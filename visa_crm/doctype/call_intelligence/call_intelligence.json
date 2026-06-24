@@ -1,0 +1,437 @@
+{
+  "actions": [],
+  "allow_rename": 1,
+  "app": "visa_crm",
+  "autoname": "CI-.YYYY.-.#####",
+  "custom": 1,
+  "doctype": "DocType",
+  "document_type": "",
+  "engine": "InnoDB",
+  "editable_grid": 0,
+  "field_order": [
+    "recording_file",
+    "customer_phone",
+    "employee_phone",
+    "processing_status",
+    "audio_filename",
+    "ai_results_section",
+    "summary",
+    "emotion",
+    "lead_intent",
+    "country_of_interest",
+    "visa_type",
+    "transcription",
+    "document_requirements",
+    "action_items",
+    "tasks",
+    "follow_up_commitments",
+    "error_field_section",
+    "ai_error",
+    "section_break_zfmk",
+    "gemini_file_uri",
+    "ai_processed_on",
+    "ai_confidence",
+    "section_break_skdf",
+    "customer_name",
+    "ai_raw_response",
+    "customer_phone_extracted",
+    "employee_phone_extracted",
+    "lead_score",
+    "sentiment",
+    "call_duration_seconds",
+    "customer_360_match",
+    "lead_match",
+    "communication_event",
+    "employee_match",
+    "followup_created",
+    "next_followup_date",
+    "followup_reference",
+    "follow_up_date",
+    "friendliness_score",
+    "empathy_score",
+    "professionalism_score",
+    "communication_quality",
+    "employee_strengths",
+    "employee_weaknesses",
+    "coaching_suggestions",
+    "assigned_counselor",
+    "friendliness",
+    "professionalism",
+    "empathy",
+    "clarity",
+    "responsiveness",
+    "clarity",
+    "responsiveness",
+    "policy_compliance",
+    "overall_score",
+    "ai_feedback",
+    "coaching_tips",
+    "conversation",
+    "call_duration",
+    "retry_count",
+    "gemini_upload_response",
+    "gemini_analysis_response",
+    "processing_started_on",
+    "processing_completed_on",
+    "file_size"
+  ],
+  "fields": [
+    {
+      "fieldname": "recording_file",
+      "fieldtype": "Attach",
+      "label": "Recording File"
+    },
+    {
+      "fieldname": "friendliness",
+      "fieldtype": "Float",
+      "label": "Friendliness"
+    },
+    {
+      "fieldname": "professionalism",
+      "fieldtype": "Float",
+      "label": "Professionalism"
+    },
+    {
+      "fieldname": "empathy",
+      "fieldtype": "Float",
+      "label": "Empathy"
+    },
+    {
+      "fieldname": "customer_phone",
+      "fieldtype": "Data",
+      "label": "Customer Phone"
+    },
+    {
+      "fieldname": "employee_phone",
+      "fieldtype": "Data",
+      "label": "Employee Phone"
+    },
+    {
+      "fieldname": "processing_status",
+      "fieldtype": "Select",
+      "label": "Processing Status",
+      "options": "Pending\nUploading to Gemini\nFailed to Upload to Gemini\nWaiting for Transcription\nFailed Transcription\nSuccess",
+      "default": "Pending",
+      "in_create":1
+    },
+    {
+      "fieldname": "audio_filename",
+      "fieldtype": "Data",
+      "label": "Audio Filename"
+    },
+    {
+      "fieldname": "ai_results_section",
+      "fieldtype": "Section Break",
+      "label": "AI Results"
+    },
+    {
+      "fieldname": "summary",
+      "fieldtype": "Long Text",
+      "label": "Summary"
+    },
+    {
+      "fieldname": "emotion",
+      "fieldtype": "Data",
+      "label": "Emotion"
+    },
+    {
+      "fieldname": "lead_intent",
+      "fieldtype": "Data",
+      "label": "Lead Intent"
+    },
+    {
+      "fieldname": "country_of_interest",
+      "fieldtype": "Data",
+      "label": "Country Of Interest"
+    },
+    {
+      "fieldname": "visa_type",
+      "fieldtype": "Data",
+      "label": "Visa Type"
+    },
+    {
+      "fieldname": "transcription",
+      "fieldtype": "Long Text",
+      "label": "Transcription"
+    },
+    {
+      "fieldname": "document_requirements",
+      "fieldtype": "Long Text",
+      "label": "Document Requirements"
+    },
+    {
+      "fieldname": "action_items",
+      "fieldtype": "Long Text",
+      "label": "Action Items"
+    },
+    {
+      "fieldname": "tasks",
+      "fieldtype": "Long Text",
+      "label": "Tasks"
+    },
+    {
+      "fieldname": "follow_up_commitments",
+      "fieldtype": "Long Text",
+      "label": "Follow Up Commitments"
+    },
+    {
+      "fieldname": "error_field_section",
+      "fieldtype": "Section Break",
+      "label": "AI Error"
+    },
+    {
+      "fieldname": "ai_error",
+      "fieldtype": "Long Text",
+      "label": "AI Error"
+    },
+    {
+      "fieldname": "section_break_zfmk",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "gemini_file_uri",
+      "fieldtype": "Data",
+      "label": "Gemini File URI"
+    },
+    {
+      "fieldname": "ai_processed_on",
+      "fieldtype": "Datetime",
+      "label": "AI Processed On"
+    },
+    {
+      "fieldname": "ai_confidence",
+      "fieldtype": "Percent",
+      "label": "AI Confidence"
+    },
+    {
+      "fieldname": "section_break_skdf",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "customer_name",
+      "fieldtype": "Data",
+      "label": "Customer Name"
+    },
+    {
+      "fieldname": "ai_raw_response",
+      "fieldtype": "Long Text",
+      "label": "AI Raw Response"
+    },
+    {
+      "fieldname": "customer_phone_extracted",
+      "fieldtype": "Data",
+      "label": "Customer Phone Extracted"
+    },
+    {
+      "fieldname": "employee_phone_extracted",
+      "fieldtype": "Data",
+      "label": "Employee Phone Extracted"
+    },
+    {
+      "fieldname": "lead_score",
+      "fieldtype": "Int",
+      "label": "Lead Score"
+    },
+    {
+      "fieldname": "sentiment",
+      "fieldtype": "Data",
+      "label": "Sentiment"
+    },
+    {
+      "fieldname": "call_duration_seconds",
+      "fieldtype": "Int",
+      "label": "Call Duration Seconds"
+    },
+    {
+      "fieldname": "customer_360_match",
+      "fieldtype": "Link",
+      "options": "Customer",
+      "label": "Customer 360 Match"
+    },
+    {
+      "fieldname": "lead_match",
+      "fieldtype": "Link",
+      "options": "CRM Lead",
+      "label": "Lead Match"
+    },
+    {
+      "fieldname": "communication_event",
+      "fieldtype": "Link",
+      "options": "Communication Event",
+      "label": "Communication Event"
+    },
+    {
+      "fieldname": "employee_match",
+      "fieldtype": "Link",
+      "options": "Employee",
+      "label": "Employee Match"
+    },
+    {
+      "fieldname": "followup_created",
+      "fieldtype": "Check",
+      "label": "Followup Created"
+    },
+    {
+      "fieldname": "next_followup_date",
+      "fieldtype": "Datetime",
+      "label": "Next Followup Date"
+    },
+    {
+      "fieldname": "followup_reference",
+      "fieldtype": "Link",
+      "options": "ToDo",
+      "label": "Followup Reference"
+    },
+    {
+      "fieldname": "follow_up_date",
+      "fieldtype": "Date",
+      "label": "Follow Up Date"
+    },
+    {
+      "fieldname": "friendliness_score",
+      "fieldtype": "Float",
+      "label": "Friendliness Score"
+    },
+    {
+      "fieldname": "empathy_score",
+      "fieldtype": "Float",
+      "label": "Empathy Score"
+    },
+    {
+      "fieldname": "professionalism_score",
+      "fieldtype": "Float",
+      "label": "Professionalism Score"
+    },
+    {
+      "fieldname": "communication_quality",
+      "fieldtype": "Float",
+      "label": "Communication Quality"
+    },
+    {
+      "fieldname": "employee_strengths",
+      "fieldtype": "Long Text",
+      "label": "Employee Strengths"
+    },
+    {
+      "fieldname": "employee_weaknesses",
+      "fieldtype": "Long Text",
+      "label": "Employee Weaknesses"
+    },
+    {
+      "fieldname": "coaching_suggestions",
+      "fieldtype": "Long Text",
+      "label": "Coaching Suggestions"
+    },
+    {
+      "fieldname": "assigned_counselor",
+      "fieldtype": "Link",
+      "options": "Employee",
+      "label": "Assigned Counselor"
+    },
+    {
+      "fieldname": "clarity",
+      "fieldtype": "Float",
+      "label": "Clarity"
+    },
+    {
+      "fieldname": "responsiveness",
+      "fieldtype": "Float",
+      "label": "Responsiveness"
+    },
+    {
+      "fieldname": "policy_compliance",
+      "fieldtype": "Float",
+      "label": "Policy Compliance"
+    },
+    {
+      "fieldname": "overall_score",
+      "fieldtype": "Float",
+      "label": "Overall Score"
+    },
+    {
+      "fieldname": "ai_feedback",
+      "fieldtype": "Small Text",
+      "label": "AI Feedback"
+    },
+    {
+      "fieldname": "coaching_tips",
+      "fieldtype": "Small Text",
+      "label": "Coaching Tips"
+    },
+    {
+      "fieldname": "conversation",
+      "fieldtype": "Table",
+      "options": "Conversation Message",
+      "label": "Conversation"
+    },
+    {
+      "fieldname": "call_duration",
+      "fieldtype": "Duration",
+      "label": "Call Duration"
+    },
+    {
+      "fieldname": "retry_count",
+      "fieldtype": "Int",
+      "label": "Retry Count",
+      "default": "0"
+    },
+    {
+      "fieldname": "gemini_upload_response",
+      "fieldtype": "Long Text",
+      "label": "Gemini Upload Response"
+    },
+    {
+      "fieldname": "gemini_analysis_response",
+      "fieldtype": "Long Text",
+      "label": "Gemini Analysis Response"
+    },
+    {
+      "fieldname": "processing_started_on",
+      "fieldtype": "Datetime",
+      "label": "Processing Started On"
+    },
+    {
+      "fieldname": "processing_completed_on",
+      "fieldtype": "Datetime",
+      "label": "Processing Completed On"
+    },
+    {
+      "fieldname": "file_size",
+      "fieldtype": "Int",
+      "label": "File Size"
+    }
+  ],
+  "index_web_pages_for_search": 1,
+  "is_submittable": 0,
+  "issingle": 0,
+  "module": "Visa CRM",
+  "name": "Call Intelligence",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "CRM Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1
+    },
+    {
+      "role": "CRM User",
+      "read": 1,
+      "write":1,
+      "create":1 
+    }
+  ],
+  "search_fields": "customer_name,customer_phone,audio_filename,customer_phone_extracted",
+  "show_name_in_global_search": 1,
+  "sort_field": "creation",
+  "sort_order": "DESC",
+  "title_field": "customer_name",
+  "track_changes": 1,
+  "track_views": 1
+}

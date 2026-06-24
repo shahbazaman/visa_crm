@@ -1,0 +1,295 @@
+{
+ "actions":[],
+ "allow_rename":1,
+ "app":"visa_crm",
+ "autoname":"EKPI-.YYYY.-.#####",
+ "custom":1,
+ "doctype":"DocType",
+ "document_type":"",
+ "engine":"InnoDB",
+ "editable_grid":0,
+
+ "module":"Visa CRM",
+ "name":"Employee KPI",
+
+ "track_changes":1,
+ "track_views":1,
+
+ "show_name_in_global_search":1,
+
+ "title_field":"employee",
+
+ "sort_field":"creation",
+ "sort_order":"DESC",
+
+ "search_fields":"employee",
+
+ "field_order":[
+
+"employee",
+
+"month",
+
+"year",
+
+"calls_handled",
+
+"total_calls",
+
+"total_leads",
+
+"hot_leads",
+
+"medium_leads",
+
+"cold_leads",
+
+"average_lead_score",
+
+"positive_calls",
+
+"neutral_calls",
+
+"negative_calls",
+
+"conversion_count",
+
+"converted_leads",
+
+"pending_followups",
+
+"average_evaluation_score",
+
+"last_updated"
+
+ ],
+
+ "fields":[
+
+{
+
+"fieldname":"employee",
+
+"fieldtype":"Link",
+
+"label":"Employee",
+
+"options":"Employee",
+
+"reqd":1
+
+},
+
+{
+
+"fieldname":"month",
+
+"fieldtype":"Select",
+
+"label":"Month",
+
+"options":"January\nFebruary\nMarch\nApril\nMay\nJune\nJuly\nAugust\nSeptember\nOctober\nNovember\nDecember"
+
+},
+
+{
+
+"fieldname":"year",
+
+"fieldtype":"Int",
+
+"label":"Year"
+
+},
+
+{
+
+"fieldname":"calls_handled",
+
+"fieldtype":"Int",
+
+"label":"Calls Handled"
+
+},
+
+{
+
+"fieldname":"total_calls",
+
+"fieldtype":"Int",
+
+"label":"Total Calls"
+
+},
+
+{
+
+"fieldname":"total_leads",
+
+"fieldtype":"Int",
+
+"label":"Total Leads"
+
+},
+
+{
+
+"fieldname":"hot_leads",
+
+"fieldtype":"Int",
+
+"label":"Hot Leads"
+
+},
+
+{
+
+"fieldname":"medium_leads",
+
+"fieldtype":"Int",
+
+"label":"Medium Leads"
+
+},
+
+{
+
+"fieldname":"cold_leads",
+
+"fieldtype":"Int",
+
+"label":"Cold Leads"
+
+},
+
+{
+
+"fieldname":"average_lead_score",
+
+"fieldtype":"Float",
+
+"label":"Average Lead Score"
+
+},
+
+{
+
+"fieldname":"positive_calls",
+
+"fieldtype":"Int",
+
+"label":"Positive Calls"
+
+},
+
+{
+
+"fieldname":"neutral_calls",
+
+"fieldtype":"Int",
+
+"label":"Neutral Calls"
+
+},
+
+{
+
+"fieldname":"negative_calls",
+
+"fieldtype":"Int",
+
+"label":"Negative Calls"
+
+},
+
+{
+
+"fieldname":"conversion_count",
+
+"fieldtype":"Int",
+
+"label":"Conversion Count"
+
+},
+
+{
+
+"fieldname":"converted_leads",
+
+"fieldtype":"Int",
+
+"label":"Converted Leads"
+
+},
+
+{
+
+"fieldname":"pending_followups",
+
+"fieldtype":"Int",
+
+"label":"Pending Followups"
+
+},
+
+{
+
+"fieldname":"average_evaluation_score",
+
+"fieldtype":"Float",
+
+"label":"Average Evaluation Score"
+
+},
+
+{
+
+"fieldname":"last_updated",
+
+"fieldtype":"Datetime",
+
+"label":"Last Updated"
+
+}
+
+ ],
+
+ "permissions":[
+
+{
+
+"role":"System Manager",
+
+"read":1,
+
+"write":1,
+
+"create":1,
+
+"delete":1
+
+},
+
+{
+
+"role":"CRM Manager",
+
+"read":1,
+
+"write":1,
+
+"create":1
+
+},
+
+{
+
+"role":"CRM User",
+
+"read":1
+
+}
+
+ ]
+
+}

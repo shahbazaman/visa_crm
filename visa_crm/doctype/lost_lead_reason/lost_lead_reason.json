@@ -1,0 +1,127 @@
+{
+ "actions":[],
+ "allow_rename":1,
+ "app":"visa_crm",
+ "autoname":"LLR-.YYYY.-.#####",
+ "custom":1,
+ "doctype":"DocType",
+ "document_type":"",
+ "engine":"InnoDB",
+ "editable_grid":0,
+
+ "module":"Visa CRM",
+ "name":"Lost Lead Reason",
+
+ "track_changes":1,
+ "track_views":1,
+
+ "show_name_in_global_search":1,
+
+ "title_field":"lead",
+
+ "sort_field":"creation",
+ "sort_order":"DESC",
+
+ "search_fields":"lead,employee,reason",
+
+ "field_order":[
+
+"lead",
+
+"reason",
+
+"notes",
+
+"employee"
+
+ ],
+
+ "fields":[
+
+{
+
+"fieldname":"lead",
+
+"fieldtype":"Link",
+
+"label":"Lead",
+
+"options":"CRM Lead"
+
+},
+
+{
+
+"fieldname":"reason",
+
+"fieldtype":"Select",
+
+"label":"Reason",
+
+"options":"Price\nDelay\nCompetitor\nNo Response\nDocuments Missing\nVisa Rejected\nChanged Plan\nCountry Changed\nOther"
+
+},
+
+{
+
+"fieldname":"notes",
+
+"fieldtype":"Text",
+
+"label":"Notes"
+
+},
+
+{
+
+"fieldname":"employee",
+
+"fieldtype":"Link",
+
+"label":"Employee",
+
+"options":"Employee"
+
+}
+
+],
+
+"permissions":[
+
+{
+
+"role":"System Manager",
+
+"read":1,
+
+"write":1,
+
+"create":1,
+
+"delete":1
+
+},
+
+{
+
+"role":"CRM Manager",
+
+"read":1,
+
+"write":1,
+
+"create":1
+
+},
+
+{
+
+"role":"CRM User",
+
+"read":1
+
+}
+
+]
+
+}

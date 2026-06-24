@@ -1,0 +1,116 @@
+{
+ "actions":[],
+ "allow_rename":1,
+ "app":"visa_crm",
+ "custom":1,
+ "doctype":"DocType",
+ "document_type":"",
+ "engine":"InnoDB",
+ "editable_grid":1,
+
+ "module":"Visa CRM",
+ "name":"Conversation Message",
+
+ "istable":1,
+
+ "track_changes":1,
+
+ "field_order":[
+
+"speaker",
+
+"message",
+
+"call_intelligence"
+
+ ],
+
+ "fields":[
+
+{
+
+"fieldname":"speaker",
+
+"fieldtype":"Data",
+
+"label":"Speaker",
+
+"reqd":1,
+
+"in_list_view":1
+
+},
+
+{
+
+"fieldname":"message",
+
+"fieldtype":"Long Text",
+
+"label":"Message",
+
+"reqd":1,
+
+"in_list_view":1
+
+},
+
+{
+
+"fieldname":"call_intelligence",
+
+"fieldtype":"Link",
+
+"label":"Call Intelligence",
+
+"options":"Call Intelligence",
+
+"read_only":1
+
+}
+
+ ],
+
+ "permissions":[
+
+{
+
+"role":"System Manager",
+
+"read":1,
+
+"write":1,
+
+"create":1,
+
+"delete":1
+
+},
+
+{
+
+"role":"CRM Manager",
+
+"read":1,
+
+"write":1,
+
+"create":1
+
+},
+
+{
+
+"role":"CRM User",
+
+"read":1,
+
+"write":1,
+
+"create":1
+
+}
+
+ ]
+
+}

@@ -1,0 +1,257 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "app": "visa_crm",
+ "autoname": "naming_series",
+ "custom": 1,
+ "doctype": "DocType",
+ "document_type": "",
+ "engine": "InnoDB",
+ "editable_grid": 0,
+
+ "module": "Visa CRM",
+ "name": "Communication Event",
+
+ "track_changes": 1,
+ "track_views": 1,
+ "show_name_in_global_search": 1,
+
+ "title_field": "name",
+
+ "sort_field": "creation",
+ "sort_order": "DESC",
+
+ "search_fields": "name,phone,email,channel_id",
+
+ "field_order": [
+
+  "status",
+  "naming_series",
+
+  "source",
+  "event_type",
+  "direction",
+
+  "customer",
+  "lead",
+  "employee",
+  "call_intelligence",
+
+  "phone",
+  "email",
+
+  "content",
+  "summary",
+
+  "sentiment",
+  "lead_score",
+  "ai_score",
+
+  "event_datetime",
+  "duration",
+  "response_time",
+
+  "recording_file",
+  "channel_id",
+
+  "converted",
+  "conversion_value",
+
+  "lost_reason",
+  "coaching_suggestion"
+
+ ],
+
+ "fields": [
+
+  {
+   "fieldname":"status",
+   "fieldtype":"Select",
+   "label":"Status",
+   "options":"Open\nPending\nQualified\nConverted\nLost\nClosed",
+   "default":"Open"
+  },
+
+  {
+   "fieldname":"naming_series",
+   "fieldtype":"Select",
+   "label":"Naming Series",
+   "options":"CE-.YYYY.-.#####",
+   "default":"CE-.YYYY.-.#####"
+  },
+
+  {
+   "fieldname":"source",
+   "fieldtype":"Select",
+   "label":"Source",
+   "options":"Phone\nWhatsApp\nFacebook\nInstagram\nMessenger\nEmail\nManual\nWebsite\nMeta Form"
+  },
+
+  {
+   "fieldname":"event_type",
+   "fieldtype":"Select",
+   "label":"Event Type",
+   "options":"Call\nChat\nEmail\nNote\nLead\nMeeting"
+  },
+
+  {
+   "fieldname":"direction",
+   "fieldtype":"Select",
+   "label":"Direction",
+   "options":"Inbound\nOutbound"
+  },
+
+  {
+   "fieldname":"customer",
+   "fieldtype":"Link",
+   "label":"Customer",
+   "options":"Customer"
+  },
+
+  {
+   "fieldname":"lead",
+   "fieldtype":"Link",
+   "label":"Lead",
+   "options":"CRM Lead"
+  },
+
+  {
+   "fieldname":"employee",
+   "fieldtype":"Link",
+   "label":"Employee",
+   "options":"Employee"
+  },
+
+  {
+   "fieldname":"call_intelligence",
+   "fieldtype":"Link",
+   "label":"Call Intelligence",
+   "options":"Call Intelligence"
+  },
+
+  {
+   "fieldname":"phone",
+   "fieldtype":"Data",
+   "label":"Phone"
+  },
+
+  {
+   "fieldname":"email",
+   "fieldtype":"Data",
+   "label":"Email"
+  },
+
+  {
+   "fieldname":"content",
+   "fieldtype":"Long Text",
+   "label":"Content"
+  },
+
+  {
+   "fieldname":"summary",
+   "fieldtype":"Long Text",
+   "label":"Summary"
+  },
+
+  {
+   "fieldname":"sentiment",
+   "fieldtype":"Select",
+   "label":"Sentiment",
+   "options":"Positive\nNeutral\nNegative"
+  },
+
+  {
+   "fieldname":"lead_score",
+   "fieldtype":"Int",
+   "label":"Lead Score"
+  },
+
+  {
+   "fieldname":"ai_score",
+   "fieldtype":"Float",
+   "label":"AI Score"
+  },
+
+  {
+   "fieldname":"event_datetime",
+   "fieldtype":"Datetime",
+   "label":"Event Datetime"
+  },
+
+  {
+   "fieldname":"duration",
+   "fieldtype":"Duration",
+   "label":"Duration"
+  },
+
+  {
+   "fieldname":"response_time",
+   "fieldtype":"Duration",
+   "label":"Response Time"
+  },
+
+  {
+   "fieldname":"recording_file",
+   "fieldtype":"Attach",
+   "label":"Recording File"
+  },
+
+  {
+   "fieldname":"channel_id",
+   "fieldtype":"Data",
+   "label":"Channel ID"
+  },
+
+  {
+   "fieldname":"converted",
+   "fieldtype":"Check",
+   "label":"Converted"
+  },
+
+  {
+   "fieldname":"conversion_value",
+   "fieldtype":"Currency",
+   "label":"Conversion Value"
+  },
+
+  {
+   "fieldname":"lost_reason",
+   "fieldtype":"Small Text",
+   "label":"Lost Reason"
+  },
+
+  {
+   "fieldname":"coaching_suggestion",
+   "fieldtype":"Long Text",
+   "label":"Coaching Suggestion"
+  }
+
+ ],
+
+ "permissions":[
+
+  {
+   "role":"System Manager",
+   "read":1,
+   "write":1,
+   "create":1,
+   "delete":1
+  },
+
+  {
+   "role":"CRM Manager",
+   "read":1,
+   "write":1,
+   "create":1
+  },
+
+  {
+   "role":"CRM User",
+   "read":1,
+   "write":1,
+   "create":1
+  }
+
+ ]
+
+}

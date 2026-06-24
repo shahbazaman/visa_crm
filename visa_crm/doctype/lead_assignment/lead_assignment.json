@@ -1,0 +1,195 @@
+{
+ "actions":[],
+ "allow_rename":1,
+ "app":"visa_crm",
+ "autoname":"LA-.YYYY.-.#####",
+ "custom":1,
+ "doctype":"DocType",
+ "document_type":"",
+ "engine":"InnoDB",
+ "editable_grid":0,
+
+ "module":"Visa CRM",
+ "name":"Lead Assignment",
+
+ "track_changes":1,
+ "track_views":1,
+
+ "show_name_in_global_search":1,
+
+ "title_field":"lead",
+
+ "sort_field":"creation",
+ "sort_order":"DESC",
+
+ "search_fields":"lead,assigned_to",
+
+ "field_order":[
+
+"lead",
+
+"communication_event",
+
+"assigned_to",
+
+"assigned_by",
+
+"assigned_on",
+
+"status",
+
+"priority",
+
+"remarks"
+
+ ],
+
+ "fields":[
+
+{
+
+"fieldname":"lead",
+
+"fieldtype":"Link",
+
+"label":"Lead",
+
+"options":"CRM Lead",
+
+"reqd":1
+
+},
+
+{
+
+"fieldname":"communication_event",
+
+"fieldtype":"Link",
+
+"label":"Communication Event",
+
+"options":"Communication Event"
+
+},
+
+{
+
+"fieldname":"assigned_to",
+
+"fieldtype":"Link",
+
+"label":"Assigned To",
+
+"options":"Employee",
+
+"reqd":1
+
+},
+
+{
+
+"fieldname":"assigned_by",
+
+"fieldtype":"Link",
+
+"label":"Assigned By",
+
+"options":"Employee"
+
+},
+
+{
+
+"fieldname":"assigned_on",
+
+"fieldtype":"Datetime",
+
+"label":"Assigned On",
+
+"default":"Now"
+
+},
+
+{
+
+"fieldname":"status",
+
+"fieldtype":"Select",
+
+"label":"Status",
+
+"default":"Pending",
+
+"options":"Pending\nAccepted\nIn Progress\nClosed"
+
+},
+
+{
+
+"fieldname":"priority",
+
+"fieldtype":"Select",
+
+"label":"Priority",
+
+"default":"Medium",
+
+"options":"Low\nMedium\nHigh"
+
+},
+
+{
+
+"fieldname":"remarks",
+
+"fieldtype":"Small Text",
+
+"label":"Remarks"
+
+}
+
+ ],
+
+ "permissions":[
+
+{
+
+"role":"System Manager",
+
+"read":1,
+
+"write":1,
+
+"create":1,
+
+"delete":1
+
+},
+
+{
+
+"role":"CRM Manager",
+
+"read":1,
+
+"write":1,
+
+"create":1
+
+},
+
+{
+
+"role":"CRM User",
+
+"read":1,
+
+"write":1,
+
+"create":1
+
+}
+
+ ]
+
+}
