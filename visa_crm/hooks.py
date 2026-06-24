@@ -74,3 +74,24 @@ scheduler_events = {
 # "meta.receive":"visa_crm.api.meta_webhook.receive"
 
 # }
+fixtures = [
+
+"Custom Field",
+
+"Property Setter",
+
+"Client Script",
+
+"Server Script",
+
+"Workspace",
+
+"Workflow",
+
+"Workflow State",
+
+"Workflow Action Master",
+
+"Print Format"
+
+]
