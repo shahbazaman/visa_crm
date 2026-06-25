@@ -9,27 +9,15 @@ def meta_verify():
     token = frappe.request.args.get("hub.verify_token")
     challenge = frappe.request.args.get("hub.challenge")
 
-    names = frappe.get_all(
+    name = frappe.get_all(
         "Meta Settings",
         pluck="name",
         limit=1
-    )
-
-    if not names:
-
-        frappe.log_error(
-            title="META DEBUG",
-            message="No Meta Settings found"
-        )
-
-        frappe.response["http_status_code"] = 403
-
-        return "Meta Settings not found"
-
+    )[0]
 
     settings = frappe.get_doc(
         "Meta Settings",
-        names[0]
+        name
     )
 
     saved = settings.get_password("verify_token")
@@ -42,38 +30,40 @@ def meta_verify():
         message=f"""
 mode={mode}
 
-token={token}
-
-challenge={challenge}
-
 token_repr={repr(token)}
 
 saved_token_repr={repr(saved)}
 
 comparison={token == saved}
 
-settings_name={settings.name}
-
-request_args={dict(frappe.request.args)}
+challenge={challenge}
 """
-
     )
 
 
     if mode == "subscribe" and token == saved:
 
-        frappe.local.response["type"] = "txt"
+        frappe.local.response.filename = ""
 
-        frappe.local.response["filename"] = None
+        frappe.local.response.filecontent = challenge
 
-        frappe.local.response["response"] = challenge
+        frappe.local.response.type = "txt"
+
+        frappe.local.response.doctype = "meta"
 
         return
 
 
-    frappe.response["http_status_code"] = 403
+    frappe.local.response.http_status_code = 403
 
-    return "Verification failed"
+    frappe.local.response.filename = ""
+
+    frappe.local.response.filecontent = "Verification failed"
+
+    frappe.local.response.type = "txt"
+
+    frappe.local.response.doctype = "meta"
+
 
 
 
@@ -81,6 +71,7 @@ request_args={dict(frappe.request.args)}
 def receive():
 
     payload = frappe.request.get_json()
+
 
     lead_source = "Meta Ads"
 
