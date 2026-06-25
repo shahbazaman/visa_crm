@@ -1,40 +1,47 @@
 import frappe
 import json
 
-
 @frappe.whitelist(allow_guest=True)
 def meta_verify():
 
-    mode=frappe.form_dict.get("hub.mode")
-    token=frappe.form_dict.get("hub.verify_token")
-    challenge=frappe.form_dict.get("hub.challenge")
+    return {
+        "mode": frappe.request.args.get("hub.mode"),
+        "token": frappe.request.args.get("hub.verify_token"),
+        "challenge": frappe.request.args.get("hub.challenge")
+    }
+# @frappe.whitelist(allow_guest=True)
+# def meta_verify():
+
+#     mode=frappe.form_dict.get("hub.mode")
+#     token=frappe.form_dict.get("hub.verify_token")
+#     challenge=frappe.form_dict.get("hub.challenge")
 
 
-    frappe.log_error(
-        title="META VERIFY",
-        message=f"""
-mode={mode}
+#     frappe.log_error(
+#         title="META VERIFY",
+#         message=f"""
+# mode={mode}
 
-token={token}
+# token={token}
 
-challenge={challenge}
-"""
-    )
-
-
-    settings=frappe.get_all(
-        "Meta Settings",
-        fields=["name","verify_token"]
-    )
+# challenge={challenge}
+# """
+#     )
 
 
-    frappe.log_error(
-        title="META SETTINGS",
-        message=str(settings)
-    )
+#     settings=frappe.get_all(
+#         "Meta Settings",
+#         fields=["name","verify_token"]
+#     )
 
 
-    return "OK"
+#     frappe.log_error(
+#         title="META SETTINGS",
+#         message=str(settings)
+#     )
+
+
+#     return "OK"
 
 
 
