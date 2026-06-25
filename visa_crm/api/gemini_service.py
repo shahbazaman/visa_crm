@@ -103,7 +103,6 @@ def get_api_key():
     settings = frappe.get_single("Gemini Settings")
     return settings.get_password("gemini_api_key")
 
-
 def upload_audio_to_gemini(file_path):
     """Upload raw audio bytes to Gemini Files API and return file_uri."""
     api_key = get_api_key()
@@ -235,20 +234,16 @@ def contains_malayalam(text):
             return True
     return False
 
-
 def translate_gemini_response(raw_response):
     """Ask Gemini to translate the labeled Gemini output into English, preserving labels."""
     api_key = get_api_key()
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-
     prompt = f"Translate the following AI output into English. Preserve all labeled field names exactly and return only the labeled fields in the same format. Do not add commentary.\n\n{raw_response}"
-
     payload = {
         "contents": [
             {"parts": [{"text": prompt}]}
         ]
     }
-
     r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload)
     r.raise_for_status()
     result = r.json()
@@ -1063,19 +1058,45 @@ def auto_process(doc, method=None):
 
 
 def auto_create_call_intelligence(doc, method=None):
-    if not doc.file_name:
-        return
-    if not doc.file_name.lower().endswith(AUDIO_EXTENSIONS):
+    """
+    Auto-create Call Intelligence only for standalone/unattached audio files.
+
+    Important:
+    When an audio is uploaded inside the Call Intelligence form, Frappe creates a
+    File row first. At that moment, the current Call Intelligence document may
+    not yet have recording_file saved, so checking only recording_file can create
+    a duplicate Call Intelligence record for the same uploaded audio.
+
+    Therefore, if the File is already attached to any document, especially
+    Call Intelligence, do not create another Call Intelligence record here.
+    The Call Intelligence after_save hook will enqueue processing for the
+    existing document.
+    """
+    file_name = doc.file_name or os.path.basename(doc.file_url or "")
+    file_url = doc.file_url
+
+    if not file_name:
         return
 
-    exists = frappe.db.exists("Call Intelligence", {"recording_file": doc.file_url})
+    if not file_name.lower().endswith(AUDIO_EXTENSIONS):
+        return
+
+    # Main duplicate fix:
+    # If file was uploaded inside a form, it already belongs to a document.
+    # Do not create another Call Intelligence record.
+    if doc.attached_to_doctype or doc.attached_to_name or doc.attached_to_field:
+        return
+
+    if not file_url:
+        return
+
+    exists = frappe.db.exists("Call Intelligence", {"recording_file": file_url})
     if exists:
         return
 
-    # create Call Intelligence with Pending status
     ci = frappe.get_doc({
         "doctype": "Call Intelligence",
-        "recording_file": doc.file_url,
+        "recording_file": file_url,
         "processing_status": "Pending",
     })
     ci.insert(ignore_permissions=True)

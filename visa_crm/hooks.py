@@ -6,15 +6,6 @@ app_email = "shahbazaman2003@gmail.com"
 app_license = "mit"
 
 
-# FIX 1: Use after_insert for new Call Intelligence docs and after_save
-#         only for manual recording_file attachment on existing records.
-#         enqueue_processing skips unchanged saves and only queues when the
-#         recording_file is newly added.
-#
-# FIX 2: Restored the missing File → after_insert hook so that audio files
-#         uploaded via the File doctype automatically create a Call
-#         Intelligence record and trigger processing.
-
 doc_events = {
 
     "File": {
@@ -44,18 +35,13 @@ scheduler_events = {
 
     "cron": {
 
-        # Picks up any audio files that were uploaded but not yet linked
-        # to a Call Intelligence record (e.g. uploaded outside the UI).
         "* * * * *": [
-            "visa_crm.api.gemini_service.process_unprocessed_audio_files"
+            "visa_crm.api.gemini_service.process_unprocessed_audio_files",
+            "visa_crm.api.intake_processor.process_pending"
         ],
 
-        # Retries calls that failed upload or transcription (max 3 attempts).
         "*/10 * * * *": [
             "visa_crm.api.gemini_service.retry_failed_calls"
-        ],
-        "* * * * *":[
-            "visa_crm.api.intake_processor.process_pending"
         ]
 
     },
@@ -65,61 +51,25 @@ scheduler_events = {
     ]
 
 }
-# override_whitelisted_methods={
 
 
-# "meta.verify":"visa_crm.api.meta_webhook.verify",
+fixtures = [
 
+    "Custom Field",
+    "Property Setter",
+    "Client Script",
+    "Server Script",
+    "Workspace",
+    "Workflow",
+    "Workflow State",
+    "Workflow Action Master",
+    "Print Format",
 
-# "meta.receive":"visa_crm.api.meta_webhook.receive"
-
-# }
-# fixtures = [
-
-# "Custom Field",
-
-# "Property Setter",
-
-# "Client Script",
-
-# "Server Script",
-
-# "Workspace",
-
-# "Workflow",
-
-# "Workflow State",
-
-# "Workflow Action Master",
-
-# "Print Format"
-
-# ]
-fixtures=[
-
-"Custom Field",
-
-"Property Setter",
-
-"Client Script",
-
-"Server Script",
-
-"Workspace",
-
-"Workflow",
-
-"Workflow State",
-
-"Workflow Action Master",
-
-"Print Format",
-
-{
-"dt":"DocType",
-"filters":[
-["module","=","Visa CRM"]
-]
-}
+    {
+        "dt": "DocType",
+        "filters": [
+            ["module", "=", "Visa CRM"]
+        ]
+    }
 
 ]
