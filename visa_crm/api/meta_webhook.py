@@ -23,6 +23,7 @@ def meta_verify():
         )
 
         frappe.response["http_status_code"] = 403
+
         return "Meta Settings not found"
 
 
@@ -30,7 +31,6 @@ def meta_verify():
         "Meta Settings",
         names[0]
     )
-
 
     saved = settings.get_password("verify_token")
 
@@ -62,9 +62,13 @@ request_args={dict(frappe.request.args)}
 
     if mode == "subscribe" and token == saved:
 
-        frappe.response["type"] = "text/plain"
+        frappe.local.response["type"] = "txt"
 
-        return challenge
+        frappe.local.response["filename"] = None
+
+        frappe.local.response["response"] = challenge
+
+        return
 
 
     frappe.response["http_status_code"] = 403
@@ -77,7 +81,6 @@ request_args={dict(frappe.request.args)}
 def receive():
 
     payload = frappe.request.get_json()
-
 
     lead_source = "Meta Ads"
 
@@ -104,5 +107,7 @@ def receive():
 
 
     return {
+
         "success": True
+
     }
