@@ -23,22 +23,14 @@ def meta_verify():
     saved = settings.get_password("verify_token")
 
 
-    frappe.log_error(
-
-        title="META DEBUG",
-
-        message=f"""
-mode={mode}
-
-token_repr={repr(token)}
-
-saved_token_repr={repr(saved)}
-
-comparison={token == saved}
-
-challenge={challenge}
-"""
-    )
+    frappe.logger().info(f"""
+    META DEBUG
+    mode={mode}
+    token_repr={repr(token)}
+    saved_token_repr={repr(saved)}
+    comparison={token == saved}
+    challenge={challenge}
+    """)
 
 
     if mode == "subscribe" and token == saved:
