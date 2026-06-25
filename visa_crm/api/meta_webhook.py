@@ -43,26 +43,22 @@ challenge={challenge}
 
     if mode == "subscribe" and token == saved:
 
-        frappe.local.response.filename = ""
+        frappe.response["type"] = "txt"
 
-        frappe.local.response.filecontent = challenge
+        frappe.response["doctype"] = "meta"
 
-        frappe.local.response.type = "txt"
-
-        frappe.local.response.doctype = "meta"
+        frappe.response["result"] = challenge
 
         return
 
 
-    frappe.local.response.http_status_code = 403
+    frappe.response["type"] = "txt"
 
-    frappe.local.response.filename = ""
+    frappe.response["doctype"] = "meta"
 
-    frappe.local.response.filecontent = "Verification failed"
+    frappe.response["result"] = "Verification failed"
 
-    frappe.local.response.type = "txt"
-
-    frappe.local.response.doctype = "meta"
+    frappe.response["http_status_code"] = 403
 
 
 
