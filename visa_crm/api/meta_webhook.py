@@ -9,13 +9,13 @@ def meta_verify():
     token = frappe.request.args.get("hub.verify_token")
     challenge = frappe.request.args.get("hub.challenge")
 
-    settings_name = frappe.get_all(
+    names = frappe.get_all(
         "Meta Settings",
         pluck="name",
         limit=1
     )
 
-    if not settings_name:
+    if not names:
 
         frappe.log_error(
             title="META DEBUG",
@@ -28,12 +28,17 @@ def meta_verify():
 
     settings = frappe.get_doc(
         "Meta Settings",
-        settings_name[0]
+        names[0]
     )
 
 
+    saved = settings.get_password("verify_token")
+
+
     frappe.log_error(
+
         title="META DEBUG",
+
         message=f"""
 mode={mode}
 
@@ -41,21 +46,21 @@ token={token}
 
 challenge={challenge}
 
+token_repr={repr(token)}
+
+saved_token_repr={repr(saved)}
+
+comparison={token == saved}
+
 settings_name={settings.name}
-
-saved_token={settings.verify_token}
-
-comparison={(token == settings.verify_token)}
 
 request_args={dict(frappe.request.args)}
 """
+
     )
 
 
-    if (
-        mode == "subscribe"
-        and token == settings.verify_token
-    ):
+    if mode == "subscribe" and token == saved:
 
         frappe.response["type"] = "text/plain"
 
@@ -66,24 +71,38 @@ request_args={dict(frappe.request.args)}
 
     return "Verification failed"
 
+
+
 @frappe.whitelist(allow_guest=True)
 def receive():
 
     payload = frappe.request.get_json()
+
 
     lead_source = "Meta Ads"
 
     if payload.get("object") == "page":
         lead_source = "Meta Instant Form"
 
+
     queue = frappe.get_doc({
+
         "doctype": "Lead Intake Queue",
+
         "lead_source": lead_source,
+
         "raw_payload": json.dumps(payload),
+
         "status": "Lead Received"
+
     })
 
+
     queue.insert(ignore_permissions=True)
+
     frappe.db.commit()
 
-    return {"success": True}
+
+    return {
+        "success": True
+    }
