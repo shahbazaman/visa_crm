@@ -5,39 +5,36 @@ import json
 @frappe.whitelist(allow_guest=True)
 def meta_verify():
 
-    mode = frappe.form_dict.get("hub.mode")
-    token = frappe.form_dict.get("hub.verify_token")
-    challenge = frappe.form_dict.get("hub.challenge")
+    mode=frappe.form_dict.get("hub.mode")
+    token=frappe.form_dict.get("hub.verify_token")
+    challenge=frappe.form_dict.get("hub.challenge")
 
 
-    settings_name = frappe.get_all(
-        "Meta Settings",
-        pluck="name",
-        limit=1
+    frappe.log_error(
+        title="META VERIFY",
+        message=f"""
+mode={mode}
+
+token={token}
+
+challenge={challenge}
+"""
     )
 
 
-    if not settings_name:
-        frappe.throw("Meta Settings not found")
-
-
-    settings = frappe.get_doc(
+    settings=frappe.get_all(
         "Meta Settings",
-        settings_name[0]
+        fields=["name","verify_token"]
     )
 
 
-    if (
-        mode == "subscribe"
-        and token == settings.verify_token
-    ):
-
-        frappe.response["type"] = "text"
-        frappe.response["message"] = challenge
-        return
+    frappe.log_error(
+        title="META SETTINGS",
+        message=str(settings)
+    )
 
 
-    frappe.throw("Verification failed")
+    return "OK"
 
 
 
