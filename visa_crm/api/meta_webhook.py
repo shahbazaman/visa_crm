@@ -16,24 +16,55 @@ def meta_verify():
     )
 
     if not settings_name:
+
+        frappe.log_error(
+            title="META DEBUG",
+            message="No Meta Settings found"
+        )
+
         frappe.response["http_status_code"] = 403
         return "Meta Settings not found"
+
 
     settings = frappe.get_doc(
         "Meta Settings",
         settings_name[0]
     )
 
+
+    frappe.log_error(
+        title="META DEBUG",
+        message=f"""
+mode={mode}
+
+token={token}
+
+challenge={challenge}
+
+settings_name={settings.name}
+
+saved_token={settings.verify_token}
+
+comparison={(token == settings.verify_token)}
+
+request_args={dict(frappe.request.args)}
+"""
+    )
+
+
     if (
         mode == "subscribe"
         and token == settings.verify_token
     ):
+
         frappe.response["type"] = "text/plain"
+
         return challenge
 
-    frappe.response["http_status_code"] = 403
-    return "Verification failed"
 
+    frappe.response["http_status_code"] = 403
+
+    return "Verification failed"
 
 @frappe.whitelist(allow_guest=True)
 def receive():
