@@ -3,90 +3,442 @@ import json
 
 
 @frappe.whitelist(allow_guest=True)
-def meta_verify():
+def webhook():
 
-    mode = frappe.request.args.get("hub.mode")
-    token = frappe.request.args.get("hub.verify_token")
-    challenge = frappe.request.args.get("hub.challenge")
+    frappe.log_error(
+        title="META WEBHOOK ENTRY",
+        message=f"""
+method={frappe.request.method}
 
-    name = frappe.get_all(
-        "Meta Settings",
-        pluck="name",
-        limit=1
-    )[0]
+headers={dict(frappe.request.headers)}
 
-    settings = frappe.get_doc(
-        "Meta Settings",
-        name
+args={dict(frappe.request.args)}
+
+form_dict={dict(frappe.form_dict)}
+"""
     )
 
-    saved = settings.get_password("verify_token")
+    try:
+
+        if frappe.request.method == "GET":
+            return meta_verify()
+
+        return receive()
+
+    except Exception:
+
+        frappe.log_error(
+
+            title="META WEBHOOK CRASH",
+
+            message=frappe.get_traceback()
+
+        )
+
+        frappe.response["http_status_code"] = 500
+
+        return "Webhook crashed"
 
 
-    frappe.logger().info(f"""
-    META DEBUG
-    mode={mode}
-    token_repr={repr(token)}
-    saved_token_repr={repr(saved)}
-    comparison={token == saved}
-    challenge={challenge}
-    """)
+
+def meta_verify():
+
+    try:
+
+        mode = frappe.request.args.get("hub.mode")
+
+        token = frappe.request.args.get("hub.verify_token")
+
+        challenge = frappe.request.args.get("hub.challenge")
 
 
-    if mode == "subscribe" and token == saved:
+        frappe.log_error(
 
-        frappe.response["type"] = "txt"
+            title="META VERIFY INPUT",
 
-        frappe.response["doctype"] = "meta"
+            message=f"""
+mode={repr(mode)}
 
-        frappe.response["result"] = challenge
+token={repr(token)}
+
+challenge={repr(challenge)}
+"""
+
+        )
+
+
+        settings_name = frappe.get_all(
+
+            "Meta Settings",
+
+            pluck="name",
+
+            limit=1
+
+        )
+
+
+        frappe.log_error(
+
+            title="META SETTINGS LOOKUP",
+
+            message=str(settings_name)
+
+        )
+
+
+        if not settings_name:
+
+            frappe.log_error(
+
+                title="META VERIFY ERROR",
+
+                message="Meta Settings not found"
+
+            )
+
+            return "Verification failed"
+
+
+
+        settings = frappe.get_doc(
+
+            "Meta Settings",
+
+            settings_name[0]
+
+        )
+
+
+        saved = settings.get_password(
+
+            "verify_token"
+
+        )
+
+
+        frappe.log_error(
+
+            title="META TOKEN CHECK",
+
+            message=f"""
+settings_doc={settings.name}
+
+token_repr={repr(token)}
+
+saved_repr={repr(saved)}
+
+comparison={token==saved}
+"""
+
+        )
+
+
+        if mode == "subscribe" and token == saved:
+
+
+            frappe.log_error(
+
+                title="META VERIFY SUCCESS",
+
+                message=f"""
+challenge={challenge}
+"""
+
+            )
+
+
+            response = frappe.response
+
+            response["type"] = "txt"
+
+            response["doctype"] = "meta"
+
+            response["filename"] = "challenge"
+
+            response["result"] = challenge
+
+            return
+
+
+
+        frappe.log_error(
+
+            title="META VERIFY FAILED",
+
+            message=f"""
+mode={mode}
+
+token={repr(token)}
+
+saved={repr(saved)}
+"""
+
+        )
+
+
+        frappe.response["http_status_code"] = 403
+
+
+        response = frappe.response
+
+        response["type"] = "txt"
+
+        response["doctype"] = "meta"
+
+        response["filename"] = "error"
+
+        response["result"] = "Verification failed"
 
         return
 
 
-    frappe.response["type"] = "txt"
-
-    frappe.response["doctype"] = "meta"
-
-    frappe.response["result"] = "Verification failed"
-
-    frappe.response["http_status_code"] = 403
+    except Exception:
 
 
+        frappe.log_error(
+
+            title="META VERIFY EXCEPTION",
+
+            message=frappe.get_traceback()
+
+        )
+
+        return "Verification Exception"
 
 
-@frappe.whitelist(allow_guest=True)
+
+
 def receive():
 
-    payload = frappe.request.get_json()
+    try:
 
 
-    lead_source = "Meta Ads"
-
-    if payload.get("object") == "page":
-        lead_source = "Meta Instant Form"
+        raw_data = frappe.request.data
 
 
-    queue = frappe.get_doc({
+        frappe.log_error(
 
-        "doctype": "Lead Intake Queue",
+            title="META RAW BODY",
 
-        "lead_source": lead_source,
+            message=str(raw_data)
 
-        "raw_payload": json.dumps(payload),
-
-        "status": "Lead Received"
-
-    })
+        )
 
 
-    queue.insert(ignore_permissions=True)
 
-    frappe.db.commit()
+        payload = frappe.request.get_json(
+
+            silent=True
+
+        )
 
 
-    return {
 
-        "success": True
+        frappe.log_error(
 
-    }
+            title="META JSON PARSE",
+
+            message=str(payload)
+
+        )
+
+
+
+        if not payload:
+
+            payload = dict(
+
+                frappe.form_dict
+
+            )
+
+
+
+        frappe.log_error(
+
+            title="META FORM DICT",
+
+            message=json.dumps(
+
+                payload,
+
+                indent=2,
+
+                default=str
+
+            )
+
+        )
+
+
+
+        if not payload:
+
+            payload = raw_data.decode(
+
+                "utf-8"
+
+            )
+
+
+
+        frappe.log_error(
+
+            title="META RECEIVE",
+
+            message=json.dumps(
+
+                payload,
+
+                indent=2,
+
+                default=str
+
+            )
+
+        )
+
+
+
+        lead_source = "Meta Ads"
+
+
+
+        if isinstance(
+
+            payload,
+
+            dict
+
+        ):
+
+
+            if payload.get(
+
+                "object"
+
+            ) == "page":
+
+
+                lead_source = (
+
+                    "Meta Instant Form"
+
+                )
+
+
+
+        frappe.log_error(
+
+            title="META LEAD SOURCE",
+
+            message=lead_source
+
+        )
+
+
+
+        queue = frappe.get_doc({
+
+
+            "doctype":
+
+                "Lead Intake Queue",
+
+
+            "lead_source":
+
+                lead_source,
+
+
+            "raw_payload":
+
+                json.dumps(
+
+                    payload,
+
+                    default=str
+
+                ),
+
+
+            "status":
+
+                "Lead Received"
+
+
+
+        })
+
+
+
+        frappe.log_error(
+
+            title="META QUEUE DOC",
+
+            message=str(queue.as_dict())
+
+        )
+
+
+
+        queue.insert(
+
+            ignore_permissions=True
+
+        )
+
+
+
+        frappe.log_error(
+
+            title="META INSERTED",
+
+            message=queue.name
+
+        )
+
+
+
+        frappe.db.commit()
+
+
+
+        frappe.log_error(
+
+            title="META COMMIT",
+
+            message="success"
+
+        )
+
+
+
+        return {
+
+            "success": True
+
+        }
+
+
+
+    except Exception:
+
+
+
+        frappe.log_error(
+
+            title="META RECEIVE EXCEPTION",
+
+            message=frappe.get_traceback()
+
+        )
+
+
+
+        return {
+
+            "success": False
+
+        }
