@@ -509,22 +509,8 @@ def create_communication_event(doc):
     doc.db_update()
     frappe.db.commit()
     if doc.customer_360_match:
-        customer_doc = frappe.get_doc("Customer", doc.customer_360_match)
-        meta = frappe.get_meta("Customer")
-        if meta.has_field("communication_timeline"):
-            customer_doc.append(
-                "communication_timeline",
-                {
-                    "event_datetime": event.event_datetime,
-                    "communication_event": event.name,
-                    "summary": event.summary,
-                    "sentiment": event.sentiment,
-                    "employee": event.employee,
-                    "call_intelligence": doc.name,
-                },
-            )
-            customer_doc.save(ignore_permissions=True)
-    frappe.db.commit()
+        from visa_crm.api.communication_timeline import add_to_customer_timeline
+        add_to_customer_timeline(doc.customer_360_match,event)
 
 
 def create_employee_evaluation(doc):
@@ -705,23 +691,6 @@ def update_employee_kpi(doc):
     frappe.db.commit()
 
 
-def update_customer_360(doc):
-    if not doc.customer_360_match:
-        return
-
-    customer = frappe.get_doc("Customer", doc.customer_360_match)
-    customer.communication_count = frappe.db.count("Communication Event", {"customer": customer.name})
-    customer.last_contacted = frappe.utils.now()
-    customer.last_summary = doc.summary
-    customer.last_emotion = doc.emotion
-    customer.last_visa_interest = doc.country_of_interest
-    customer.current_counselor = doc.employee_match
-    customer.last_sentiment = doc.emotion
-    customer.last_lead_score = doc.lead_score
-    customer.save(ignore_permissions=True)
-    frappe.db.commit()
-
-
 def log_ai_usage(doc, file_uri=None, status="Success", error_message=None):
     try:
         usage = frappe.get_doc({
@@ -883,21 +852,11 @@ def save_ai_results(call_docname, parsed, raw_response, file_uri):
         frappe.log_error(frappe.get_traceback(), "Create Customer If Missing")
 
     try:
-        if doc.lead_match:
-            exists = frappe.db.exists("Lead Score History", {"call_intelligence": doc.name})
-            if not exists:
-                score_doc = frappe.get_doc({
-                    "doctype": "Lead Score History",
-                    "lead": doc.lead_match,
-                    "score": doc.lead_score,
-                    "emotion": doc.emotion,
-                    "intent": doc.lead_intent,
-                    "call_intelligence": doc.name,
-                })
-                score_doc.insert(ignore_permissions=True)
+        from visa_crm.api.lead_scoring import update_lead_score
+        update_lead_score(doc)
     except Exception:
-        append_ai_error(doc, f"Lead Score History: {frappe.get_traceback()}")
-        frappe.log_error(frappe.get_traceback(), "Lead Score History")
+        append_ai_error(doc,f"Lead Scoring: {frappe.get_traceback()}")
+        frappe.log_error(frappe.get_traceback(),"Lead Scoring")
 
     try:
         score = cint(doc.lead_score or 0)
@@ -952,7 +911,8 @@ def save_ai_results(call_docname, parsed, raw_response, file_uri):
         frappe.log_error(frappe.get_traceback(), "Update Employee KPI")
 
     try:
-        update_customer_360(doc)
+        from visa_crm.api.customer360 import update_customer_profile
+        update_customer_profile(doc)
     except Exception:
         append_ai_error(doc, f"Update Customer 360: {frappe.get_traceback()}")
         frappe.log_error(frappe.get_traceback(), "Update Customer 360")

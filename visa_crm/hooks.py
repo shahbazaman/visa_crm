@@ -13,6 +13,11 @@ doc_events = {
             "visa_crm.api.gemini_service.auto_create_call_intelligence"
         ]
     },
+    "Communication Event":{
+        "before_insert":[
+            "visa_crm.api.communication_event.auto_link"
+        ]
+    },
 
     "Call Intelligence": {
         "after_insert": [
@@ -26,8 +31,10 @@ doc_events = {
 }
 
 
-doctype_js = {
-    "Call Intelligence": "public/js/call_intelligence.js"
+doctype_js={
+    "Call Intelligence":"public/js/call_intelligence.js",
+    "Customer":"public/js/customer.js",
+    "Communication Event":"public/js/communication_event.js"
 }
 
 
@@ -47,7 +54,8 @@ scheduler_events = {
     },
 
     "daily": [
-        "visa_crm.api.gemini_service.send_followup_reminders"
+        "visa_crm.api.gemini_service.send_followup_reminders",
+        "visa_crm.api.reminder_scheduler.create_reminders"  
     ]
 
 }
