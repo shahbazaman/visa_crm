@@ -5,6 +5,7 @@ app_description = "Visa CRM AI Integration"
 app_email = "shahbazaman2003@gmail.com"
 app_license = "mit"
 
+after_install = "visa_crm.install.after_install"
 
 doc_events = {
 
@@ -81,3 +82,17 @@ fixtures = [
     }
 
 ]
+
+override_whitelisted_methods={
+
+    "visa_crm.manager_dashboard.dashboard":
+
+    "visa_crm.manager_dashboard.api.dashboard"
+
+}
+
+page_js={
+
+"manager-dashboard":"public/js/manager_dashboard.js"
+
+}

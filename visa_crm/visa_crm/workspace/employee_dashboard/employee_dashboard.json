@@ -11,7 +11,7 @@
  "is_hidden": 0,
  "label": "Employee Dashboard",
  "links": [],
- "modified": "2026-06-29 14:26:43.732979",
+ "modified": "2026-06-29 15:18:53.126018",
  "modified_by": "Administrator",
  "module": "Visa CRM",
  "name": "Employee Dashboard",
@@ -21,6 +21,61 @@
  "quick_lists": [],
  "roles": [],
  "sequence_id": 0.0,
- "shortcuts": [],
+ "shortcuts": [
+  {
+   "doc_view": "",
+   "label": "Call Intelligence",
+   "link_to": "Call Intelligence",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "",
+   "label": "Communication Event",
+   "link_to": "Communication Event",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "",
+   "label": "CRM Lead",
+   "link_to": "CRM Lead",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "",
+   "label": "Customer",
+   "link_to": "Customer",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "",
+   "label": "Employee KPI",
+   "link_to": "Employee KPI",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "",
+   "label": "Employee Evaluation",
+   "link_to": "Employee Evaluation",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "",
+   "label": "Counselor Leaderboard",
+   "link_to": "Counselor Leaderboard",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "",
+   "label": "AI Usage Log",
+   "link_to": "AI Usage Log",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "",
+   "label": "Lost Lead Intelligence",
+   "link_to": "Lost Lead Intelligence",
+   "type": "DocType"
+  }
+ ],
  "title": "Employee Dashboard"
 }
