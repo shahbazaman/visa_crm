@@ -28,7 +28,22 @@ def overview():
 
         "calls":frappe.db.count("Call Intelligence"),
 
-        "leads":frappe.db.count("CRM Lead")
+        "leads":frappe.db.count("CRM Lead"),
+
+        "positive_calls":frappe.db.count(
+            "Call Intelligence",
+            {"sentiment":"Positive"}
+        ),
+
+        "negative_calls":frappe.db.count(
+            "Call Intelligence",
+            {"sentiment":"Negative"}
+        ),
+
+        "pending_followups":frappe.db.count(
+            "ToDo",
+            {"status":"Open"}
+        )
 
     }
 
@@ -36,21 +51,35 @@ def employee_summary():
 
     return frappe.db.sql("""
 
-    select
+    SELECT
 
-    employee,
+        employee,
 
-    avg(score) score,
+        total_calls,
 
-    avg(conversion_rate) conversion,
+        total_leads,
 
-    avg(response_time) response
+        converted_leads,
 
-    from `tabEmployee KPI`
+        average_lead_score,
 
-    group by employee
+        average_evaluation_score,
 
-    order by score desc
+        pending_followups,
+
+        positive_calls,
+
+        neutral_calls,
+
+        negative_calls
+
+    FROM `tabEmployee KPI`
+
+    ORDER BY average_evaluation_score DESC,
+             converted_leads DESC,
+             total_calls DESC
+
+    LIMIT 10
 
     """,as_dict=True)
 
