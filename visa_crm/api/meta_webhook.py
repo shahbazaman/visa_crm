@@ -20,10 +20,18 @@ form_dict={dict(frappe.form_dict)}
 
     try:
 
+        # if frappe.request.method == "GET":
+        #     return meta_verify()
+
+        # return receive()
         if frappe.request.method == "GET":
             return meta_verify()
 
-        return receive()
+        if frappe.request.method == "POST":
+            return receive()
+
+        frappe.response["http_status_code"] = 405
+        return "Method Not Allowed"        
 
     except Exception:
 
