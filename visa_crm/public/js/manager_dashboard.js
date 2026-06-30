@@ -1,3 +1,5 @@
+frappe.pages["manager-dashboard"] = frappe.pages["manager-dashboard"] || {};
+
 frappe.pages["manager-dashboard"].on_page_load = function (wrapper) {
   const page = frappe.ui.make_app_page({
     parent: wrapper,
