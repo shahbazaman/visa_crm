@@ -6,3 +6,4 @@
 # Patches added in this section will be executed after doctypes are migrated
 visa_crm.patches.remove_manager_dashboard_workspace
 visa_crm.patches.remove_employee_dashboard_workspace
+visa_crm.patches.remove_employee_dashboard_workspace_v2
