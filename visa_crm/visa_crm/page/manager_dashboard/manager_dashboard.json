@@ -1,0 +1,10 @@
+{
+  "doctype": "Page",
+  "name": "manager-dashboard",
+  "page_name": "manager-dashboard",
+  "title": "Manager Dashboard",
+  "module": "Visa CRM",
+  "standard": "Yes",
+  "icon": "dashboard",
+  "roles": []
+}
