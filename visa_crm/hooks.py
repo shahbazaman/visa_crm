@@ -91,8 +91,6 @@ fixtures = [
 
 # }
 
-# page_js={
-
-# "manager-dashboard":"public/js/manager_dashboard.js"
-
-# }
+page_js = {
+    "manager-dashboard": "public/js/manager_dashboard.js"
+}
