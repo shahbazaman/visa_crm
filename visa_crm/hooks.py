@@ -83,13 +83,13 @@ fixtures = [
 
 ]
 
-override_whitelisted_methods={
+# override_whitelisted_methods={
 
-    "visa_crm.manager_dashboard.dashboard":
+#     "visa_crm.manager_dashboard.dashboard":
 
-    "visa_crm.manager_dashboard.api.dashboard"
+#     "visa_crm.manager_dashboard.api.dashboard"
 
-}
+# }
 
 page_js={
 
