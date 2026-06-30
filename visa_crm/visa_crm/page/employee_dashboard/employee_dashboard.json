@@ -1,0 +1,10 @@
+{
+  "doctype": "Page",
+  "name": "employee-dashboard",
+  "page_name": "employee-dashboard",
+  "title": "Employee Dashboard",
+  "module": "Visa CRM",
+  "standard": "Yes",
+  "icon": "users",
+  "roles": []
+}

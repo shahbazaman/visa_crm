@@ -92,5 +92,6 @@ fixtures = [
 # }
 
 page_js = {
-    "manager-dashboard": "public/js/manager_dashboard.js"
+    "manager-dashboard": "public/js/manager_dashboard.js",
+    "employee-dashboard": "public/js/employee_dashboard.js",
 }
