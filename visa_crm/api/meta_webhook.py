@@ -397,7 +397,10 @@ def receive():
 
         )
 
-
+        fetch_lead_details(
+            payload,
+            queue.name
+        )
 
         frappe.log_error(
 
