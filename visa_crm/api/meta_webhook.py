@@ -1,7 +1,7 @@
 import frappe
 import json
 
-
+from visa_crm.api.meta_graph import fetch_lead
 @frappe.whitelist(allow_guest=True)
 def webhook():
 
@@ -345,42 +345,39 @@ def receive():
 
         )
 
+        leadgen_id=None
 
+        try:
+            leadgen_id=payload["entry"][0]["changes"][0]["value"]["leadgen_id"]
+        except:
+            pass
 
-        queue = frappe.get_doc({
+        lead_data=None
+        if leadgen_id:
+            lead_data=fetch_lead(leadgen_id)
 
-
-            "doctype":
-
-                "Lead Intake Queue",
-
-
-            "lead_source":
-
-                lead_source,
-
-
-            "raw_payload":
-
-                json.dumps(
-
-                    payload,
-
-                    default=str
-
-                ),
-
-
-            "status":
-
-                "Lead Received"
-
-
-
+        queue=frappe.get_doc({
+        "doctype":"Lead Intake Queue",
+        "lead_source":lead_source,
+        "source_lead_id":leadgen_id,
+        "raw_payload":json.dumps(payload,default=str),
+        "status":"Lead Received"
         })
 
-
-
+        if lead_data:
+            for f in lead_data.get("field_data",[]):
+                n=f.get("name")
+                v=f.get("values",[None])[0]
+                if n=="full_name":
+                    queue.customer_name=v
+                elif n=="phone_number":
+                    queue.phone=v
+                elif n=="email":
+                    queue.email=v
+                elif "country" in n.lower():
+                    queue.country_interested=v
+                elif "visa" in n.lower():
+                    queue.visa_type=v
         frappe.log_error(
 
             title="META QUEUE DOC",

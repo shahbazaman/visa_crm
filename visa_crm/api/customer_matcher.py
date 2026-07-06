@@ -1,7 +1,5 @@
 import frappe
 
-
-
 def find_customer(phone):
 
     if not phone:
@@ -84,3 +82,28 @@ def match_all(phone):
 
 
     }
+
+
+def match_customer(queue):
+
+    if queue.phone:
+
+        lead=frappe.db.exists(
+            "Lead",
+            {"mobile_no":queue.phone}
+        )
+
+        if lead:
+            return lead
+
+    if queue.email:
+
+        lead=frappe.db.exists(
+            "Lead",
+            {"email_id":queue.email}
+        )
+
+        if lead:
+            return lead
+
+    return None
