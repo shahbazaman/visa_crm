@@ -50,10 +50,13 @@ def _charts():
         if not frappe.db.exists("DocType", doctype) or frappe.db.exists("Dashboard Chart", name):
             continue
         doc = frappe.new_doc("Dashboard Chart")
-        for field, value in {"chart_name": name, "chart_type": "Donut", "document_type": doctype, "group_by_type": "Count", "group_by_based_on": group_by, "is_public": 1, "timeseries": 0, "number_of_groups": 10, "type": "Group By"}.items():
+        for field, value in {"chart_name": name, "chart_type": "Donut", "document_type": doctype, "group_by_type": "Count", "group_by_based_on": group_by, "is_public": 1, "timeseries": 0, "is_timeseries": 0, "based_on": "creation", "timespan": "Last Year", "time_interval": "Monthly", "number_of_groups": 10, "type": "Group By"}.items():
             if doc.meta.has_field(field):
                 doc.set(field, value)
-        doc.insert(ignore_permissions=True)
+        try:
+            doc.insert(ignore_permissions=True)
+        except Exception:
+            frappe.logger("visa_crm.migration").warning(f"Skipped Dashboard Chart {name}: {frappe.get_traceback()}")
 
 def _cards():
     if not frappe.db.exists("DocType", "Number Card"):

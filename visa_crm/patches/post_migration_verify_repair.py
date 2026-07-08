@@ -105,8 +105,11 @@ def _charts():
     for name,doctype,group_by in CHARTS:
         if _exists("DocType",doctype) and not _exists("Dashboard Chart",name):
             doc=frappe.new_doc("Dashboard Chart")
-            _set(doc,{"chart_name":name,"chart_type":"Donut","document_type":doctype,"group_by_type":"Count","group_by_based_on":group_by,"is_public":1,"timeseries":0,"number_of_groups":10,"type":"Group By"})
-            _save(doc,"Dashboard Chart",name)
+            _set(doc,{"chart_name":name,"chart_type":"Donut","document_type":doctype,"group_by_type":"Count","group_by_based_on":group_by,"is_public":1,"timeseries":0,"is_timeseries":0,"based_on":"creation","timespan":"Last Year","time_interval":"Monthly","number_of_groups":10,"type":"Group By"})
+            try:
+                _save(doc,"Dashboard Chart",name)
+            except Exception:
+                _log("chart_skip",name,frappe.get_traceback())
 
 def _cards():
     if not _exists("DocType", "Number Card"):
@@ -190,6 +193,8 @@ def _save(doc,doctype,name):
         _log("ensured", doctype, name)
     except frappe.DuplicateEntryError:
         _log("duplicate_skip", doctype, name)
+    except Exception:
+        _log("save_skip", doctype, name, frappe.get_traceback())
 
 def _exists(doctype,name):
     return bool(frappe.db.exists(doctype,name))
