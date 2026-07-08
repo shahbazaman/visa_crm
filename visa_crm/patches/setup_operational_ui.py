@@ -9,15 +9,8 @@ CHARTS = [("Visa Lead Stage Mix", "CRM Lead", "status"), ("Visa Source Performan
 CARDS = [("New Leads", "CRM Lead", {"status": "New"}), ("Active Leads", "CRM Lead", {}), ("Pending Documents", "Customer Documents", {"status": "Pending"}), ("Visa Processing", "Visa Application", {"status": "Visa Processing"}), ("Approved Visas", "Visa Application", {"status": "Approved"}), ("Overdue Follow-ups", "ToDo", {"status": "Open"})]
 
 def execute():
-    _roles()
-    _reports()
-    _print_formats()
-    _charts()
-    _cards()
-    _dashboards()
-    _workspace()
-    _kanban()
-    _permissions()
+    for fn in (_roles, _reports, _print_formats, _charts, _cards, _dashboards, _workspace, _kanban, _permissions):
+        _safe(fn)
 
 def _roles():
     for role in ROLES:
@@ -27,12 +20,18 @@ def _roles():
 def _reports():
     for name, (ref, query) in REPORTS.items():
         if frappe.db.exists("DocType", ref) and not frappe.db.exists("Report", name):
-            frappe.get_doc({"doctype": "Report", "report_name": name, "ref_doctype": ref, "report_type": "Query Report", "is_standard": "No", "query": query}).insert(ignore_permissions=True)
+            try:
+                frappe.get_doc({"doctype": "Report", "report_name": name, "ref_doctype": ref, "report_type": "Query Report", "is_standard": "No", "module": "Visa CRM", "query": query}).insert(ignore_permissions=True)
+            except Exception:
+                frappe.logger("visa_crm.migration").warning(f"Skipped Report {name}: {frappe.get_traceback()}")
 
 def _print_formats():
     for name, (dt, html) in PRINTS.items():
         if frappe.db.exists("DocType", dt) and not frappe.db.exists("Print Format", name):
-            frappe.get_doc({"doctype": "Print Format", "name": name, "doc_type": dt, "module": "Visa CRM", "standard": "No", "custom_format": 1, "print_format_type": "Jinja", "html": html}).insert(ignore_permissions=True)
+            try:
+                frappe.get_doc({"doctype": "Print Format", "name": name, "doc_type": dt, "module": "Visa CRM", "standard": "No", "custom_format": 1, "print_format_type": "Jinja", "html": html}).insert(ignore_permissions=True)
+            except Exception:
+                frappe.logger("visa_crm.migration").warning(f"Skipped Print Format {name}: {frappe.get_traceback()}")
 
 def _dashboards():
     for name in ("Sales Dashboard", "Counselor Dashboard", "Visa Processing Dashboard", "Management Dashboard", "Follow-up Dashboard"):
@@ -71,7 +70,10 @@ def _cards():
         for field, value in {"label": name, "document_type": doctype, "function": "Count", "is_public": 1, "filters_json": frappe.as_json(filters)}.items():
             if doc.meta.has_field(field):
                 doc.set(field, value)
-        doc.insert(ignore_permissions=True)
+        try:
+            doc.insert(ignore_permissions=True)
+        except Exception:
+            frappe.logger("visa_crm.migration").warning(f"Skipped Number Card {name}: {frappe.get_traceback()}")
 
 def _workspace():
     existing = frappe.db.exists("Workspace", "Visa CRM")
@@ -86,9 +88,15 @@ def _workspace():
         doc = frappe.get_doc("Workspace", "Visa CRM")
         doc.content = frappe.as_json(content)
         doc.set("shortcuts", shortcuts)
-        doc.save(ignore_permissions=True)
+        try:
+            doc.save(ignore_permissions=True)
+        except Exception:
+            frappe.logger("visa_crm.migration").warning(f"Skipped Workspace repair: {frappe.get_traceback()}")
         return
-    frappe.get_doc({"doctype": "Workspace", "name": "Visa CRM", "label": "Visa CRM", "title": "Visa CRM", "module": "Visa CRM", "public": 1, "content": frappe.as_json(content), "shortcuts": shortcuts}).insert(ignore_permissions=True)
+    try:
+        frappe.get_doc({"doctype": "Workspace", "name": "Visa CRM", "label": "Visa CRM", "title": "Visa CRM", "module": "Visa CRM", "public": 1, "content": frappe.as_json(content), "shortcuts": shortcuts}).insert(ignore_permissions=True)
+    except Exception:
+        frappe.logger("visa_crm.migration").warning(f"Skipped Workspace create: {frappe.get_traceback()}")
 
 def _kanban():
     if not frappe.db.exists("DocType", "Kanban Board") or frappe.db.exists("Kanban Board", "CRM Lead by Stage"):
@@ -97,7 +105,10 @@ def _kanban():
     doc.kanban_board_name = "CRM Lead by Stage"
     doc.reference_doctype = "CRM Lead"
     doc.field_name = _stage_field()
-    doc.insert(ignore_permissions=True)
+    try:
+        doc.insert(ignore_permissions=True)
+    except Exception:
+        frappe.logger("visa_crm.migration").warning(f"Skipped Kanban Board CRM Lead by Stage: {frappe.get_traceback()}")
 
 def _permissions():
     doctypes = ["CRM Lead", "Visa Application", "Customer Documents", "Follow-up History", "Counselor Assignment History", "Lead Timeline", "Activity Log", "Payment Schedule", "Visa Status Log", "Communication Event"]
@@ -110,7 +121,10 @@ def _permissions():
 def _permission(doctype, role, read=1, write=1, create=1):
     if frappe.db.exists("Custom DocPerm", {"parent": doctype, "role": role}):
         return
-    frappe.get_doc({"doctype": "Custom DocPerm", "parent": doctype, "parenttype": "DocType", "parentfield": "permissions", "role": role, "read": read, "write": write, "create": create, "export": read, "print": read, "report": read}).insert(ignore_permissions=True)
+    try:
+        frappe.get_doc({"doctype": "Custom DocPerm", "parent": doctype, "parenttype": "DocType", "parentfield": "permissions", "role": role, "read": read, "write": write, "create": create, "export": read, "print": read, "report": read}).insert(ignore_permissions=True)
+    except Exception:
+        frappe.logger("visa_crm.migration").warning(f"Skipped permission {doctype} {role}: {frappe.get_traceback()}")
 
 def _stage_field():
     meta = frappe.get_meta("CRM Lead")
@@ -122,3 +136,9 @@ def _stage_field():
 def _target_exists(link_type, link_to):
     checks = {"DocType": "DocType", "Report": "Report", "Dashboard": "Dashboard", "Page": "Page"}
     return frappe.db.exists(checks.get(link_type, link_type), link_to)
+
+def _safe(fn):
+    try:
+        fn()
+    except Exception:
+        frappe.logger("visa_crm.migration").warning(f"Skipped {fn.__name__}: {frappe.get_traceback()}")

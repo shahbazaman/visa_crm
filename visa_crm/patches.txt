@@ -11,3 +11,4 @@ visa_crm.patches.seed_crm_demo_data
 visa_crm.patches.setup_operational_ui
 visa_crm.patches.setup_phase4_communication_ai_portal
 visa_crm.patches.post_migration_verify_repair
+visa_crm.patches.stabilize_phase_deployment

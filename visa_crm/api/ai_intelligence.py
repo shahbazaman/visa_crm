@@ -27,10 +27,20 @@ def analyze_event(doc):
     return _heuristic(text)
 
 def manager_dashboard():
-    fields=["employee","count(name) as interactions","avg(lead_score) as avg_score"] if has_field("Communication Event","employee") else ["count(name) as interactions"]
-    rows=frappe.get_all("Communication Event",fields=fields,group_by="employee" if has_field("Communication Event","employee") else None,limit_page_length=20)
+    if not has_doctype("Communication Event"):
+        return {"performance":[],"sentiment":[],"recommendations":[],"date":nowdate()}
+    fields=["count(name) as interactions"]
+    group_by=None
+    if has_field("Communication Event","employee"):
+        fields.insert(0,"employee")
+        group_by="employee"
+    if has_field("Communication Event","lead_score"):
+        fields.append("avg(lead_score) as avg_score")
+    rows=frappe.get_all("Communication Event",fields=fields,group_by=group_by,limit_page_length=20)
     sentiment=frappe.get_all("Communication Event",fields=["sentiment","count(name) as count"],group_by="sentiment",limit_page_length=20) if has_field("Communication Event","sentiment") else []
-    recommendations=frappe.get_all("Communication Event",fields=["name","ai_next_best_action","ai_customer_priority","customer","lead"],filters={"ai_next_best_action":["is","set"]} if has_field("Communication Event","ai_next_best_action") else {},order_by="modified desc",limit_page_length=10)
+    rec_fields=[f for f in ("name","ai_next_best_action","ai_customer_priority","customer","lead") if f=="name" or has_field("Communication Event",f)]
+    filters={"ai_next_best_action":["is","set"]} if has_field("Communication Event","ai_next_best_action") else {}
+    recommendations=frappe.get_all("Communication Event",fields=rec_fields,filters=filters,order_by="modified desc",limit_page_length=10) if has_field("Communication Event","ai_next_best_action") else []
     return {"performance":rows,"sentiment":sentiment,"recommendations":recommendations,"date":nowdate()}
 
 def manager_daily_summary():

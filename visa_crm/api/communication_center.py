@@ -74,19 +74,22 @@ def send_reply(channel,to,content,customer=None,lead=None,visa_application=None)
 
 @frappe.whitelist()
 def shared_inbox(filters=None,limit=50):
+    if not has_doctype("Communication Event"):
+        return {"rows":[],"counters":inbox_counters()}
     filters=load_json(filters,{}) if isinstance(filters,str) else (filters or {})
     query={}
     if filters.get("channel"):
         query["source"]=filters["channel"]
-    if filters.get("status"):
+    if filters.get("status") and has_field("Communication Event","conversation_status"):
         query["conversation_status"]=filters["status"]
-    if filters.get("assigned_to"):
+    if filters.get("assigned_to") and has_field("Communication Event","assigned_user"):
         query["assigned_user"]=filters["assigned_to"]
-    if filters.get("label"):
+    if filters.get("label") and has_field("Communication Event","label"):
         query["label"]=filters["label"]
-    fields=["name","event_id","source","event_type","direction","customer","lead","employee","phone","email","content","summary","sentiment","lead_score","event_datetime"]
+    fields=[f for f in ("name","event_id","source","event_type","direction","customer","lead","employee","phone","email","content","summary","sentiment","lead_score","event_datetime") if f=="name" or has_field("Communication Event",f)]
     fields += [f for f in ("unread","assigned_user","conversation_status","label","provider","provider_message_id","visa_application","ai_next_best_action","ai_customer_priority") if has_field("Communication Event",f)]
-    rows=frappe.get_all("Communication Event",filters=query,fields=fields,order_by="event_datetime desc, modified desc",limit_page_length=int(limit or 50))
+    order_by="event_datetime desc, modified desc" if has_field("Communication Event","event_datetime") else "modified desc"
+    rows=frappe.get_all("Communication Event",filters=query,fields=fields or ["name"],order_by=order_by,limit_page_length=int(limit or 50))
     if filters.get("search"):
         term=str(filters.get("search")).lower()
         rows=[r for r in rows if term in " ".join([str(v or "") for v in r.values()]).lower()]
@@ -110,7 +113,9 @@ def conversation(name):
         conditions.append(["email","=",doc.email])
     if getattr(doc,"customer",None):
         conditions.append(["customer","=",doc.customer])
-    rows=frappe.get_all("Communication Event",or_filters=conditions,fields=["name","source","direction","content","summary","event_datetime","customer","lead","phone","email"],order_by="event_datetime asc") if conditions else [doc.as_dict()]
+    fields=[f for f in ("name","source","direction","content","summary","event_datetime","customer","lead","phone","email") if f=="name" or has_field("Communication Event",f)]
+    order_by="event_datetime asc" if has_field("Communication Event","event_datetime") else "modified asc"
+    rows=frappe.get_all("Communication Event",or_filters=conditions,fields=fields,order_by=order_by) if conditions else [doc.as_dict()]
     return {"event":doc.as_dict(),"history":rows}
 
 @frappe.whitelist()

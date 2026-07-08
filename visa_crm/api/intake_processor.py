@@ -1,5 +1,5 @@
 import frappe
-from frappe.utils import add_to_date, now
+from frappe.utils import add_to_date, get_datetime, now, now_datetime
 from visa_crm.api.customer360 import link_or_create_lead
 from visa_crm.api.followup import create_meta_followup
 from visa_crm.api.lead_assignment import assign_lead
@@ -8,7 +8,7 @@ from visa_crm.api.meta_mapping import normalize_lead
 from visa_crm.api.meta_utils import MAX_RETRIES, get_meta_settings, has_field, load_json, log_exception, log_info, meta_debug_log, queue_status, retry_count, safe_json_dumps, set_values
 from visa_crm.api.workflow import create_deal_if_supported, mark_lead_stage, qualify_lead
 
-def process_pending(limit=20):
+def process_pending(limit=100):
     meta_debug_log("process_pending_start", status="scheduler", limit=limit)
     rows = _pending_rows(limit)
     for row in rows:
@@ -61,7 +61,7 @@ def process_queue(docname):
 
 def _pending_rows(limit):
     filters = {"status": ["in", ["Lead Received", "Failed"]]}
-    rows = frappe.get_all("Lead Intake Queue", filters=filters, fields=["name", "status"], order_by="creation asc", limit=limit)
+    rows = frappe.get_all("Lead Intake Queue", filters=filters, fields=["name", "status"], order_by="creation asc", limit=int(limit or 100))
     if not has_field("Lead Intake Queue", "next_retry_at"):
         return [row for row in rows if row.status == "Lead Received"]
     pending = []
@@ -71,7 +71,7 @@ def _pending_rows(limit):
             continue
         next_retry = frappe.db.get_value("Lead Intake Queue", row.name, "next_retry_at")
         count = frappe.db.get_value("Lead Intake Queue", row.name, "retry_count") if has_field("Lead Intake Queue", "retry_count") else MAX_RETRIES
-        if next_retry and next_retry <= now() and (count or 0) < MAX_RETRIES:
+        if next_retry and get_datetime(next_retry) <= now_datetime() and (count or 0) < MAX_RETRIES:
             pending.append(row)
     return pending
 
