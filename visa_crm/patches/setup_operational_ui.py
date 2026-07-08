@@ -41,7 +41,10 @@ def _dashboards():
         doc = frappe.new_doc("Dashboard")
         doc.dashboard_name = name
         doc.module = "Visa CRM"
-        doc.insert(ignore_permissions=True)
+        try:
+            doc.insert(ignore_permissions=True)
+        except Exception:
+            frappe.logger("visa_crm.migration").warning(f"Skipped Dashboard {name}: {frappe.get_traceback()}")
 
 def _charts():
     if not frappe.db.exists("DocType", "Dashboard Chart"):
