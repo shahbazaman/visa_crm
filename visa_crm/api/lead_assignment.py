@@ -16,6 +16,7 @@ def assign_lead(lead, queue_doc=None, strategy=None, context=None):
             set_if_has(doc, field, employee)
         doc.save(ignore_permissions=True)
     _assignment_log(lead, employee)
+    _assignment_history(lead, employee, strategy or "least_workload")
     if queue_doc:
         queue_doc.assigned_employee = employee
     log_info("meta_lead_assigned", lead=lead, employee=employee)
@@ -41,8 +42,23 @@ def _round_robin_employee():
 def _eligible_employees():
     if not has_doctype("Employee"):
         return []
+    configured = frappe.conf.get("visa_crm_sales_employees")
+    if configured:
+        return [employee for employee in configured if frappe.db.exists("Employee", employee)]
     filters = {"status": "Active"} if has_field("Employee", "status") else {}
-    return frappe.get_all("Employee", filters=filters, pluck="name", order_by="name asc")
+    employees = frappe.get_all("Employee", filters=filters, pluck="name", order_by="name asc")
+    groups = frappe.conf.get("visa_crm_sales_employee_groups") or []
+    return _filter_by_groups(employees, groups) if groups else employees
+
+def _filter_by_groups(employees, groups):
+    if not has_doctype("Employee Group"):
+        return employees
+    linked = []
+    for group in groups:
+        for field in ("employee", "employee_name", "member"):
+            if has_field("Employee Group", field):
+                linked.extend(frappe.get_all("Employee Group", filters={"name": group}, pluck=field))
+    return [employee for employee in employees if employee in linked] or employees
 
 def _assignment_log(lead, employee):
     if not lead or not employee or not has_doctype("Lead Assignment"):
@@ -57,4 +73,12 @@ def _assignment_log(lead, employee):
     doc.assigned_on = now()
     doc.status = "Pending"
     doc.priority = "Medium"
+    doc.insert(ignore_permissions=True)
+
+def _assignment_history(lead, employee, strategy):
+    if not lead or not employee or not has_doctype("Counselor Assignment History"):
+        return
+    doc = frappe.new_doc("Counselor Assignment History")
+    for field, value in {"lead": lead, "assigned_to": employee, "assigned_by": frappe.session.user, "assigned_on": now(), "strategy": strategy}.items():
+        set_if_has(doc, field, value)
     doc.insert(ignore_permissions=True)

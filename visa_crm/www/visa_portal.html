@@ -1,0 +1,17 @@
+{% extends "templates/web.html" %}
+{% block page_content %}
+<div class="visa-portal">
+    <section class="visa-portal-head">
+        <h1>{{ profile.customer_name or profile.name }}</h1>
+        <p>{{ profile.email_id or profile.email or "" }}{% if profile.mobile_no or profile.phone %} · {{ profile.mobile_no or profile.phone }}{% endif %}</p>
+    </section>
+    <section class="visa-portal-grid">
+        <div class="visa-panel"><h3>Visa Applications</h3>{% for row in applications %}<div class="visa-row"><b>{{ row.visa_type or row.name }}</b><span>{{ row.country or row.country_interested or "" }}</span><small>{{ row.status or row.workflow_state or "In Progress" }}</small></div>{% else %}<p>No visa applications yet.</p>{% endfor %}</div>
+        <div class="visa-panel"><h3>Documents</h3>{% for row in documents %}<div class="visa-row"><b>{{ row.document_name or row.document_type or row.name }}</b><span>{{ row.status or row.verification_status or "Pending" }}</span><small>{{ row.expiry_date or "" }}</small></div>{% else %}<p>No documents requested yet.</p>{% endfor %}<a class="btn btn-primary btn-sm" href="/document-upload">Upload Document</a></div>
+        <div class="visa-panel"><h3>Payments</h3>{% for row in payments %}<div class="visa-row"><b>{{ row.amount or row.paid_amount or "" }}</b><span>{{ row.status or row.payment_status or "Pending" }}</span><small>{{ row.due_date or "" }}</small></div>{% else %}<p>No payment schedule available.</p>{% endfor %}</div>
+        <div class="visa-panel"><h3>Appointments</h3>{% for row in appointments %}<div class="visa-row"><b>{{ row.description }}</b><span>{{ row.status }}</span><small>{{ row.date or "" }}</small></div>{% else %}<p>No appointments scheduled.</p>{% endfor %}</div>
+    </section>
+    <section class="visa-panel"><h3>Communication Timeline</h3>{% for row in timeline %}<div class="visa-row"><b>{{ row.source or row.event_type or "Update" }}</b><span>{{ row.summary or row.content or "" }}</span><small>{{ row.event_datetime or row.modified }}</small></div>{% else %}<p>No updates yet.</p>{% endfor %}</section>
+    <section class="visa-panel"><h3>Notifications</h3>{% for row in notifications %}<div class="visa-row"><b>{{ row.subject }}</b><small>{{ row.creation }}</small></div>{% else %}<p>No unread notifications.</p>{% endfor %}</section>
+</div>
+{% endblock %}

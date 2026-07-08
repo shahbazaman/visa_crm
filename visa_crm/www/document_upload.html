@@ -1,0 +1,26 @@
+{% extends "templates/web.html" %}
+{% block page_content %}
+<div class="visa-portal">
+    <section class="visa-portal-head"><h1>Upload Document</h1><p>Upload only documents requested for your visa application.</p></section>
+    <div class="visa-panel">
+        <div class="form-group"><label>Document Name</label><input class="form-control" id="document-name" placeholder="Passport, photo, bank statement"></div>
+        <div class="form-group"><label>File</label><input class="form-control" id="document-file" type="file"></div>
+        <button class="btn btn-primary" id="register-document">Submit Document</button>
+        <p class="text-muted" id="upload-status"></p>
+    </div>
+</div>
+<script>
+document.getElementById("register-document").onclick=function(){
+    const status=document.getElementById("upload-status"), file=document.getElementById("document-file").files[0];
+    if(!file){status.textContent="Please choose a file.";return}
+    status.textContent="Uploading...";
+    const data=new FormData();
+    data.append("file",file);
+    data.append("is_private",1);
+    fetch("/api/method/upload_file",{method:"POST",body:data,headers:{"X-Frappe-CSRF-Token":frappe.csrf_token}}).then(r=>r.json()).then(r=>{
+        const file_url=(r.message||{}).file_url;
+        frappe.call({method:"visa_crm.www.document_upload.register_document",args:{document_name:document.getElementById("document-name").value,file_url:file_url},callback:function(res){status.textContent=res.message?"Document submitted for verification.":"Unable to submit document.";}})
+    }).catch(()=>{status.textContent="Upload failed.";});
+}
+</script>
+{% endblock %}

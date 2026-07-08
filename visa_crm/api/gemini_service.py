@@ -102,50 +102,11 @@ def set_call_status(docname, status, error_message=None, overwrite=False, only_i
 def get_api_key():
     settings = frappe.get_single("Gemini Settings")
     return settings.get_password("gemini_api_key")
-def _gemini_headers(extra=None):
-    headers = {"x-goog-api-key": get_api_key()}
-    if extra:
-        headers.update(extra)
-    return headers
-
-
-def _gemini_error_message(response):
-    body = ""
-    try:
-        body = response.text or ""
-    except Exception:
-        body = ""
-    body = body[:1000]
-    if body:
-        return f"Gemini API returned HTTP {response.status_code} {response.reason}: {body}"
-    return f"Gemini API returned HTTP {response.status_code} {response.reason}"
-
-
-def _gemini_request(method, url, *, retries=3, timeout=180, **kwargs):
-    retry_statuses = {429, 500, 502, 503, 504}
-    last_response = None
-
-    for attempt in range(retries + 1):
-        response = requests.request(method, url, timeout=timeout, **kwargs)
-        last_response = response
-
-        if response.status_code not in retry_statuses:
-            break
-
-        if attempt < retries:
-            time.sleep(min(2 ** attempt, 8))
-
-    if last_response is None:
-        raise RuntimeError("Gemini request did not return a response")
-
-    if last_response.status_code >= 400:
-        raise requests.HTTPError(_gemini_error_message(last_response), response=last_response)
-
-    return last_response
 
 def upload_audio_to_gemini(file_path):
     """Upload raw audio bytes to Gemini Files API and return file_uri."""
-    upload_url = "https://generativelanguage.googleapis.com/upload/v1beta/files"
+    api_key = get_api_key()
+    upload_url = f"https://generativelanguage.googleapis.com/upload/v1beta/files?key={api_key}"
 
     filename = os.path.basename(file_path)
     ext = os.path.splitext(filename)[1].lower()
@@ -168,17 +129,19 @@ def upload_audio_to_gemini(file_path):
     }
 
     with open(file_path, "rb") as fh:
-        r = _gemini_request("POST", upload_url, headers=_gemini_headers(headers), data=fh)
+        r = requests.post(upload_url, headers=headers, data=fh)
+    r.raise_for_status()
     return r.json()["file"]["uri"]
 
 
 def wait_until_active(file_uri, timeout_sec=60):
+    api_key = get_api_key()
     file_name = file_uri.split("/")[-1]
-    url = f"https://generativelanguage.googleapis.com/v1beta/files/{file_name}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/files/{file_name}?key={api_key}"
 
     start = time.time()
     while time.time() - start < timeout_sec:
-        r = _gemini_request("GET", url, headers=_gemini_headers(), retries=2, timeout=60)
+        r = requests.get(url)
         try:
             data = r.json()
         except Exception:
@@ -191,7 +154,8 @@ def wait_until_active(file_uri, timeout_sec=60):
 
 
 def analyze_audio(file_uri):
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+    api_key = get_api_key()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
 
     prompt = """
 You are an assistant that analyzes audio conversations. Reply using ONLY labeled fields in this exact format.
@@ -246,12 +210,8 @@ Coaching Tips: <coaching tips>
         ]
     }
 
-    r = _gemini_request(
-        "POST",
-        url,
-        headers=_gemini_headers({"Content-Type": "application/json"}),
-        json=payload,
-    )
+    r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload)
+    r.raise_for_status()
     result = r.json()
     candidates = result.get("candidates") or []
     if not candidates:
@@ -276,19 +236,16 @@ def contains_malayalam(text):
 
 def translate_gemini_response(raw_response):
     """Ask Gemini to translate the labeled Gemini output into English, preserving labels."""
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+    api_key = get_api_key()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     prompt = f"Translate the following AI output into English. Preserve all labeled field names exactly and return only the labeled fields in the same format. Do not add commentary.\n\n{raw_response}"
     payload = {
         "contents": [
             {"parts": [{"text": prompt}]}
         ]
     }
-    r = _gemini_request(
-        "POST",
-        url,
-        headers=_gemini_headers({"Content-Type": "application/json"}),
-        json=payload,
-    )
+    r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload)
+    r.raise_for_status()
     result = r.json()
     candidates = result.get("candidates") or []
     if not candidates:
