@@ -7,6 +7,10 @@ def inbox(filters=None,limit=50):
     return shared_inbox(filters,limit)
 
 @frappe.whitelist()
+def get_inbox(filters=None,limit=50):
+    return inbox(filters,limit)
+
+@frappe.whitelist()
 def thread(event):
     return conversation(event)
 

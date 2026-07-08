@@ -6,3 +6,8 @@
 # Patches added in this section will be executed after doctypes are migrated
 visa_crm.patches.add_meta_lead_queue_fields
 visa_crm.patches.remove_bad_meta_scheduler_wrappers
+visa_crm.patches.create_crm_lifecycle_doctypes
+visa_crm.patches.seed_crm_demo_data
+visa_crm.patches.setup_operational_ui
+visa_crm.patches.setup_phase4_communication_ai_portal
+visa_crm.patches.post_migration_verify_repair

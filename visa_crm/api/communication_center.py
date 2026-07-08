@@ -93,6 +93,14 @@ def shared_inbox(filters=None,limit=50):
     return {"rows":rows,"counters":inbox_counters()}
 
 @frappe.whitelist()
+def get_inbox(filters=None,limit=50):
+    return shared_inbox(filters,limit)
+
+@frappe.whitelist()
+def get_shared_inbox(filters=None,limit=50):
+    return shared_inbox(filters,limit)
+
+@frappe.whitelist()
 def conversation(name):
     doc=frappe.get_doc("Communication Event",name)
     conditions=[]
