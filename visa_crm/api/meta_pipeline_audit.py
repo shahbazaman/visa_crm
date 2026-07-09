@@ -16,9 +16,14 @@ def generate_report(queue_name=None, leadgen_id=None, write_file=1):
 @frappe.whitelist()
 def webhook_audit():
     _admin()
+    return last_webhook_events()
+
+@frappe.whitelist()
+def last_webhook_events():
+    _admin()
     if not has_doctype("Meta Webhook Event"):
         return []
-    fields = ["name", "creation"] + [field for field in ("event_type", "leadgen_id", "page_id", "form_id", "queue", "queue_status", "crm_lead", "graph_api_request", "graph_api_response") if has_field("Meta Webhook Event", field)]
+    fields = ["name", "creation"] + [field for field in ("event_type", "entry_id", "leadgen_id", "page_id", "form_id", "request_headers", "raw_json", "queue", "queue_status", "crm_lead", "graph_api_request", "graph_api_response") if has_field("Meta Webhook Event", field)]
     rows = frappe.get_all("Meta Webhook Event", fields=fields, order_by="creation desc", limit=20)
     out = []
     for row in rows:
@@ -28,8 +33,23 @@ def webhook_audit():
         if queue and has_doctype("Lead Intake Queue"):
             queue_status = queue_status or frappe.db.get_value("Lead Intake Queue", queue, "status")
             lead = lead or (frappe.db.get_value("Lead Intake Queue", queue, "matched_lead") if has_field("Lead Intake Queue", "matched_lead") else None)
-        out.append({"event": row.name, "received_at": row.creation, "event_field": row.get("event_type"), "leadgen_id": row.get("leadgen_id"), "page_id": row.get("page_id"), "form_id": row.get("form_id"), "graph_request": row.get("graph_api_request"), "graph_response": row.get("graph_api_response"), "queue": queue, "queue_status": queue_status, "crm_lead_created": bool(lead), "crm_lead": lead})
+        out.append({"event": row.name, "received_at": row.creation, "event_field": row.get("event_type"), "entry_id": row.get("entry_id"), "leadgen_id": row.get("leadgen_id"), "page_id": row.get("page_id"), "form_id": row.get("form_id"), "headers": load_json(row.get("request_headers"), {}), "raw_json": load_json(row.get("raw_json"), {}), "graph_request": row.get("graph_api_request"), "graph_response": row.get("graph_api_response"), "queue": queue, "queue_status": queue_status, "crm_lead_created": bool(lead), "crm_lead": lead})
     return out
+
+@frappe.whitelist()
+def last_real_leadgen():
+    _admin()
+    if not has_doctype("Meta Webhook Event"):
+        return {"found": False, "message": "No real Meta LeadGen webhook has ever been received."}
+    fields = ["name", "creation"] + [field for field in ("event_type", "entry_id", "leadgen_id", "page_id", "form_id", "request_headers", "raw_json", "queue", "queue_status", "crm_lead", "graph_api_request", "graph_api_response") if has_field("Meta Webhook Event", field)]
+    rows = frappe.get_all("Meta Webhook Event", filters={"event_type": "leadgen"}, fields=fields, order_by="creation desc", limit=1)
+    if not rows:
+        return {"found": False, "message": "No real Meta LeadGen webhook has ever been received."}
+    row = rows[0]
+    graph = _graph_probe(row.get("leadgen_id")) if row.get("leadgen_id") else {"skipped": "missing_leadgen_id"}
+    if graph.get("ok") is False:
+        _store_event_graph(row.name, graph)
+    return {"found": True, "event": row.name, "received_at": row.creation, "event_field": row.get("event_type"), "entry_id": row.get("entry_id"), "leadgen_id": row.get("leadgen_id"), "page_id": row.get("page_id"), "form_id": row.get("form_id"), "headers": load_json(row.get("request_headers"), {}), "raw_json": load_json(row.get("raw_json"), {}), "queue": row.get("queue"), "queue_status": row.get("queue_status"), "crm_lead_created": bool(row.get("crm_lead")), "crm_lead": row.get("crm_lead"), "graph_probe": graph}
 
 @frappe.whitelist()
 def meta_health():
@@ -151,6 +171,17 @@ def _latest_value(doctype, filters, field):
 def _permission_failures():
     rows = frappe.get_all("Lead Intake Queue", fields=["name", "graph_error_message"], filters={"graph_error_message": ["is", "set"]}, limit=500)
     return len([row for row in rows if "permission" in str(row.get("graph_error_message") or "").lower() or "oauth" in str(row.get("graph_error_message") or "").lower()])
+
+def _store_event_graph(event_name, graph):
+    if not has_doctype("Meta Webhook Event"):
+        return
+    values = {}
+    if has_field("Meta Webhook Event", "graph_api_request"):
+        values["graph_api_request"] = safe_json_dumps(graph.get("request"))
+    if has_field("Meta Webhook Event", "graph_api_response"):
+        values["graph_api_response"] = safe_json_dumps(graph.get("response"))
+    if values:
+        frappe.db.set_value("Meta Webhook Event", event_name, values, update_modified=False)
 
 def _queue(name=None):
     if not has_doctype("Lead Intake Queue"):

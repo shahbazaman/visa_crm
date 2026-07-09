@@ -32,19 +32,22 @@ def meta_verify():
 
 def receive():
     raw = frappe.request.get_data() or b""
+    payload = frappe.request.get_json(silent=True) or _decode_json(raw)
+    logged_events = _log_raw_webhook(payload if isinstance(payload, dict) else {}, raw)
     if not _valid_signature(raw):
         frappe.response["http_status_code"] = 403
         log_info("meta_webhook_bad_signature", payload_size=len(raw))
+        frappe.db.commit()
         return {"ok": False}
-    payload = frappe.request.get_json(silent=True) or _decode_json(raw)
     if not isinstance(payload, dict):
         frappe.response["http_status_code"] = 400
         log_info("meta_webhook_invalid_payload", payload_type=type(payload).__name__)
+        frappe.db.commit()
         return {"ok": False}
     log_info("meta_webhook_payload_received", payload=payload)
     stored = updates = duplicates = 0
     for item in _webhook_events(payload):
-        event_log = _log_webhook_event(item, payload)
+        event_log = logged_events.get(_event_key(item)) or _log_webhook_event(item, payload)
         if item.get("event_type") != "leadgen":
             updates += 1
             continue
@@ -114,7 +117,7 @@ def _webhook_events(payload):
             leadgen_id = value.get("leadgen_id")
             if not leadgen_id:
                 continue
-            events.append({"event_type": change.get("field"), "source_lead_id": str(leadgen_id), "leadgen_id": str(leadgen_id), "page_id": value.get("page_id") or entry.get("id"), "form_id": value.get("form_id"), "received_at": now(), "payload": payload, "entry": entry, "change": change, "value": value})
+            events.append({"event_type": change.get("field"), "entry_id": entry.get("id"), "source_lead_id": str(leadgen_id), "leadgen_id": str(leadgen_id), "page_id": value.get("page_id") or entry.get("id"), "form_id": value.get("form_id"), "received_at": now(), "payload": payload, "entry": entry, "change": change, "value": value})
     return events
 
 def _lead_events(payload):
@@ -129,12 +132,12 @@ def _lead_source():
 
 def _log_webhook_event(item, payload):
     request = getattr(frappe.local, "request", None)
-    headers = {k: v for k, v in dict(getattr(request, "headers", {}) or {}).items() if k.lower() not in ("authorization", "cookie", "x-hub-signature-256")}
-    log_info("meta_webhook_event", event_type=item.get("event_type"), leadgen_id=item.get("leadgen_id"), page_id=item.get("page_id"), form_id=item.get("form_id"), raw_json=payload, headers=headers)
+    headers = dict(getattr(request, "headers", {}) or {})
+    log_info("meta_webhook_event", event_type=item.get("event_type"), entry_id=item.get("entry_id"), leadgen_id=item.get("leadgen_id"), page_id=item.get("page_id"), form_id=item.get("form_id"), raw_json=payload, headers=headers)
     if not has_doctype("Meta Webhook Event"):
         return None
     doc = frappe.new_doc("Meta Webhook Event")
-    values = {"event_type": item.get("event_type"), "leadgen_id": item.get("leadgen_id"), "page_id": item.get("page_id"), "form_id": item.get("form_id"), "raw_json": safe_json_dumps(payload), "request_headers": safe_json_dumps(headers), "received_at": item.get("received_at"), "status": "Received"}
+    values = {"event_type": item.get("event_type"), "entry_id": item.get("entry_id"), "leadgen_id": item.get("leadgen_id"), "page_id": item.get("page_id"), "form_id": item.get("form_id"), "raw_json": safe_json_dumps(payload), "request_headers": safe_json_dumps(headers), "received_at": item.get("received_at"), "status": "Received"}
     for field, value in values.items():
         set_if_has(doc, field, value)
     doc.insert(ignore_permissions=True)
@@ -143,3 +146,19 @@ def _log_webhook_event(item, payload):
 def _link_event(event_log, queue_name=None, queue_status=None):
     if event_log and has_doctype("Meta Webhook Event"):
         frappe.db.set_value("Meta Webhook Event", event_log, {"queue": queue_name, "queue_status": queue_status}, update_modified=False)
+
+def _log_raw_webhook(payload, raw):
+    events = _webhook_events(payload) if isinstance(payload, dict) else []
+    if not events:
+        item = {"event_type": None, "entry_id": None, "leadgen_id": None, "page_id": None, "form_id": None, "received_at": now()}
+        name = _log_webhook_event(item, payload if isinstance(payload, dict) else {"raw": raw.decode("utf-8", "replace")})
+        return {_event_key(item): name} if name else {}
+    logged = {}
+    for item in events:
+        name = _log_webhook_event(item, payload)
+        if name:
+            logged[_event_key(item)] = name
+    return logged
+
+def _event_key(item):
+    return "|".join(str(item.get(field) or "") for field in ("event_type", "entry_id", "leadgen_id", "page_id", "form_id"))
