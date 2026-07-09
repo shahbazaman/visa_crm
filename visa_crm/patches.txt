@@ -16,3 +16,4 @@ visa_crm.patches.final_production_stabilization
 visa_crm.patches.production_integration_verification
 visa_crm.patches.performance_security_audit
 visa_crm.patches.disable_builtin_crm_meta_sync
+visa_crm.patches.meta_live_monitoring

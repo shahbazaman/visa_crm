@@ -24,6 +24,11 @@ def process_queue(docname):
         return
     doc = frappe.get_doc("Lead Intake Queue", docname)
     try:
+        event_type = _event_type(doc)
+        if event_type and event_type != "leadgen":
+            queue_status(doc.name, "Ignored Test Event", last_error=f"Ignored Meta event field {event_type}; only leadgen events are processed", next_retry_at=None, processing_completed_at=now())
+            frappe.db.commit()
+            return
         settings = get_meta_settings()
         leadgen_id = doc.source_lead_id or _leadgen_id(doc)
         context = _context(doc, leadgen_id)
@@ -52,7 +57,7 @@ def process_queue(docname):
     except MetaGraphError as exc:
         meta_debug_log("process_queue_exception", queue_name=docname, source_lead_id=frappe.db.get_value("Lead Intake Queue", docname, "source_lead_id"), status=frappe.db.get_value("Lead Intake Queue", docname, "status"), error=str(exc), graph_response=getattr(exc, "response", None), graph_request=getattr(exc, "request", None))
         frappe.db.rollback()
-        _retry_or_fail(docname, str(exc), retryable=True, graph_response=getattr(exc, "response", None), graph_request=getattr(exc, "request", None))
+        _retry_or_fail(docname, str(exc), retryable=not _ignored_test_event(docname, exc), graph_response=getattr(exc, "response", None), graph_request=getattr(exc, "request", None), ignored=_ignored_test_event(docname, exc))
     except Exception as exc:
         meta_debug_log("process_queue_exception", queue_name=docname, source_lead_id=frappe.db.get_value("Lead Intake Queue", docname, "source_lead_id"), status=frappe.db.get_value("Lead Intake Queue", docname, "status"), error=str(exc), traceback=frappe.get_traceback())
         frappe.db.rollback()
@@ -91,11 +96,18 @@ def _leadgen_id(doc):
     payload = load_json(doc.raw_payload, {})
     return str((payload.get("value") or {}).get("leadgen_id") or "")
 
+def _event_type(doc):
+    if has_field("Lead Intake Queue", "event_type") and getattr(doc, "event_type", None):
+        return doc.event_type
+    payload = load_json(getattr(doc, "raw_payload", None), {})
+    return (payload.get("change") or {}).get("field")
+
 def _update_queue(doc, data, graph_payload, status):
     meta_debug_log("queue_status_update_start", queue_name=doc.name, source_lead_id=data.get("source_lead_id") or doc.source_lead_id, status=status)
     values = {field: data.get(field) for field in ("source_lead_id", "customer_name", "phone", "email", "country_interested", "visa_type", "campaign_name", "adset_name", "ad_name")}
     values.update({"status": status, "graph_payload": safe_json_dumps(graph_payload), "custom_answers": safe_json_dumps(data.get("custom_answers")), "page_id": data.get("page_id"), "form_id": data.get("form_id"), "campaign_id": data.get("campaign_id"), "ad_id": data.get("ad_id")})
     set_values("Lead Intake Queue", doc.name, values)
+    _sync_webhook_event(doc.name, {"graph_api_response": safe_json_dumps(graph_payload), "queue_status": status})
     doc.reload()
     meta_debug_log("queue_status_update_end", queue_name=doc.name, source_lead_id=doc.source_lead_id, status=doc.status)
 
@@ -103,12 +115,14 @@ def _link_matches(doc, matches):
     status = "Customer Matched" if matches.get("customer") else "Lead Created"
     meta_debug_log("queue_status_update_start", queue_name=doc.name, source_lead_id=doc.source_lead_id, status=status)
     set_values("Lead Intake Queue", doc.name, {"matched_customer": matches.get("customer"), "matched_lead": matches.get("lead"), "status": status})
+    _sync_webhook_event(doc.name, {"queue_status": status, "crm_lead": matches.get("lead")})
     doc.reload()
     meta_debug_log("queue_status_update_end", queue_name=doc.name, source_lead_id=doc.source_lead_id, status=doc.status)
 
 def _finish(doc, lead, customer, employee, event, todo):
     meta_debug_log("queue_status_update_start", queue_name=doc.name, source_lead_id=doc.source_lead_id, status="Processed")
     set_values("Lead Intake Queue", doc.name, {"matched_customer": customer, "matched_lead": lead, "assigned_employee": employee, "communication_event": event, "followup_reference": todo, "processing_completed_at": now(), "next_retry_at": None, "status": "Processed", "last_error": ""})
+    _sync_webhook_event(doc.name, {"queue_status": "Processed", "crm_lead": lead})
     meta_debug_log("queue_status_update_end", queue_name=doc.name, source_lead_id=doc.source_lead_id, status="Processed")
 
 def _communication_event(data, lead, customer, employee, queue_name, context=None):
@@ -127,21 +141,49 @@ def _communication_event(data, lead, customer, employee, queue_name, context=Non
     meta_debug_log("communication_event_creation_end", communication_event=doc.name, existing=False, **context)
     return doc.name
 
-def _retry_or_fail(docname, error, retryable, graph_response=None, graph_request=None):
+def _retry_or_fail(docname, error, retryable, graph_response=None, graph_request=None, ignored=False):
     doc = frappe.get_doc("Lead Intake Queue", docname)
     count = retry_count(doc) + 1
-    status = "Failed"
+    status = "Ignored Test Event" if ignored else "Failed"
     values = {"retry_count": count, "last_error": error[:1000], "next_retry_at": None, "processing_completed_at": now()}
     if graph_response is not None:
         values["graph_payload"] = safe_json_dumps(graph_response)
         values["graph_api_response"] = safe_json_dumps(graph_response)
+        values.update(_graph_error_values(graph_response))
     if graph_request is not None:
         values["graph_api_request"] = safe_json_dumps(graph_request)
     if retryable and count < MAX_RETRIES:
         values["next_retry_at"] = add_to_date(now(), minutes=min(60, 2 ** count))
     queue_status(docname, status, **values)
+    _sync_webhook_event(docname, {"queue_status": status, "graph_api_request": values.get("graph_api_request"), "graph_api_response": values.get("graph_api_response")})
     frappe.db.commit()
     log_info("meta_queue_retry_state", queue=docname, status=status, retry_count=count, error=error[:200])
 
 def _context(doc, source_lead_id=None):
     return {"queue_name": doc.name, "source_lead_id": source_lead_id or doc.source_lead_id, "status": doc.status}
+
+def _graph_error_values(response):
+    error = (response or {}).get("error", {}) if isinstance(response, dict) else {}
+    return {"graph_http_status": error.get("http_status") or (response or {}).get("status_code") if isinstance(response, dict) else None, "graph_fbtrace_id": error.get("fbtrace_id"), "graph_error_code": error.get("code"), "graph_error_subcode": error.get("error_subcode") or error.get("subcode"), "graph_error_type": error.get("type"), "graph_error_message": error.get("message")}
+
+def _ignored_test_event(docname, exc):
+    leadgen_id = frappe.db.get_value("Lead Intake Queue", docname, "source_lead_id")
+    response = getattr(exc, "response", None) or {}
+    error = response.get("error", {}) if isinstance(response, dict) else {}
+    subcode = error.get("error_subcode") or error.get("subcode")
+    message = str(error.get("message") or exc).lower()
+    return (str(subcode) == "33" or "unsupported get request" in message) and _dummy_leadgen_id(leadgen_id)
+
+def _dummy_leadgen_id(leadgen_id):
+    value = str(leadgen_id or "")
+    return value in ("444444444444", "987654321") or (value.isdigit() and len(value) <= 12)
+
+def _sync_webhook_event(queue_name, values):
+    if not has_field("Lead Intake Queue", "meta_webhook_event"):
+        return
+    event = frappe.db.get_value("Lead Intake Queue", queue_name, "meta_webhook_event")
+    if not event:
+        return
+    clean = {field: value for field, value in values.items() if value is not None}
+    if clean:
+        set_values("Meta Webhook Event", event, clean, update_modified=False)

@@ -43,7 +43,11 @@ def _get(path, params):
         raise MetaGraphError(str(exc), request=request) from exc
     data = _response_json(response)
     if response.status_code >= 400:
+        if isinstance(data, dict):
+            data["status_code"] = response.status_code
         error = data.get("error", {}) if isinstance(data, dict) else {}
+        if isinstance(error, dict):
+            error["http_status"] = response.status_code
         message = error.get("message") or f"Graph API HTTP {response.status_code}"
         raise MetaGraphError(message, request=request, response=data, status_code=response.status_code)
     meta_debug_log("meta_graph_response", source_lead_id=path, status_code=response.status_code, graph_response=data, graph_request=request)

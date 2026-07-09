@@ -13,6 +13,66 @@ def generate_report(queue_name=None, leadgen_id=None, write_file=1):
         _write_report(report)
     return report
 
+@frappe.whitelist()
+def webhook_audit():
+    _admin()
+    if not has_doctype("Meta Webhook Event"):
+        return []
+    fields = ["name", "creation"] + [field for field in ("event_type", "leadgen_id", "page_id", "form_id", "queue", "queue_status", "crm_lead", "graph_api_request", "graph_api_response") if has_field("Meta Webhook Event", field)]
+    rows = frappe.get_all("Meta Webhook Event", fields=fields, order_by="creation desc", limit=20)
+    out = []
+    for row in rows:
+        queue = row.get("queue")
+        queue_status = row.get("queue_status")
+        lead = row.get("crm_lead")
+        if queue and has_doctype("Lead Intake Queue"):
+            queue_status = queue_status or frappe.db.get_value("Lead Intake Queue", queue, "status")
+            lead = lead or (frappe.db.get_value("Lead Intake Queue", queue, "matched_lead") if has_field("Lead Intake Queue", "matched_lead") else None)
+        out.append({"event": row.name, "received_at": row.creation, "event_field": row.get("event_type"), "leadgen_id": row.get("leadgen_id"), "page_id": row.get("page_id"), "form_id": row.get("form_id"), "graph_request": row.get("graph_api_request"), "graph_response": row.get("graph_api_response"), "queue": queue, "queue_status": queue_status, "crm_lead_created": bool(lead), "crm_lead": lead})
+    return out
+
+@frappe.whitelist()
+def meta_health():
+    _admin()
+    settings = get_meta_settings()
+    today = frappe.utils.today()
+    data = {"webhook_reachable": True, "webhook_receiving_events": False, "leadgen_events_count": 0, "leadgen_update_count": 0, "graph_success_count": 0, "graph_failed_count": 0, "crm_leads_created": 0, "ignored_test_events": 0, "queue_waiting": 0, "queue_failed": 0, "queue_ignored": 0, "permission_failures": 0, "token_expiry": getattr(settings, "token_expiry", None) if settings else None, "page_id": getattr(settings, "page_id", None) if settings else None, "form_ids": getattr(settings, "lead_form_ids", None) if settings else None, "last_webhook_received": None, "last_leadgen_event": None, "last_leadgen_update": None, "crm_leads_created_today": 0}
+    if has_doctype("Meta Webhook Event"):
+        data["webhook_receiving_events"] = bool(frappe.db.count("Meta Webhook Event"))
+        data["leadgen_events_count"] = frappe.db.count("Meta Webhook Event", {"event_type": "leadgen"})
+        data["leadgen_update_count"] = frappe.db.count("Meta Webhook Event", {"event_type": "leadgen_update"})
+        data["last_webhook_received"] = _latest_value("Meta Webhook Event", None, "received_at")
+        data["last_leadgen_event"] = _latest_value("Meta Webhook Event", {"event_type": "leadgen"}, "received_at")
+        data["last_leadgen_update"] = _latest_value("Meta Webhook Event", {"event_type": "leadgen_update"}, "received_at")
+    if has_doctype("Lead Intake Queue"):
+        data["queue_waiting"] = frappe.db.count("Lead Intake Queue", {"status": "Lead Received"})
+        data["queue_failed"] = frappe.db.count("Lead Intake Queue", {"status": "Failed"})
+        data["queue_ignored"] = frappe.db.count("Lead Intake Queue", {"status": "Ignored Test Event"})
+        data["ignored_test_events"] = data["queue_ignored"]
+        if has_field("Lead Intake Queue", "graph_payload"):
+            data["graph_success_count"] = frappe.db.count("Lead Intake Queue", {"graph_payload": ["is", "set"], "status": ["!=", "Failed"]})
+        if has_field("Lead Intake Queue", "graph_error_message"):
+            data["graph_failed_count"] = frappe.db.count("Lead Intake Queue", {"graph_error_message": ["is", "set"]})
+            data["permission_failures"] = _permission_failures()
+        if has_field("Lead Intake Queue", "matched_lead"):
+            data["crm_leads_created"] = frappe.db.count("Lead Intake Queue", {"matched_lead": ["is", "set"]})
+    if has_doctype("CRM Lead"):
+        data["crm_leads_created_today"] = frappe.db.count("CRM Lead", {"creation": [">=", today]})
+    return data
+
+@frappe.whitelist()
+def replay_webhook_event(event_name):
+    _admin()
+    if not has_doctype("Meta Webhook Event"):
+        frappe.throw("Meta Webhook Event is not installed")
+    raw = frappe.db.get_value("Meta Webhook Event", event_name, "raw_json")
+    payload = load_json(raw, {})
+    if not payload:
+        frappe.throw("Stored webhook JSON is empty")
+    from visa_crm.api import meta_webhook
+    result = meta_webhook.replay_payload(payload)
+    return {"replayed": event_name, "result": result, "note": "Replay inserts queue from stored webhook JSON only and never calls Meta Graph API directly."}
+
 def _admin():
     if "System Manager" not in frappe.get_roles():
         frappe.throw("System Manager role required", frappe.PermissionError)
@@ -81,6 +141,16 @@ def _settings_status():
         return {"exists": False}
     token = settings.get_password("access_token") or getattr(settings, "access_token", None)
     return {"exists": True, "has_page_access_token": bool(token), "page_id": getattr(settings, "page_id", None), "lead_form_ids": getattr(settings, "lead_form_ids", None), "has_app_secret": bool(settings.get_password("meta_app_secret")), "has_verify_token": bool(settings.get_password("verify_token"))}
+
+def _latest_value(doctype, filters, field):
+    if not has_field(doctype, field):
+        field = "creation"
+    rows = frappe.get_all(doctype, filters=filters or {}, fields=["name", field], order_by=f"{field} desc", limit=1)
+    return rows[0].get(field) if rows else None
+
+def _permission_failures():
+    rows = frappe.get_all("Lead Intake Queue", fields=["name", "graph_error_message"], filters={"graph_error_message": ["is", "set"]}, limit=500)
+    return len([row for row in rows if "permission" in str(row.get("graph_error_message") or "").lower() or "oauth" in str(row.get("graph_error_message") or "").lower()])
 
 def _queue(name=None):
     if not has_doctype("Lead Intake Queue"):
