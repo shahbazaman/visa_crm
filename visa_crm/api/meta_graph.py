@@ -3,7 +3,7 @@ import frappe
 from visa_crm.api.meta_utils import get_meta_settings, log_info, meta_debug_log, safe_json_dumps
 
 GRAPH_VERSION = "v20.0"
-LEAD_FIELDS = "id,created_time,field_data,form_id,page_id,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name"
+LEAD_FIELDS = "id,created_time,field_data,form_id,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name"
 
 class MetaGraphError(Exception):
     def __init__(self, message, request=None, response=None, status_code=None):
@@ -73,4 +73,21 @@ def _hydrate_names(lead, token):
 def _access_token(settings):
     if not settings:
         return None
-    return settings.get_password("access_token") or getattr(settings, "access_token", None)
+    for field in ("access_token", "page_access_token", "facebook_page_access_token", "meta_page_access_token"):
+        token = _password_or_value(settings, field)
+        if token:
+            return token
+    for key in ("meta_page_access_token", "facebook_page_access_token", "page_access_token"):
+        token = frappe.conf.get(key)
+        if token:
+            return token
+    return None
+
+def _password_or_value(settings, fieldname):
+    try:
+        token = settings.get_password(fieldname, raise_exception=False)
+        if token:
+            return token
+    except Exception:
+        pass
+    return getattr(settings, fieldname, None)

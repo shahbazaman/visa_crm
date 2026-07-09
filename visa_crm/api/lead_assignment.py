@@ -69,7 +69,9 @@ def _assignment_log(lead, employee):
     doc = frappe.new_doc("Lead Assignment")
     doc.lead = lead
     doc.assigned_to = employee
-    doc.assigned_by = frappe.session.user
+    assigned_by = _link_value(doc, "assigned_by")
+    if assigned_by:
+        doc.assigned_by = assigned_by
     doc.assigned_on = now()
     doc.status = "Pending"
     doc.priority = "Medium"
@@ -79,6 +81,27 @@ def _assignment_history(lead, employee, strategy):
     if not lead or not employee or not has_doctype("Counselor Assignment History"):
         return
     doc = frappe.new_doc("Counselor Assignment History")
-    for field, value in {"lead": lead, "assigned_to": employee, "assigned_by": frappe.session.user, "assigned_on": now(), "strategy": strategy}.items():
+    for field, value in {"lead": lead, "assigned_to": employee, "assigned_by": _link_value(doc, "assigned_by"), "assigned_on": now(), "strategy": strategy}.items():
         set_if_has(doc, field, value)
     doc.insert(ignore_permissions=True)
+
+def _link_value(doc, fieldname):
+    field = doc.meta.get_field(fieldname)
+    if not field or field.fieldtype != "Link" or not field.options:
+        return frappe.session.user
+    if field.options == "User":
+        return frappe.session.user if frappe.db.exists("User", frappe.session.user) else None
+    if field.options == "Employee":
+        employee = _employee_for_user(frappe.session.user)
+        return employee if employee and frappe.db.exists("Employee", employee) else None
+    return frappe.session.user if frappe.db.exists(field.options, frappe.session.user) else None
+
+def _employee_for_user(user):
+    if not user or not has_doctype("Employee"):
+        return None
+    for field in ("user_id", "company_email", "personal_email"):
+        if has_field("Employee", field):
+            found = frappe.db.get_value("Employee", {field: user}, "name")
+            if found:
+                return found
+    return None

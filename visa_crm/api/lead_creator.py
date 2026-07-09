@@ -7,10 +7,11 @@ def create_crm_lead(data, context=None):
     context = context or {}
     meta_debug_log("lead_creation_start", **context)
     doc = frappe.new_doc("CRM Lead")
-    name = data.get("customer_name") or "Meta Lead"
+    name = _lead_name(data)
     source = data.get("lead_source") or data.get("source") or DEFAULT_SOURCE
     _ensure_link_master(doc, "source", source)
     _ensure_link_master(doc, "lead_source", source)
+    _ensure_link_master(doc, "status", "Open")
     for field in ("lead_name", "first_name", "customer_name", "organization"):
         set_if_has(doc, field, name)
     for field in ("mobile_no", "phone", "phone_number"):
@@ -20,6 +21,7 @@ def create_crm_lead(data, context=None):
     for field, value in {"source": source, "lead_source": source, "status": "Open", "workflow_state": "Lead", "country_of_interest": data.get("country_interested"), "country_interested": data.get("country_interested"), "visa_type": data.get("visa_type"), "campaign_name": data.get("campaign_name"), "ad_name": data.get("ad_name"), "source_lead_id": data.get("source_lead_id")}.items():
         if _allowed(doc, field, value):
             set_if_has(doc, field, value)
+    _fill_required_text(doc, name)
     doc.insert(ignore_permissions=True)
     meta_debug_log("lead_creation_end", lead=doc.name, source=source, **context)
     return doc.name
@@ -39,10 +41,27 @@ def _ensure_link_master(doc, fieldname, value):
         return
 
 def _set_title(doc, value):
-    for field in (doc.meta.title_field, "source_name", "lead_source", "source", "title"):
+    for field in (doc.meta.title_field, "source_name", "lead_source", "source", "status_name", "status", "label", "title"):
         if field and doc.meta.has_field(field):
             doc.set(field, value)
-            return
+    for field in doc.meta.get("fields"):
+        if field.reqd and field.fieldtype in ("Data", "Small Text") and not doc.get(field.fieldname):
+            doc.set(field.fieldname, value)
+
+def _lead_name(data):
+    name = _clean_text(data.get("customer_name")) or _clean_text(data.get("name"))
+    return name or f"Meta Lead {data.get('source_lead_id') or ''}".strip()
+
+def _clean_text(value):
+    text = str(value or "").strip()
+    if not text or text.lower().startswith("<test lead:"):
+        return None
+    return text
+
+def _fill_required_text(doc, value):
+    for field in doc.meta.get("fields"):
+        if field.reqd and field.fieldtype in ("Data", "Small Text", "Text") and not doc.get(field.fieldname):
+            doc.set(field.fieldname, value)
 
 def _allowed(doc, field, value):
     meta_field = doc.meta.get_field(field)
