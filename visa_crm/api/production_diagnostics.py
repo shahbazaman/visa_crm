@@ -1,4 +1,5 @@
 import json
+import os
 import frappe
 from frappe.utils import add_to_date, get_datetime, now, now_datetime
 from visa_crm.api.meta_utils import get_meta_settings, has_doctype, has_field, load_json, safe_json_dumps, set_if_has
@@ -44,7 +45,7 @@ def production_health():
 def queue_diagnostics(limit=100):
     _admin()
     fields=["name","status","source_lead_id","creation","modified"]
-    optional=("retry_count","last_error","next_retry_at","processing_started_at","processing_completed_at","graph_payload","raw_payload")
+    optional=("retry_count","last_error","next_retry_at","processing_started_at","processing_completed_at","graph_payload","graph_api_request","graph_api_response","raw_payload")
     fields += [f for f in optional if has_field("Lead Intake Queue",f)]
     limit=min(max(int(limit or 100),1),200)
     rows=frappe.get_all("Lead Intake Queue",fields=fields,order_by="modified desc",limit=limit) if has_doctype("Lead Intake Queue") else []
@@ -52,7 +53,7 @@ def queue_diagnostics(limit=100):
     for row in rows:
         started=get_datetime(row.get("processing_started_at")) if row.get("processing_started_at") else None
         done=get_datetime(row.get("processing_completed_at")) if row.get("processing_completed_at") else None
-        out.append({"name":row.name,"current_stage":row.status,"retry_count":row.get("retry_count") or 0,"last_api_response":_clip(row.get("graph_payload")),"graph_api_request":row.get("source_lead_id"),"scheduler_timestamp":row.get("processing_started_at") or row.modified,"processing_duration":round((done-started).total_seconds(),2) if started and done else None,"failure_reason":row.get("last_error"),"modified":row.modified})
+        out.append({"name":row.name,"current_stage":row.status,"retry_count":row.get("retry_count") or 0,"last_api_response":_clip(row.get("graph_api_response") or row.get("graph_payload")),"graph_api_request":_clip(row.get("graph_api_request")) or row.get("source_lead_id"),"scheduler_timestamp":row.get("processing_started_at") or row.modified,"processing_duration":round((done-started).total_seconds(),2) if started and done else None,"failure_reason":row.get("last_error"),"modified":row.modified})
     log_event("queue_diagnostics","success","Lead Intake Queue",count=len(out))
     return out
 

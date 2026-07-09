@@ -64,4 +64,8 @@ def meta_context(queue_name=None, source_lead_id=None, status=None):
 
 def meta_debug_log(event, queue_name=None, source_lead_id=None, status=None, **data):
     payload = {"event": event, "queue_name": queue_name, "source_lead_id": source_lead_id, "status": status, "traceback": data.pop("traceback", "") or "", "data": data, "ts": now()}
-    frappe.log_error(title=f"Meta Lead Debug: {event}", message=safe_json_dumps(payload))
+    logger = frappe.logger("visa_crm.meta")
+    if payload["traceback"]:
+        logger.error(safe_json_dumps(payload))
+    else:
+        logger.info(safe_json_dumps(payload))

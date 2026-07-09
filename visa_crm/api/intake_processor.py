@@ -50,9 +50,9 @@ def process_queue(docname):
         log_info("meta_queue_completed", queue=doc.name, lead=lead, customer=customer, employee=employee)
         meta_debug_log("process_queue_end", queue_name=doc.name, source_lead_id=data.get("source_lead_id") or leadgen_id, status="Processed", lead=lead, customer=customer, employee=employee)
     except MetaGraphError as exc:
-        meta_debug_log("process_queue_exception", queue_name=docname, source_lead_id=frappe.db.get_value("Lead Intake Queue", docname, "source_lead_id"), status=frappe.db.get_value("Lead Intake Queue", docname, "status"), error=str(exc), traceback=frappe.get_traceback())
+        meta_debug_log("process_queue_exception", queue_name=docname, source_lead_id=frappe.db.get_value("Lead Intake Queue", docname, "source_lead_id"), status=frappe.db.get_value("Lead Intake Queue", docname, "status"), error=str(exc), graph_response=getattr(exc, "response", None), graph_request=getattr(exc, "request", None))
         frappe.db.rollback()
-        _retry_or_fail(docname, str(exc), retryable=True)
+        _retry_or_fail(docname, str(exc), retryable=True, graph_response=getattr(exc, "response", None), graph_request=getattr(exc, "request", None))
     except Exception as exc:
         meta_debug_log("process_queue_exception", queue_name=docname, source_lead_id=frappe.db.get_value("Lead Intake Queue", docname, "source_lead_id"), status=frappe.db.get_value("Lead Intake Queue", docname, "status"), error=str(exc), traceback=frappe.get_traceback())
         frappe.db.rollback()
@@ -127,11 +127,16 @@ def _communication_event(data, lead, customer, employee, queue_name, context=Non
     meta_debug_log("communication_event_creation_end", communication_event=doc.name, existing=False, **context)
     return doc.name
 
-def _retry_or_fail(docname, error, retryable):
+def _retry_or_fail(docname, error, retryable, graph_response=None, graph_request=None):
     doc = frappe.get_doc("Lead Intake Queue", docname)
     count = retry_count(doc) + 1
     status = "Failed"
     values = {"retry_count": count, "last_error": error[:1000], "next_retry_at": None, "processing_completed_at": now()}
+    if graph_response is not None:
+        values["graph_payload"] = safe_json_dumps(graph_response)
+        values["graph_api_response"] = safe_json_dumps(graph_response)
+    if graph_request is not None:
+        values["graph_api_request"] = safe_json_dumps(graph_request)
     if retryable and count < MAX_RETRIES:
         values["next_retry_at"] = add_to_date(now(), minutes=min(60, 2 ** count))
     queue_status(docname, status, **values)
