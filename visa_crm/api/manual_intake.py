@@ -7,6 +7,7 @@ from visa_crm.api.workflow import mark_lead_stage
 
 @frappe.whitelist()
 def create_manual_lead(data=None, **kwargs):
+    _staff()
     data = frappe._dict(data or kwargs)
     payload = _normalize(data)
     matches = link_or_create_lead(payload, _context(payload))
@@ -38,3 +39,7 @@ def _queue(data, lead, customer, employee, todo):
 
 def _context(data):
     return {"queue_name": None, "source_lead_id": data.get("source_lead_id"), "status": "Manual"}
+
+def _staff():
+    if frappe.session.user=="Guest" or not ({"System Manager","Sales Manager","Counselor","Visa Processing","Administrator"} & set(frappe.get_roles())):
+        frappe.throw("Visa CRM staff access required", frappe.PermissionError)

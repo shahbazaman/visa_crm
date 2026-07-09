@@ -14,6 +14,8 @@ def register_document(document_name=None,file_url=None,visa_application=None):
     customer=_customer()
     if not has_doctype("Customer Documents"):
         frappe.throw("Document management is not enabled.")
+    if file_url and not str(file_url).startswith(("/files/","/private/files/")):
+        frappe.throw("Invalid uploaded file path.")
     doc=frappe.new_doc("Customer Documents")
     _set(doc,"customer",customer)
     _set(doc,"document_name",document_name or "Customer Upload")

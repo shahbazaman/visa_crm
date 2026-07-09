@@ -50,6 +50,7 @@ def manager_daily_summary():
 
 @frappe.whitelist()
 def insights_dashboard():
+    _staff()
     return manager_dashboard()
 
 def _gemini_json(prompt):
@@ -117,3 +118,7 @@ def _timeline(doc,insights):
         if has_field("Lead Timeline",field):
             tl.set(field,message)
     tl.insert(ignore_permissions=True)
+
+def _staff():
+    if frappe.session.user=="Guest" or not ({"System Manager","Sales Manager","Counselor","Visa Processing","Administrator"} & set(frappe.get_roles())):
+        frappe.throw("Visa CRM staff access required", frappe.PermissionError)

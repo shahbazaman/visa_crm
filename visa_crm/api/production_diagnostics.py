@@ -28,6 +28,7 @@ def _job_log(method):
 
 @frappe.whitelist()
 def production_health():
+    _admin()
     with timed_log("production_health","dashboard"):
         queue_dt="Lead Intake Queue"
         latest_webhook=_latest(queue_dt,fields=_fields(queue_dt,("name","source_lead_id","status","creation","modified"))) if has_doctype(queue_dt) else None
@@ -41,10 +42,12 @@ def production_health():
 
 @frappe.whitelist()
 def queue_diagnostics(limit=100):
+    _admin()
     fields=["name","status","source_lead_id","creation","modified"]
     optional=("retry_count","last_error","next_retry_at","processing_started_at","processing_completed_at","graph_payload","raw_payload")
     fields += [f for f in optional if has_field("Lead Intake Queue",f)]
-    rows=frappe.get_all("Lead Intake Queue",fields=fields,order_by="modified desc",limit=int(limit or 100)) if has_doctype("Lead Intake Queue") else []
+    limit=min(max(int(limit or 100),1),200)
+    rows=frappe.get_all("Lead Intake Queue",fields=fields,order_by="modified desc",limit=limit) if has_doctype("Lead Intake Queue") else []
     out=[]
     for row in rows:
         started=get_datetime(row.get("processing_started_at")) if row.get("processing_started_at") else None
@@ -55,6 +58,7 @@ def queue_diagnostics(limit=100):
 
 @frappe.whitelist()
 def meta_diagnostics(leadgen_id=None):
+    _admin()
     settings=get_meta_settings()
     latest=_latest("Lead Intake Queue",fields=_fields("Lead Intake Queue",("name","source_lead_id","graph_payload","last_error","modified"))) if has_doctype("Lead Intake Queue") else None
     data={"page_access_token_valid":bool(settings and _token(settings)),"token_expiry":getattr(settings,"token_expiry",None) if settings else None,"page_id":getattr(settings,"page_id",None) if settings else None,"form_ids":getattr(settings,"form_ids",None) if settings else None,"permission_list":getattr(settings,"permissions",None) if settings else None,"latest_graph_api_call":latest.source_lead_id if latest else None,"latest_response":_clip(latest.get("graph_payload")) if latest else None,"latest_error":latest.get("last_error") if latest else None}
@@ -65,6 +69,7 @@ def meta_diagnostics(leadgen_id=None):
 
 @frappe.whitelist()
 def scheduler_diagnostics():
+    _admin()
     log=_job_log("visa_crm.api.intake_processor.process_pending")
     data={"last_execution":log.creation if log else None,"duration":None,"next_execution":None,"pending_jobs":_count("Lead Intake Queue",{"status":"Lead Received"}),"failed_jobs":_count("Lead Intake Queue",{"status":"Failed"}),"retry_jobs":_retry_jobs()}
     if log and has_field("Scheduled Job Log","duration"):
@@ -147,6 +152,7 @@ def generate_demo(kind):
 
 @frappe.whitelist()
 def deployment_verification():
+    _admin()
     checks={}
     for dt in ("Workspace","Dashboard Chart","Number Card","Report","Print Format","Page","Role","Custom Field"):
         checks[dt]=_count(dt)>0 if has_doctype(dt) else False

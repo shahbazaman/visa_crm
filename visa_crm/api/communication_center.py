@@ -5,6 +5,7 @@ from visa_crm.api.customer360 import match_lead_data
 from visa_crm.api.meta_utils import has_doctype, has_field, load_json, normalize_phone, safe_json_dumps, set_if_has
 
 CHANNELS=("whatsapp","messenger","instagram","facebook_page","email","manual_phone","android_call")
+STAFF_ROLES={"System Manager","Sales Manager","Counselor","Visa Processing","Administrator"}
 
 def after_communication_insert(doc,method=None):
     attach_context(doc)
@@ -55,6 +56,7 @@ def record_interaction(channel,payload,direction="Inbound",assigned_to=None):
 
 @frappe.whitelist()
 def receive_channel(channel,payload=None):
+    _staff()
     payload=load_json(payload,{}) if isinstance(payload,str) else (payload or frappe.form_dict)
     return {"event":record_interaction(channel,payload,"Inbound")}
 
@@ -70,10 +72,12 @@ def send_message(channel,to,content,customer=None,lead=None,visa_application=Non
 
 @frappe.whitelist()
 def send_reply(channel,to,content,customer=None,lead=None,visa_application=None):
+    _staff()
     return send_message(channel,to,content,customer=customer,lead=lead,visa_application=visa_application,assigned_to=frappe.session.user)
 
 @frappe.whitelist()
 def shared_inbox(filters=None,limit=50):
+    _staff()
     if not has_doctype("Communication Event"):
         return {"rows":[],"counters":inbox_counters()}
     filters=load_json(filters,{}) if isinstance(filters,str) else (filters or {})
@@ -89,7 +93,8 @@ def shared_inbox(filters=None,limit=50):
     fields=[f for f in ("name","event_id","source","event_type","direction","customer","lead","employee","phone","email","content","summary","sentiment","lead_score","event_datetime") if f=="name" or has_field("Communication Event",f)]
     fields += [f for f in ("unread","assigned_user","conversation_status","label","provider","provider_message_id","visa_application","ai_next_best_action","ai_customer_priority") if has_field("Communication Event",f)]
     order_by="event_datetime desc, modified desc" if has_field("Communication Event","event_datetime") else "modified desc"
-    rows=frappe.get_all("Communication Event",filters=query,fields=fields or ["name"],order_by=order_by,limit_page_length=int(limit or 50))
+    limit=min(max(int(limit or 50),1),100)
+    rows=frappe.get_all("Communication Event",filters=query,fields=fields or ["name"],order_by=order_by,limit_page_length=limit)
     if filters.get("search"):
         term=str(filters.get("search")).lower()
         rows=[r for r in rows if term in " ".join([str(v or "") for v in r.values()]).lower()]
@@ -105,6 +110,7 @@ def get_shared_inbox(filters=None,limit=50):
 
 @frappe.whitelist()
 def conversation(name):
+    _staff()
     doc=frappe.get_doc("Communication Event",name)
     conditions=[]
     if getattr(doc,"phone",None):
@@ -115,11 +121,12 @@ def conversation(name):
         conditions.append(["customer","=",doc.customer])
     fields=[f for f in ("name","source","direction","content","summary","event_datetime","customer","lead","phone","email") if f=="name" or has_field("Communication Event",f)]
     order_by="event_datetime asc" if has_field("Communication Event","event_datetime") else "modified asc"
-    rows=frappe.get_all("Communication Event",or_filters=conditions,fields=fields,order_by=order_by) if conditions else [doc.as_dict()]
+    rows=frappe.get_all("Communication Event",or_filters=conditions,fields=fields,order_by=order_by,limit_page_length=100) if conditions else [doc.as_dict()]
     return {"event":doc.as_dict(),"history":rows}
 
 @frappe.whitelist()
 def update_conversation(name,status=None,assigned_to=None,label=None,internal_note=None,mark_read=0):
+    _staff()
     values={}
     if status:
         values["conversation_status"]=status
@@ -138,10 +145,12 @@ def update_conversation(name,status=None,assigned_to=None,label=None,internal_no
 
 @frappe.whitelist()
 def quick_replies():
+    _staff()
     return ["Thanks, we are checking this for you.","Please upload the pending documents.","Your counselor will contact you shortly.","Your visa application has been updated."]
 
 @frappe.whitelist()
 def templates(channel=None):
+    _staff()
     return [{"name":"Document Request","content":"Please upload your pending visa documents."},{"name":"Payment Reminder","content":"Your next payment is pending. Please contact your counselor."},{"name":"Application Update","content":"Your visa application status has been updated."}]
 
 def inbox_counters():
@@ -169,3 +178,7 @@ def _latest_visa(lead=None,customer=None):
 def _set(doc,field,value):
     if value is not None:
         set_if_has(doc,field,value)
+
+def _staff():
+    if frappe.session.user=="Guest" or not (STAFF_ROLES & set(frappe.get_roles())):
+        frappe.throw("Visa CRM staff access required", frappe.PermissionError)

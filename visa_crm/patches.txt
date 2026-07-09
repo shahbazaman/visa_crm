@@ -14,3 +14,4 @@ visa_crm.patches.post_migration_verify_repair
 visa_crm.patches.stabilize_phase_deployment
 visa_crm.patches.final_production_stabilization
 visa_crm.patches.production_integration_verification
+visa_crm.patches.performance_security_audit
