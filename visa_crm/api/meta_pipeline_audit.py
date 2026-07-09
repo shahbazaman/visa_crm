@@ -114,6 +114,10 @@ def graph_preview(leadgen_id):
 
 @frappe.whitelist()
 def download_test_lead(leadgen_id):
+    return process_real_lead(leadgen_id)
+
+@frappe.whitelist()
+def process_real_lead(leadgen_id):
     _admin()
     if not leadgen_id:
         frappe.throw("leadgen_id is required")
@@ -131,7 +135,7 @@ def download_test_lead(leadgen_id):
 
 @frappe.whitelist()
 def replay_pipeline(leadgen_id):
-    return download_test_lead(leadgen_id)
+    return process_real_lead(leadgen_id)
 
 @frappe.whitelist()
 def event_detail(event_name):
