@@ -12,10 +12,10 @@ frappe.ui.form.on("Call Intelligence", {
                     frappe.call({
 
                         method:
-"visa_crm.api.gemini_service.process_call_intelligence",
+"visa_crm.api.gemini_service.retry_processing",
 
                         args: {
-                            docname: frm.doc.name
+                            name: frm.doc.name
                         },
 
                         callback() {
