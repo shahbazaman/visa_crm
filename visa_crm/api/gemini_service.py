@@ -1,14 +1,18 @@
 import os
 import time
 import json
+import hashlib
 import requests
 
 import frappe
-from frappe.utils import cint, now, add_days, today
+from frappe.utils import cint, now, add_days, today, add_to_date, now_datetime
 from frappe.utils.file_manager import get_file_path
 
 # Supported audio extensions
 AUDIO_EXTENSIONS = (".m4a", ".mp3", ".wav", ".aac", ".mpeg", ".ogg", ".webm", ".mp4")
+GEMINI_RETRYABLE_STATUS = "Gemini Retry Scheduled"
+GEMINI_PAUSED_STATUS = "Gemini Rate Limit Paused"
+GEMINI_MAX_RETRIES = 5
 
 # Max lengths to avoid Data-too-long DB errors for Data fields
 _MAX_DATA = 255
@@ -98,6 +102,54 @@ def set_call_status(docname, status, error_message=None, overwrite=False, only_i
         cursor = getattr(frappe.db, '_cursor', None)
         return bool(cursor and cursor.rowcount)
     return True
+
+def _safe_error(error):
+    text = str(error or "")
+    if "?key=" in text:
+        text = text.split("?key=")[0]
+    try:
+        api_key = get_api_key()
+    except Exception:
+        api_key = None
+    return _trunc(text.replace(api_key or "", "[redacted]"), 1000)
+
+def _is_rate_limited(error):
+    status = getattr(getattr(error, "response", None), "status_code", None)
+    text = str(error or "").lower()
+    return status == 429 or "429" in text or "too many requests" in text or "quota" in text or "rate limit" in text
+
+def _schedule_gemini_retry(docname, error, stage):
+    doc = frappe.get_doc("Call Intelligence", docname)
+    if doc.meta.has_field("next_retry_at") and doc.next_retry_at and frappe.utils.get_datetime(doc.next_retry_at) > now_datetime() and doc.processing_status == GEMINI_RETRYABLE_STATUS:
+        return
+    count = cint(doc.retry_count or 0) + 1
+    if count >= GEMINI_MAX_RETRIES:
+        values = {"processing_status": GEMINI_PAUSED_STATUS, "retry_count": count, "processing_completed_on": now(), "ai_error": _safe_error(f"{stage}: Gemini rate limit. Max retries reached. Please retry manually after quota resets. {error}")}
+        frappe.db.set_value("Call Intelligence", docname, values)
+        frappe.db.commit()
+        _notify_gemini_rate_limit(docname, None, count, stage)
+        frappe.logger("visa_crm.gemini").warning(f"Gemini rate limit paused for {docname}; max retries reached")
+        return
+    delay = min(240, 15 * (2 ** max(count - 1, 0)))
+    retry_at = add_to_date(now_datetime(), minutes=delay)
+    values = {"processing_status": GEMINI_RETRYABLE_STATUS, "retry_count": count, "processing_completed_on": now(), "ai_error": _safe_error(f"{stage}: Gemini rate limit. Retry {count}/{GEMINI_MAX_RETRIES} scheduled at {retry_at}. {error}")}
+    if doc.meta.has_field("next_retry_at"):
+        values["next_retry_at"] = retry_at
+    frappe.db.set_value("Call Intelligence", docname, values)
+    frappe.db.commit()
+    _notify_gemini_rate_limit(docname, retry_at, count, stage)
+    frappe.logger("visa_crm.gemini").warning(f"Gemini rate limit for {docname}; retry {count}/{GEMINI_MAX_RETRIES} at {retry_at}")
+
+def _notify_gemini_rate_limit(docname, retry_at, count, stage):
+    try:
+        users = frappe.get_all("Has Role", filters={"role": "System Manager", "parenttype": "User"}, pluck="parent", limit=20)
+        for user in users:
+            if user and frappe.db.exists("User", user):
+                content = f"{stage} hit Gemini rate limit. Retry {count}/{GEMINI_MAX_RETRIES} scheduled at {retry_at}." if retry_at else f"{stage} hit Gemini rate limit. Max retries reached; manual retry needed after quota resets."
+                frappe.get_doc({"doctype": "Notification Log", "subject": "Gemini rate limit on Call Intelligence", "type": "Alert", "for_user": user, "document_type": "Call Intelligence", "document_name": docname, "email_content": content}).insert(ignore_permissions=True)
+        frappe.db.commit()
+    except Exception:
+        frappe.logger("visa_crm.gemini").warning(f"Could not create Gemini rate-limit notification: {frappe.get_traceback()}")
 
 def get_api_key():
     settings = frappe.get_single("Gemini Settings")
@@ -939,25 +991,38 @@ def save_ai_results(call_docname, parsed, raw_response, file_uri):
 
 # Scheduler / helper jobs
 def process_unprocessed_audio_files():
-    files = frappe.get_all("File", filters={"attached_to_doctype": ["in", ["", None]]}, fields=["name", "file_name", "file_url"])
+    files = frappe.get_all("File", fields=_file_fields(), order_by="creation desc", limit=500)
     for f in files:
         if not f.file_name:
             continue
         if not f.file_name.lower().endswith(AUDIO_EXTENSIONS):
             continue
-        exists = frappe.db.exists("Call Intelligence", {"recording_file": f.file_url})
-        if exists:
+        if f.get("attached_to_doctype") == "Call Intelligence":
             continue
-        # create Call Intelligence with Pending status
-        doc = frappe.get_doc({"doctype": "Call Intelligence", "recording_file": f.file_url, "processing_status": "Pending"})
-        doc.insert(ignore_permissions=True)
-        frappe.db.commit()
+        _create_call_for_file_once(f)
 
 
 def retry_failed_calls():
-    docs = frappe.get_all("Call Intelligence", filters={"processing_status": ["in", ["Failed Upload to Gemini", "Failed Transcription"]], "retry_count": ["<", 3]}, fields=["name"])
+    _schedule_existing_rate_limited_calls()
+    statuses = ["Failed Upload to Gemini", "Failed Transcription", GEMINI_RETRYABLE_STATUS]
+    filters = {"processing_status": ["in", statuses], "retry_count": ["<", GEMINI_MAX_RETRIES]}
+    docs = frappe.get_all("Call Intelligence", filters=filters, fields=["name"])
     for d in docs:
+        if not _retry_due(d.name):
+            continue
         frappe.enqueue("visa_crm.api.gemini_service.process_call_intelligence", queue="long", timeout=1800, enqueue_after_commit=True, docname=d.name)
+
+def _retry_due(docname):
+    if not frappe.get_meta("Call Intelligence").has_field("next_retry_at"):
+        return True
+    retry_at = frappe.db.get_value("Call Intelligence", docname, "next_retry_at")
+    return not retry_at or frappe.utils.get_datetime(retry_at) <= now_datetime()
+
+def _schedule_existing_rate_limited_calls():
+    docs = frappe.get_all("Call Intelligence", filters={"processing_status": ["in", ["Failed Upload to Gemini", "Failed Transcription", "Failed to Upload"]], "retry_count": ["<", GEMINI_MAX_RETRIES]}, fields=["name", "ai_error"], limit=500)
+    for doc in docs:
+        if _is_rate_limited(doc.ai_error):
+            _schedule_gemini_retry(doc.name, doc.ai_error, "Gemini previous failure")
 
 
 def send_followup_reminders():
@@ -993,6 +1058,7 @@ def enqueue_processing(doc, method=None):
         "Waiting for Transcription",
         "Processing Response",
         "Success",
+        GEMINI_RETRYABLE_STATUS,
     ):
         return
 
@@ -1027,10 +1093,9 @@ def auto_create_call_intelligence(doc, method=None):
     not yet have recording_file saved, so checking only recording_file can create
     a duplicate Call Intelligence record for the same uploaded audio.
 
-    Therefore, if the File is already attached to any document, especially
-    Call Intelligence, do not create another Call Intelligence record here.
-    The Call Intelligence after_save hook will enqueue processing for the
-    existing document.
+    Therefore, if the File is already attached to Call Intelligence, do not
+    create another Call Intelligence record here. Other attached audio files
+    are still valid Android/Desk uploads and must create exactly one record.
     """
     file_name = doc.file_name or os.path.basename(doc.file_url or "")
     file_url = doc.file_url
@@ -1041,26 +1106,183 @@ def auto_create_call_intelligence(doc, method=None):
     if not file_name.lower().endswith(AUDIO_EXTENSIONS):
         return
 
-    # Main duplicate fix:
-    # If file was uploaded inside a form, it already belongs to a document.
-    # Do not create another Call Intelligence record.
-    if doc.attached_to_doctype or doc.attached_to_name or doc.attached_to_field:
+    if doc.attached_to_doctype == "Call Intelligence":
         return
 
     if not file_url:
         return
 
-    exists = frappe.db.exists("Call Intelligence", {"recording_file": file_url})
-    if exists:
-        return
+    _create_call_for_file_once(doc)
 
-    ci = frappe.get_doc({
-        "doctype": "Call Intelligence",
-        "recording_file": file_url,
-        "processing_status": "Pending",
-    })
-    ci.insert(ignore_permissions=True)
-    frappe.db.commit()
+def _create_call_for_file_once(file_doc):
+    lock_name = _audio_lock_name(file_doc)
+    got_lock = _get_audio_lock(lock_name)
+    try:
+        exists = _existing_audio_call(file_doc)
+        if exists:
+            _link_duplicate_file(file_doc, exists)
+            return exists
+        ci = _new_call_intelligence(file_doc)
+        try:
+            ci.insert(ignore_permissions=True)
+        except frappe.DuplicateEntryError:
+            exists = _existing_audio_call(file_doc)
+            if exists:
+                _link_duplicate_file(file_doc, exists)
+            return exists
+        frappe.db.commit()
+        _link_duplicate_file(file_doc, ci.name)
+        return ci.name
+    finally:
+        if got_lock:
+            _release_audio_lock(lock_name)
+
+def prevent_duplicate_call_intelligence(doc, method=None):
+    if not getattr(doc, "recording_file", None):
+        return
+    _store_audio_identity_on_new_doc(doc)
+    existing = _existing_audio_call(doc, exclude=getattr(doc, "name", None))
+    if existing:
+        if doc.meta.has_field("duplicate_of"):
+            doc.duplicate_of = existing
+        frappe.throw(f"Duplicate audio already exists in Call Intelligence: {existing}", frappe.DuplicateEntryError)
+
+def _file_fields():
+    fields = ["name", "file_name", "file_url", "attached_to_doctype", "attached_to_name", "attached_to_field"]
+    for field in ("content_hash", "file_size"):
+        if frappe.db.has_column("File", field):
+            fields.append(field)
+    return fields
+
+def _new_call_intelligence(file_doc):
+    doc = frappe.get_doc({"doctype": "Call Intelligence", "recording_file": file_doc.file_url, "processing_status": "Pending"})
+    _set_audio_identity(doc, file_doc)
+    return doc
+
+def _set_audio_identity(call_doc, file_doc):
+    filename = _audio_filename(file_doc)
+    fingerprint = _audio_fingerprint(file_doc)
+    size = _audio_size(file_doc)
+    if call_doc.meta.has_field("audio_filename") and filename:
+        call_doc.audio_filename = _trunc(filename)
+    if call_doc.meta.has_field("audio_fingerprint") and fingerprint:
+        call_doc.audio_fingerprint = fingerprint
+    if call_doc.meta.has_field("file_size") and size:
+        call_doc.file_size = size
+
+def _store_audio_identity_on_new_doc(doc):
+    filename = _audio_filename(doc)
+    fingerprint = _audio_fingerprint(doc)
+    size = _audio_size(doc)
+    if doc.meta.has_field("audio_filename") and filename and not doc.get("audio_filename"):
+        doc.audio_filename = _trunc(filename)
+    if doc.meta.has_field("audio_fingerprint") and fingerprint and not doc.get("audio_fingerprint"):
+        doc.audio_fingerprint = fingerprint
+    if doc.meta.has_field("file_size") and size and not doc.get("file_size"):
+        doc.file_size = size
+
+def _existing_audio_call(file_doc, exclude=None):
+    file_url = getattr(file_doc, "file_url", None) or getattr(file_doc, "recording_file", None)
+    if file_url:
+        existing = _first_original_call({"recording_file": file_url}, exclude)
+        if existing and existing != exclude:
+            return existing
+    fingerprint = _audio_fingerprint(file_doc)
+    if fingerprint and frappe.get_meta("Call Intelligence").has_field("audio_fingerprint"):
+        existing = _first_original_call({"audio_fingerprint": fingerprint}, exclude)
+        if existing and existing != exclude:
+            return existing
+    filename = _audio_filename(file_doc)
+    size = _audio_size(file_doc)
+    if filename and size and frappe.get_meta("Call Intelligence").has_field("audio_filename") and frappe.get_meta("Call Intelligence").has_field("file_size"):
+        existing = _first_original_call({"audio_filename": _trunc(filename), "file_size": size}, exclude)
+        return existing if existing and existing != exclude else None
+    return None
+
+def _first_original_call(filters, exclude=None):
+    filters = dict(filters or {})
+    if frappe.get_meta("Call Intelligence").has_field("duplicate_of"):
+        filters["duplicate_of"] = ["in", ["", None]]
+    rows = frappe.get_all("Call Intelligence", filters=filters, fields=["name"], order_by="creation asc", limit=5)
+    for row in rows:
+        if row.name != exclude:
+            return row.name
+    return None
+
+def _link_duplicate_file(file_doc, call_name):
+    try:
+        if getattr(file_doc, "name", None) and not getattr(file_doc, "attached_to_doctype", None):
+            frappe.db.set_value("File", file_doc.name, {"attached_to_doctype": "Call Intelligence", "attached_to_name": call_name}, update_modified=False)
+            frappe.logger("visa_crm.gemini").info(f"Skipped duplicate audio File {file_doc.name}; linked to Call Intelligence {call_name}")
+    except Exception:
+        frappe.logger("visa_crm.gemini").error(frappe.get_traceback())
+
+def _audio_lock_name(file_doc):
+    key = _audio_fingerprint(file_doc) or getattr(file_doc, "file_url", None) or getattr(file_doc, "name", "")
+    return f"vc_audio:{hashlib.sha1(str(key).encode()).hexdigest()}"
+
+def _get_audio_lock(lock_name):
+    try:
+        return bool(frappe.db.sql("select get_lock(%s, 10)", lock_name)[0][0])
+    except Exception:
+        frappe.logger("visa_crm.gemini").warning(f"Could not acquire audio lock {lock_name}: {frappe.get_traceback()}")
+        return False
+
+def _release_audio_lock(lock_name):
+    try:
+        frappe.db.sql("select release_lock(%s)", lock_name)
+    except Exception:
+        frappe.logger("visa_crm.gemini").warning(f"Could not release audio lock {lock_name}: {frappe.get_traceback()}")
+
+def _audio_filename(file_doc):
+    return getattr(file_doc, "file_name", None) or getattr(file_doc, "audio_filename", None) or os.path.basename((getattr(file_doc, "file_url", None) or getattr(file_doc, "recording_file", None) or ""))
+
+def _audio_size(file_doc):
+    size = getattr(file_doc, "file_size", None)
+    if size:
+        return int(size)
+    try:
+        path = get_file_path(getattr(file_doc, "file_url", None) or getattr(file_doc, "recording_file", None))
+        return os.path.getsize(path) if path and os.path.exists(path) else None
+    except Exception:
+        return None
+
+def _audio_fingerprint(file_doc):
+    content_hash = getattr(file_doc, "content_hash", None)
+    if content_hash:
+        return _trunc(f"hash:{content_hash}")
+    file_url = getattr(file_doc, "file_url", None) or getattr(file_doc, "recording_file", None)
+    try:
+        path = get_file_path(file_url)
+        if path and os.path.exists(path):
+            digest = hashlib.sha256()
+            with open(path, "rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            return f"sha256:{digest.hexdigest()}"
+    except Exception:
+        frappe.logger("visa_crm.gemini").warning(f"Could not fingerprint audio {file_url}: {frappe.get_traceback()}")
+    filename = _audio_filename(file_doc)
+    size = _audio_size(file_doc)
+    return _trunc(f"name-size:{filename}:{size}") if filename and size else None
+
+def _duplicate_call(call_doc):
+    _store_call_fingerprint(call_doc)
+    return _existing_audio_call(call_doc, exclude=call_doc.name)
+
+def _store_call_fingerprint(call_doc, size=None):
+    values = {}
+    filename = _audio_filename(call_doc)
+    fingerprint = _audio_fingerprint(call_doc)
+    size = size or _audio_size(call_doc)
+    if call_doc.meta.has_field("audio_filename") and filename and not call_doc.get("audio_filename"):
+        values["audio_filename"] = _trunc(filename)
+    if call_doc.meta.has_field("audio_fingerprint") and fingerprint and not call_doc.get("audio_fingerprint"):
+        values["audio_fingerprint"] = fingerprint
+    if call_doc.meta.has_field("file_size") and size and not call_doc.get("file_size"):
+        values["file_size"] = size
+    if values:
+        frappe.db.set_value("Call Intelligence", call_doc.name, values, update_modified=False)
 
 
 def process_call_intelligence(docname):
@@ -1075,6 +1297,15 @@ def process_call_intelligence(docname):
             set_call_status(docname, "Failed Upload to Gemini", "No recording_file present", overwrite=True)
             frappe.db.set_value("Call Intelligence", docname, "processing_completed_on", now())
             return
+        duplicate = _duplicate_call(call_doc)
+        if duplicate:
+            values = {"processing_status": "Success", "processing_completed_on": now(), "ai_error": _trunc(f"Duplicate audio skipped; original Call Intelligence: {duplicate}", 1000)}
+            if call_doc.meta.has_field("duplicate_of"):
+                values["duplicate_of"] = duplicate
+            frappe.db.set_value("Call Intelligence", docname, values)
+            frappe.db.commit()
+            frappe.logger("visa_crm.gemini").info(f"Skipped Gemini processing for duplicate Call Intelligence {docname}; original {duplicate}")
+            return
         file_path = get_file_path(call_doc.recording_file)
         if not os.path.exists(file_path):
             set_call_status(docname, "Failed Upload to Gemini", f"File not found : {file_path}", overwrite=True)
@@ -1083,6 +1314,7 @@ def process_call_intelligence(docname):
 
         size = os.path.getsize(file_path)
         frappe.db.set_value("Call Intelligence", docname, "file_size", size)
+        _store_call_fingerprint(call_doc, size)
 
         # extract phones
         filename = os.path.basename(file_path)
@@ -1096,8 +1328,11 @@ def process_call_intelligence(docname):
         try:
             file_uri = upload_audio_to_gemini(file_path)
         except Exception as e:
-            set_call_status(docname, "Failed Upload to Gemini", str(e), overwrite=True)
-            frappe.log_error(frappe.get_traceback(), "Gemini Upload")
+            if _is_rate_limited(e):
+                _schedule_gemini_retry(docname, e, "Gemini upload")
+                return
+            set_call_status(docname, "Failed Upload to Gemini", _safe_error(e), overwrite=True)
+            frappe.logger("visa_crm.gemini").error(f"Gemini Upload failed for {docname}: {_safe_error(e)}")
             frappe.db.set_value("Call Intelligence", docname, "processing_completed_on", now())
             return
 
@@ -1113,8 +1348,11 @@ def process_call_intelligence(docname):
         try:
             response = analyze_audio(file_uri)
         except Exception as e:
-            set_call_status(docname, "Failed Transcription", str(e), overwrite=True)
-            frappe.log_error(frappe.get_traceback(), "Gemini Analysis")
+            if _is_rate_limited(e):
+                _schedule_gemini_retry(docname, e, "Gemini analysis")
+                return
+            set_call_status(docname, "Failed Transcription", _safe_error(e), overwrite=True)
+            frappe.logger("visa_crm.gemini").error(f"Gemini Analysis failed for {docname}: {_safe_error(e)}")
             frappe.db.set_value("Call Intelligence", docname, "processing_completed_on", now())
             return
 
@@ -1151,8 +1389,11 @@ def process_call_intelligence(docname):
         return "Success"
 
     except Exception as e:
-        set_call_status(docname, "Failed Transcription", str(e), overwrite=True)
-        frappe.log_error(frappe.get_traceback(), "Gemini Processing")
+        if _is_rate_limited(e):
+            _schedule_gemini_retry(docname, e, "Gemini processing")
+            return "Retry Scheduled"
+        set_call_status(docname, "Failed Transcription", _safe_error(e), overwrite=True)
+        frappe.logger("visa_crm.gemini").error(f"Gemini Processing failed for {docname}: {_safe_error(e)}")
         return "Failed"
 
 

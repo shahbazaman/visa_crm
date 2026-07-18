@@ -18,3 +18,8 @@ visa_crm.patches.performance_security_audit
 visa_crm.patches.disable_builtin_crm_meta_sync
 visa_crm.patches.meta_live_monitoring
 visa_crm.patches.meta_webhook_observability
+visa_crm.patches.repair_intake_scheduler_job
+visa_crm.patches.meta_production_tools
+visa_crm.patches.add_call_audio_dedupe_fields
+visa_crm.patches.repair_duplicate_call_intelligence_audio
+visa_crm.patches.add_gemini_retry_fields

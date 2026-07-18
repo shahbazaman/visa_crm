@@ -69,6 +69,7 @@
     "conversation",
     "call_duration",
     "retry_count",
+    "next_retry_at",
     "gemini_upload_response",
     "gemini_analysis_response",
     "processing_started_on",
@@ -110,7 +111,7 @@
       "fieldname": "processing_status",
       "fieldtype": "Select",
       "label": "Processing Status",
-      "options": "Pending\nUploading to Gemini\nFailed to Upload to Gemini\nWaiting for Transcription\nFailed Transcription\nSuccess",
+      "options": "Pending\nUploading to Gemini\nFailed to Upload to Gemini\nWaiting for Transcription\nFailed Transcription\nSuccess\nGemini Retry Scheduled\nGemini Rate Limit Paused",
       "default": "Pending",
       "in_create":1
     },
@@ -374,6 +375,11 @@
       "fieldtype": "Int",
       "label": "Retry Count",
       "default": "0"
+    },
+    {
+      "fieldname": "next_retry_at",
+      "fieldtype": "Datetime",
+      "label": "Next Retry At"
     },
     {
       "fieldname": "gemini_upload_response",

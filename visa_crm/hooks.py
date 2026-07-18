@@ -13,6 +13,7 @@ doc_events = {
         "after_insert": ["visa_crm.api.communication_center.after_communication_insert"]
     },
     "Call Intelligence": {
+        "before_insert": ["visa_crm.api.gemini_service.prevent_duplicate_call_intelligence"],
         "after_insert": ["visa_crm.api.gemini_service.enqueue_processing"],
         "after_save": ["visa_crm.api.gemini_service.enqueue_processing"]
     },
