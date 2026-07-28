@@ -22,10 +22,14 @@ def _job_log(method):
     if not has_doctype("Scheduled Job Log"):
         return None
     for field in ("scheduled_job_type","method","job_type"):
-        if has_field("Scheduled Job Log",field):
-            rows=frappe.get_all("Scheduled Job Log",filters={field:["like",f"%{method}%"]},fields=["name","status","creation","modified"],order_by="creation desc",limit=1)
+        if _has_column("Scheduled Job Log",field):
+            fields=["name","creation","modified"]+[f for f in ("status",) if _has_column("Scheduled Job Log",f)]
+            rows=frappe.get_all("Scheduled Job Log",filters={field:["like",f"%{method}%"]},fields=fields,order_by="creation desc",limit=1)
             return rows[0] if rows else None
     return None
+
+SCHEDULER_METHOD="visa_crm.api.intake_processor.process_pending"
+SCHEDULER_CRON="* * * * *"
 
 @frappe.whitelist()
 def production_health():
@@ -35,9 +39,11 @@ def production_health():
         latest_webhook=_latest(queue_dt,fields=_fields(queue_dt,("name","source_lead_id","status","creation","modified"))) if has_doctype(queue_dt) else None
         failed=_latest(queue_dt,{"status":"Failed"},_fields(queue_dt,("name","source_lead_id","last_error","modified"))) if has_doctype(queue_dt) else None
         graph_success=_latest(queue_dt,{"graph_payload":["is","set"]},["name","source_lead_id","modified"]) if has_doctype(queue_dt) and has_field(queue_dt,"graph_payload") else None
-        scheduler=_job_log("visa_crm.api.intake_processor.process_pending")
+        scheduler_state=_scheduler_state(SCHEDULER_METHOD)
+        scheduler=scheduler_state.get("last_log")
+        scheduler_public={k:v for k,v in scheduler_state.items() if k!="last_log"}
         settings=get_meta_settings()
-        health={"scheduler_running":bool(scheduler),"webhook_received_today":_webhook_today(),"queue_waiting":_count(queue_dt,{"status":"Lead Received"}),"queue_failed":_count(queue_dt,{"status":"Failed"}),"queue_processed":_count(queue_dt,{"status":"Processed"}),"meta_api_status":"configured" if settings and _token(settings) else "missing_token","gemini_status":"configured" if _gemini_configured() else "missing_key","last_webhook_time":latest_webhook.creation if latest_webhook else None,"last_scheduler_run":scheduler.creation if scheduler else None,"last_graph_api_success":graph_success.modified if graph_success else None,"last_graph_api_failure":failed.modified if failed else None,"latest_queue":latest_webhook,"latest_failure":failed}
+        health={"scheduler_running":scheduler_state.get("active"),"scheduler_diagnostic":scheduler_public,"webhook_received_today":_webhook_today(),"queue_waiting":_count(queue_dt,{"status":"Lead Received"}),"queue_failed":_count(queue_dt,{"status":"Failed"}),"queue_processed":_count(queue_dt,{"status":"Processed"}),"meta_api_status":"configured" if settings and _token(settings) else "missing_token","gemini_status":"configured" if _gemini_configured() else "missing_key","last_webhook_time":latest_webhook.creation if latest_webhook else None,"last_scheduler_run":scheduler.creation if scheduler else None,"last_graph_api_success":graph_success.modified if graph_success else None,"last_graph_api_failure":failed.modified if failed else None,"latest_queue":latest_webhook,"latest_failure":failed}
         log_event("production_health","success","dashboard",**health)
         return health
 
@@ -71,11 +77,13 @@ def meta_diagnostics(leadgen_id=None):
 @frappe.whitelist()
 def scheduler_diagnostics():
     _admin()
-    log=_job_log("visa_crm.api.intake_processor.process_pending")
-    data={"last_execution":log.creation if log else None,"duration":None,"next_execution":None,"pending_jobs":_count("Lead Intake Queue",{"status":"Lead Received"}),"failed_jobs":_count("Lead Intake Queue",{"status":"Failed"}),"retry_jobs":_retry_jobs()}
-    if log and has_field("Scheduled Job Log","duration"):
+    data=_scheduler_state(SCHEDULER_METHOD)
+    log=data.get("last_log")
+    data.update({"pending_jobs":_count("Lead Intake Queue",{"status":"Lead Received"}),"failed_jobs":_count("Lead Intake Queue",{"status":"Failed"}),"retry_jobs":_retry_jobs()})
+    if log and _has_column("Scheduled Job Log","duration"):
         data["duration"]=frappe.db.get_value("Scheduled Job Log",log.name,"duration")
-    data["next_execution"]=add_to_date(now_datetime(),minutes=1)
+    data.setdefault("duration",None)
+    data.pop("last_log",None)
     log_event("scheduler_diagnostics","success","scheduler",**data)
     return data
 
@@ -157,7 +165,7 @@ def deployment_verification():
     checks={}
     for dt in ("Workspace","Dashboard Chart","Number Card","Report","Print Format","Page","Role","Custom Field"):
         checks[dt]=_count(dt)>0 if has_doctype(dt) else False
-    checks.update({"workspace":_exists("Workspace","Visa CRM"),"communication_center":_exists("Page","communication-center"),"ai_dashboard":_exists("Page","ai-insights-dashboard"),"portal_visa":os.path.exists(frappe.get_app_path("visa_crm","www","visa_portal.py")),"portal_upload":os.path.exists(frappe.get_app_path("visa_crm","www","document_upload.py")),"scheduler":bool(_job_log("visa_crm.api.intake_processor.process_pending"))})
+    checks.update({"workspace":_exists("Workspace","Visa CRM"),"communication_center":_exists("Page","communication-center"),"ai_dashboard":_exists("Page","ai-insights-dashboard"),"portal_visa":os.path.exists(frappe.get_app_path("visa_crm","www","visa_portal.py")),"portal_upload":os.path.exists(frappe.get_app_path("visa_crm","www","document_upload.py")),"scheduler":bool(_scheduler_state(SCHEDULER_METHOD).get("active"))})
     result={k:("PASS" if v else "FAIL") for k,v in checks.items()}
     log_event("deployment_verification","success","verification",result=result)
     return result
@@ -226,7 +234,17 @@ def _gemini_configured():
         return False
 
 def _token(settings):
-    return settings.get_password("access_token") or getattr(settings,"access_token",None)
+    for field in ("access_token","page_access_token","facebook_page_access_token","meta_page_access_token"):
+        try:
+            token=settings.get_password(field,raise_exception=False)
+            if token:
+                return token
+        except Exception:
+            pass
+        token=getattr(settings,field,None)
+        if token:
+            return token
+    return frappe.conf.get("meta_page_access_token") or frappe.conf.get("facebook_page_access_token") or frappe.conf.get("page_access_token")
 
 def _exists(dt,name):
     return bool(frappe.db.exists(dt,name)) if has_doctype(dt) else False
@@ -237,3 +255,61 @@ def _clip(value,length=1200):
 
 def _fields(dt,names):
     return [f for f in names if f=="name" or has_field(dt,f)]
+
+def _scheduler_state(method):
+    hooks=_scheduler_hooks(method)
+    job=_scheduled_job_type(method)
+    log=_job_log(method)
+    enabled=bool(job and not job.get("stopped") and not job.get("disabled"))
+    cron=job.get("cron_format") if job else hooks.get("cron")
+    return {"method":method,"job_name":job.get("name") if job else None,"registered_in_hooks":hooks.get("registered"),"hook_cron":hooks.get("cron"),"exists":bool(job),"enabled":enabled,"active":bool(hooks.get("registered") and enabled),"cron_frequency":cron or SCHEDULER_CRON,"next_run":_next_run(job,cron),"last_run":log.creation if log else None,"last_status":log.status if log and "status" in log else None,"last_log":log,"worker_status":_worker_status(),"bench_scheduler_detectable":bool(hooks.get("registered") and job)}
+
+def _scheduler_hooks(method):
+    try:
+        import visa_crm.hooks as hooks
+        cron=(getattr(hooks,"scheduler_events",{}) or {}).get("cron") or {}
+        for expression,methods in cron.items():
+            if method in methods:
+                return {"registered":True,"cron":expression}
+    except Exception:
+        return {"registered":False,"cron":None}
+    return {"registered":False,"cron":None}
+
+def _scheduled_job_type(method):
+    if not has_doctype("Scheduled Job Type"):
+        return None
+    fields=["name"]+[field for field in ("method","frequency","cron_format","stopped","disabled","next_execution","last_execution") if _has_column("Scheduled Job Type",field)]
+    filters={"method":method} if _has_column("Scheduled Job Type","method") else {"name":method}
+    rows=frappe.get_all("Scheduled Job Type",filters=filters,fields=fields,limit=1)
+    if rows:
+        return rows[0]
+    return frappe.db.get_value("Scheduled Job Type",method,fields,as_dict=True) if frappe.db.exists("Scheduled Job Type",method) else None
+
+def _next_run(job,cron):
+    if job and job.get("next_execution"):
+        return job.get("next_execution")
+    return add_to_date(now_datetime(),minutes=1) if (cron or SCHEDULER_CRON)=="* * * * *" else None
+
+def _worker_status():
+    try:
+        if _has_table("RQ Worker"):
+            total=frappe.db.count("RQ Worker")
+            return {"status":"detected" if total else "not_detected","workers":total}
+        if _has_table("RQ Job"):
+            failed=frappe.db.count("RQ Job",{"status":"failed"})
+            return {"status":"rq_job_doctype_present","failed_jobs":failed}
+    except Exception as exc:
+        return {"status":"worker_status_unavailable","error":str(exc)}
+    return {"status":"not_available_in_this_site"}
+
+def _has_column(doctype, fieldname):
+    try:
+        return frappe.db.has_column(doctype, fieldname)
+    except Exception:
+        return has_field(doctype, fieldname)
+
+def _has_table(doctype):
+    try:
+        return frappe.db.table_exists(doctype)
+    except Exception:
+        return False
