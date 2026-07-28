@@ -10,21 +10,28 @@ def create_crm_lead(data, context=None):
     meta_fields = _meta_fields(data)
     frappe.logger("visa_crm.meta").info({"meta_fields_before_create": meta_fields})
     lead = frappe.new_doc("CRM Lead")
+    _trace("after_construction", lead, meta_fields=meta_fields)
     name = _lead_name(data, meta_fields)
     source = data.get("lead_source") or data.get("source") or DEFAULT_SOURCE
     _ensure_link_master(lead, "source", source)
     _ensure_link_master(lead, "lead_source", source)
     _ensure_link_master(lead, "status", "Open")
-    values = _crm_values(_lead_values(data, meta_fields, name, source))
+    mapped_fields = _lead_values(data, meta_fields, name, source)
+    _trace("after_lead_values", lead, mapped_fields=mapped_fields)
+    values = _crm_values(mapped_fields)
+    _trace("after_crm_values", lead, mapped_fields=values)
     for field, value in values.items():
         _set_empty_if_allowed(lead, field, value)
+    _trace("after_set_empty_if_allowed", lead, mapped_fields=values)
     for field in MAPPED_FIELDS:
         if values.get(field) is not None and lead.meta.has_field(field):
             lead.set(field, values[field])
+    _trace("after_lead_set", lead, mapped_fields=values)
     _fill_required_text(lead, name)
     before = {field: lead.get(field) for field in MAPPED_FIELDS if lead.meta.has_field(field)}
     frappe.logger("visa_crm.meta").info({"crm_lead_field_metadata": _field_metadata(lead)})
     frappe.logger("visa_crm.meta").info({"lead_document_before_insert": lead.as_dict()})
+    _trace("before_insert", lead, mapped_fields=values)
     try:
         lead.insert(ignore_permissions=True)
     except Exception as exc:
@@ -35,7 +42,9 @@ def create_crm_lead(data, context=None):
         frappe.log_error(title="CRM Lead Insert Failure", message=message)
         frappe.db.after_rollback.add(lambda: frappe.log_error(title="CRM Lead Insert Failure", message=message))
         raise
+    _trace("after_insert", lead, mapped_fields=values)
     lead.reload()
+    _trace("after_reload", lead, mapped_fields=values)
     after = {field: lead.get(field) for field in MAPPED_FIELDS if lead.meta.has_field(field)}
     frappe.logger("visa_crm.meta").info({"lead_document_after_insert": lead.as_dict()})
     changed = {field: {"before": value, "after": after.get(field)} for field, value in before.items() if value != after.get(field)}
@@ -119,7 +128,14 @@ def _validator(exc):
 def log_crm_lead_hook(doc, method=None):
     if not (getattr(doc, "source_lead_id", None) or getattr(doc, "source", None) == DEFAULT_SOURCE):
         return
-    frappe.logger("visa_crm.meta").info({"crm_lead_hook": method, "lead_document": doc.as_dict()})
+    current = {field: doc.get(field) for field in MAPPED_FIELDS if doc.meta.has_field(field)}
+    previous = getattr(doc.flags, "visa_crm_meta_trace_fields", {}) or {}
+    changes = {field: {"old": previous.get(field), "new": value} for field, value in current.items() if previous.get(field) != value}
+    frappe.logger("visa_crm.meta").info({"crm_lead_stage": f"hook_{method}", "crm_lead_hook": method, "field_changes": changes, "lead_document": doc.as_dict()})
+    doc.flags.visa_crm_meta_trace_fields = current
+
+def _trace(stage, doc, **data):
+    frappe.logger("visa_crm.meta").info({"crm_lead_stage": stage, "lead_document": doc.as_dict(), **data})
 
 def _allowed(doc, field, value):
     meta_field = doc.meta.get_field(field)
