@@ -1,5 +1,5 @@
 import frappe
-from visa_crm.api.meta_utils import load_json, meta_debug_log, set_if_has
+from visa_crm.api.meta_utils import load_json, meta_debug_log, safe_json_dumps, set_if_has
 
 DEFAULT_SOURCE = "Meta Instant Form"
 MAPPED_FIELDS = ("lead_name", "first_name", "last_name", "mobile_no", "email", "notes", "country", "city", "custom_budget", "custom_destination", "custom_travel_month", "custom_passport_status", "custom_visa_type")
@@ -23,13 +23,17 @@ def create_crm_lead(data, context=None):
             lead.set(field, values[field])
     _fill_required_text(lead, name)
     before = {field: lead.get(field) for field in MAPPED_FIELDS if lead.meta.has_field(field)}
+    frappe.logger("visa_crm.meta").info({"crm_lead_field_metadata": _field_metadata(lead)})
     frappe.logger("visa_crm.meta").info({"lead_document_before_insert": lead.as_dict()})
     try:
         lead.insert(ignore_permissions=True)
-    except Exception:
+    except Exception as exc:
         traceback = frappe.get_traceback()
-        frappe.log_error(title="CRM Lead Insert Failure", message=traceback)
-        frappe.db.after_rollback.add(lambda: frappe.log_error(title="CRM Lead Insert Failure", message=traceback))
+        failure = {"traceback": traceback, "lead_document": lead.as_dict(), "meta_fields": meta_fields, "mapped_fields": values, "flags": dict(lead.flags), "validation_message": str(exc)}
+        frappe.logger("visa_crm.meta").error({"crm_lead_insert_failure": failure})
+        message = safe_json_dumps(failure)
+        frappe.log_error(title="CRM Lead Insert Failure", message=message)
+        frappe.db.after_rollback.add(lambda: frappe.log_error(title="CRM Lead Insert Failure", message=message))
         raise
     lead.reload()
     after = {field: lead.get(field) for field in MAPPED_FIELDS if lead.meta.has_field(field)}
@@ -83,6 +87,8 @@ def _lead_name(data, meta_fields=None):
 
 def _clean_text(value):
     text = str(value or "").strip()
+    if text.lower().startswith("<test lead:") and text.endswith(">"):
+        text = text[1:-1].strip()
     return text or None
 
 def _meta_fields(data):
@@ -93,6 +99,14 @@ def _fill_required_text(doc, value):
     for field in doc.meta.get("fields"):
         if field.reqd and field.fieldtype in ("Data", "Small Text", "Text") and not doc.get(field.fieldname):
             doc.set(field.fieldname, value)
+
+def _field_metadata(doc):
+    fields = {}
+    for fieldname in ("first_name", "lead_name", "last_name", "full_name"):
+        field = doc.meta.get_field(fieldname)
+        if field:
+            fields[fieldname] = {"reqd": field.reqd, "mandatory_depends_on": field.mandatory_depends_on, "default": field.default}
+    return fields
 
 def _allowed(doc, field, value):
     meta_field = doc.meta.get_field(field)
