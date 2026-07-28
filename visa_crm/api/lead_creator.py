@@ -24,7 +24,13 @@ def create_crm_lead(data, context=None):
     _fill_required_text(lead, name)
     before = {field: lead.get(field) for field in MAPPED_FIELDS if lead.meta.has_field(field)}
     frappe.logger("visa_crm.meta").info({"lead_document_before_insert": lead.as_dict()})
-    lead.insert(ignore_permissions=True)
+    try:
+        lead.insert(ignore_permissions=True)
+    except Exception:
+        traceback = frappe.get_traceback()
+        frappe.log_error(title="CRM Lead Insert Failure", message=traceback)
+        frappe.db.after_rollback.add(lambda: frappe.log_error(title="CRM Lead Insert Failure", message=traceback))
+        raise
     lead.reload()
     after = {field: lead.get(field) for field in MAPPED_FIELDS if lead.meta.has_field(field)}
     frappe.logger("visa_crm.meta").info({"lead_document_after_insert": lead.as_dict()})
