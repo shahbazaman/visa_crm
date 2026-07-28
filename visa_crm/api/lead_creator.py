@@ -15,7 +15,7 @@ def create_crm_lead(data, context=None):
     _ensure_link_master(lead, "source", source)
     _ensure_link_master(lead, "lead_source", source)
     _ensure_link_master(lead, "status", "Open")
-    values = _lead_values(data, meta_fields, name, source)
+    values = _crm_values(_lead_values(data, meta_fields, name, source))
     for field, value in values.items():
         _set_empty_if_allowed(lead, field, value)
     for field in MAPPED_FIELDS:
@@ -29,7 +29,7 @@ def create_crm_lead(data, context=None):
         lead.insert(ignore_permissions=True)
     except Exception as exc:
         traceback = frappe.get_traceback()
-        failure = {"traceback": traceback, "lead_document": lead.as_dict(), "meta_fields": meta_fields, "mapped_fields": values, "flags": dict(lead.flags), "validation_message": str(exc)}
+        failure = {"traceback": traceback, "lead_document": lead.as_dict(), "meta_fields": meta_fields, "mapped_fields": values, "flags": dict(lead.flags), "validation_message": str(exc), "doctype": lead.doctype, "validator": _validator(exc), "phone_fields": {field: lead.get(field) for field in ("mobile_no", "phone", "phone_number") if lead.meta.has_field(field)}}
         frappe.logger("visa_crm.meta").error({"crm_lead_insert_failure": failure})
         message = safe_json_dumps(failure)
         frappe.log_error(title="CRM Lead Insert Failure", message=message)
@@ -87,9 +87,7 @@ def _lead_name(data, meta_fields=None):
 
 def _clean_text(value):
     text = str(value or "").strip()
-    if text.lower().startswith("<test lead:") and text.endswith(">"):
-        text = text[1:-1].strip()
-    return text or None
+    return None if _is_meta_test_placeholder(text) else text or None
 
 def _meta_fields(data):
     fields = data.get("meta_fields") or data.get("custom_answers") or {}
@@ -107,6 +105,21 @@ def _field_metadata(doc):
         if field:
             fields[fieldname] = {"reqd": field.reqd, "mandatory_depends_on": field.mandatory_depends_on, "default": field.default}
     return fields
+
+def _crm_values(values):
+    return {field: value if field == "meta_raw_fields" or not _is_meta_test_placeholder(value) else None for field, value in values.items()}
+
+def _is_meta_test_placeholder(value):
+    text = str(value or "").strip().lower()
+    return text.startswith("<test lead: dummy data for ") and text.endswith(">")
+
+def _validator(exc):
+    return "frappe.utils.validate_phone_number" if isinstance(exc, frappe.InvalidPhoneNumberError) else exc.__class__.__name__
+
+def log_crm_lead_hook(doc, method=None):
+    if not (getattr(doc, "source_lead_id", None) or getattr(doc, "source", None) == DEFAULT_SOURCE):
+        return
+    frappe.logger("visa_crm.meta").info({"crm_lead_hook": method, "lead_document": doc.as_dict()})
 
 def _allowed(doc, field, value):
     meta_field = doc.meta.get_field(field)
