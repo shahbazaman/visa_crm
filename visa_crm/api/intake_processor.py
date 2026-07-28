@@ -16,6 +16,7 @@ def process_pending(limit=100):
     meta_debug_log("process_pending_end", status="scheduler", count=len(rows), limit=limit)
 
 def process_queue(docname):
+    logger = frappe.logger("visa_crm.meta")
     initial_status = frappe.db.get_value("Lead Intake Queue", docname, "status")
     initial_source = frappe.db.get_value("Lead Intake Queue", docname, "source_lead_id")
     meta_debug_log("process_queue_start", queue_name=docname, source_lead_id=initial_source, status=initial_status)
@@ -34,10 +35,14 @@ def process_queue(docname):
         context = _context(doc, leadgen_id)
         if not leadgen_id:
             raise ValueError("Lead Intake Queue is missing source_lead_id")
+        logger.info("Fetching Graph Lead")
         graph_payload = fetch_lead(leadgen_id, settings, context)
+        logger.info(graph_payload)
         data = normalize_lead(graph_payload, settings, context)
         _update_queue(doc, data, graph_payload, "Lead Downloaded")
+        frappe.db.commit()
         context = _context(doc, data.get("source_lead_id") or leadgen_id)
+        logger.info(data.get("meta_fields") or data.get("custom_answers") or {})
         matches = link_or_create_lead(data, context)
         _link_matches(doc, matches)
         context = _context(doc, data.get("source_lead_id") or leadgen_id)
@@ -105,7 +110,7 @@ def _event_type(doc):
 def _update_queue(doc, data, graph_payload, status):
     meta_debug_log("queue_status_update_start", queue_name=doc.name, source_lead_id=data.get("source_lead_id") or doc.source_lead_id, status=status)
     values = {field: data.get(field) for field in ("source_lead_id", "customer_name", "phone", "email", "country_interested", "visa_type", "campaign_name", "adset_name", "ad_name")}
-    values.update({"status": status, "graph_payload": safe_json_dumps(graph_payload), "custom_answers": safe_json_dumps(data.get("custom_answers")), "page_id": data.get("page_id"), "form_id": data.get("form_id"), "campaign_id": data.get("campaign_id"), "ad_id": data.get("ad_id")})
+    values.update({"status": status, "graph_payload": safe_json_dumps(graph_payload), "graph_api_response": safe_json_dumps(graph_payload), "custom_answers": safe_json_dumps(data.get("custom_answers")), "page_id": data.get("page_id"), "form_id": data.get("form_id"), "campaign_id": data.get("campaign_id"), "ad_id": data.get("ad_id")})
     set_values("Lead Intake Queue", doc.name, values)
     _sync_webhook_event(doc.name, {"graph_api_response": safe_json_dumps(graph_payload), "queue_status": status})
     doc.reload()

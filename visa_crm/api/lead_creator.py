@@ -18,6 +18,9 @@ def create_crm_lead(data, context=None):
     values = _lead_values(data, meta_fields, name, source)
     for field, value in values.items():
         _set_empty_if_allowed(lead, field, value)
+    for field in MAPPED_FIELDS:
+        if values.get(field) is not None and lead.meta.has_field(field):
+            lead.set(field, values[field])
     _fill_required_text(lead, name)
     before = {field: lead.get(field) for field in MAPPED_FIELDS if lead.meta.has_field(field)}
     frappe.logger("visa_crm.meta").info({"lead_document_before_insert": lead.as_dict()})
