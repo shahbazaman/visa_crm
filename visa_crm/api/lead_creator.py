@@ -12,19 +12,25 @@ def create_crm_lead(data, context=None):
     _ensure_link_master(doc, "source", source)
     _ensure_link_master(doc, "lead_source", source)
     _ensure_link_master(doc, "status", "Open")
-    for field in ("lead_name", "first_name", "customer_name", "organization"):
-        set_if_has(doc, field, name)
-    for field in ("mobile_no", "phone", "phone_number"):
-        set_if_has(doc, field, data.get("phone"))
-    for field in ("email", "email_id"):
-        set_if_has(doc, field, data.get("email"))
-    for field, value in {"source": source, "lead_source": source, "status": "Open", "workflow_state": "Lead", "country_of_interest": data.get("country_interested"), "country_interested": data.get("country_interested"), "visa_type": data.get("visa_type"), "campaign_name": data.get("campaign_name"), "ad_name": data.get("ad_name"), "source_lead_id": data.get("source_lead_id")}.items():
-        if _allowed(doc, field, value):
-            set_if_has(doc, field, value)
+    values = _lead_values(data, name, source)
+    for field, value in values.items():
+        _set_empty_if_allowed(doc, field, value)
     _fill_required_text(doc, name)
     doc.insert(ignore_permissions=True)
     meta_debug_log("lead_creation_end", lead=doc.name, source=source, **context)
     return doc.name
+
+def _lead_values(data, name, source):
+    first_name = _clean_text(data.get("first_name")) or name
+    notes = data.get("notes") or data.get("message")
+    country = data.get("country") or data.get("country_interested")
+    visa_type = data.get("custom_visa_type") or data.get("visa_type")
+    return {"lead_name": name, "first_name": first_name, "last_name": data.get("last_name"), "customer_name": name, "organization": name, "mobile_no": data.get("phone"), "phone": data.get("phone"), "phone_number": data.get("phone"), "email": data.get("email"), "email_id": data.get("email"), "city": data.get("city"), "country": country, "country_interested": country, "country_of_interest": country, "visa_type": visa_type, "custom_visa_type": visa_type, "budget": data.get("budget"), "custom_budget": data.get("custom_budget") or data.get("budget"), "travel_date": data.get("travel_date"), "travel_month": data.get("travel_month"), "custom_travel_month": data.get("custom_travel_month") or data.get("travel_month"), "destination": data.get("destination"), "custom_destination": data.get("custom_destination") or data.get("destination"), "passport": data.get("passport"), "custom_passport_status": data.get("custom_passport_status") or data.get("passport"), "message": data.get("message"), "notes": notes, "meta_raw_fields": data.get("meta_raw_fields"), "source": source, "lead_source": source, "status": "Open", "workflow_state": "Lead", "campaign_name": data.get("campaign_name"), "ad_name": data.get("ad_name"), "source_lead_id": data.get("source_lead_id")}
+
+def _set_empty_if_allowed(doc, field, value):
+    if not value or not doc.meta.has_field(field) or doc.get(field) or not _allowed(doc, field, value):
+        return
+    set_if_has(doc, field, value)
 
 def _ensure_link_master(doc, fieldname, value):
     field = doc.meta.get_field(fieldname)
