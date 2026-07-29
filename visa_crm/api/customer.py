@@ -5,7 +5,7 @@ def find_customer(phone=None,email=None,name=None):
         customer=frappe.db.get_value("Customer",{"mobile_no":phone},"name")
         if customer:
             return customer
-        customer=frappe.db.get_value("Customer",{"phone":phone},"name")
+        customer=frappe.db.get_value("Customer",{"whatsapp_no":phone},"name")
         if customer:
             return customer
     if email:

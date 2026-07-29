@@ -19,6 +19,7 @@ doc_events = {
     },
     "CRM Lead": {
         "before_insert": ["visa_crm.api.lead_creator.log_crm_lead_hook"],
+        "autoname": ["visa_crm.api.lead_creator.log_crm_lead_hook"],
         "before_validate": ["visa_crm.api.lead_creator.log_crm_lead_hook"],
         "validate": ["visa_crm.api.lead_creator.log_crm_lead_hook"],
         "before_save": ["visa_crm.api.crm_lifecycle.validate_lead_transition", "visa_crm.api.lead_creator.log_crm_lead_hook"],

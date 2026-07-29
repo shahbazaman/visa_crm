@@ -19,12 +19,15 @@ def process_queue(docname):
     logger = frappe.logger("visa_crm.meta")
     initial_status = frappe.db.get_value("Lead Intake Queue", docname, "status")
     initial_source = frappe.db.get_value("Lead Intake Queue", docname, "source_lead_id")
+    stage = "claim"
     meta_debug_log("process_queue_start", queue_name=docname, source_lead_id=initial_source, status=initial_status)
     if not _claim(docname):
         meta_debug_log("process_queue_end", queue_name=docname, source_lead_id=initial_source, status=initial_status, skipped="claim_failed")
         return
     doc = frappe.get_doc("Lead Intake Queue", docname)
     try:
+        stage = "event_validation"
+        _pipeline_stage(stage, doc)
         event_type = _event_type(doc)
         if event_type and event_type != "leadgen":
             queue_status(doc.name, "Ignored Test Event", last_error=f"Ignored Meta event field {event_type}; only leadgen events are processed", next_retry_at=None, processing_completed_at=now())
@@ -35,36 +38,58 @@ def process_queue(docname):
         context = _context(doc, leadgen_id)
         if not leadgen_id:
             raise ValueError("Lead Intake Queue is missing source_lead_id")
+        stage = "graph_fetch"
+        _pipeline_stage(stage, doc)
         logger.info("Fetching Graph Lead")
         graph_payload = fetch_lead(leadgen_id, settings, context)
         logger.info(graph_payload)
+        stage = "normalization"
+        _pipeline_stage(stage, doc)
         data = normalize_lead(graph_payload, settings, context)
+        stage = "queue_graph_update"
+        _pipeline_stage(stage, doc)
         _update_queue(doc, data, graph_payload, "Lead Downloaded")
         frappe.db.commit()
         context = _context(doc, data.get("source_lead_id") or leadgen_id)
         logger.info(data.get("meta_fields") or data.get("custom_answers") or {})
+        stage = "customer360_and_lead_creation"
+        _pipeline_stage(stage, doc, data=data)
         matches = link_or_create_lead(data, context)
         _link_matches(doc, matches)
         context = _context(doc, data.get("source_lead_id") or leadgen_id)
         lead = matches.get("lead")
         customer = matches.get("customer")
         if lead:
+            stage = "workflow"
+            _pipeline_stage(stage, doc, lead=lead)
             mark_lead_stage(lead, "Lead", context)
             qualify_lead(lead, context)
             create_deal_if_supported(lead, data)
+        stage = "counselor_assignment"
+        _pipeline_stage(stage, doc, lead=lead)
         employee = assign_lead(lead, doc, context=context)
+        stage = "communication_event"
+        _pipeline_stage(stage, doc, lead=lead, employee=employee)
         event = _communication_event(data, lead, customer, employee, doc.name, context)
+        stage = "followup"
+        _pipeline_stage(stage, doc, lead=lead, communication_event=event)
         todo = create_meta_followup(data, lead, customer, employee, doc.name, context)
+        stage = "queue_finish"
+        _pipeline_stage(stage, doc, lead=lead, communication_event=event, followup=todo)
         _finish(doc, lead, customer, employee, event, todo)
         frappe.db.commit()
         log_info("meta_queue_completed", queue=doc.name, lead=lead, customer=customer, employee=employee)
         meta_debug_log("process_queue_end", queue_name=doc.name, source_lead_id=data.get("source_lead_id") or leadgen_id, status="Processed", lead=lead, customer=customer, employee=employee)
     except MetaGraphError as exc:
-        meta_debug_log("process_queue_exception", queue_name=docname, source_lead_id=frappe.db.get_value("Lead Intake Queue", docname, "source_lead_id"), status=frappe.db.get_value("Lead Intake Queue", docname, "status"), error=str(exc), graph_response=getattr(exc, "response", None), graph_request=getattr(exc, "request", None))
+        traceback = frappe.get_traceback()
+        _pipeline_failure(docname, stage, exc, traceback, graph_response=getattr(exc, "response", None), graph_request=getattr(exc, "request", None))
+        meta_debug_log("process_queue_exception", queue_name=docname, source_lead_id=frappe.db.get_value("Lead Intake Queue", docname, "source_lead_id"), status=frappe.db.get_value("Lead Intake Queue", docname, "status"), error=str(exc), traceback=traceback, graph_response=getattr(exc, "response", None), graph_request=getattr(exc, "request", None))
         frappe.db.rollback()
         _retry_or_fail(docname, str(exc), retryable=not _ignored_test_event(docname, exc), graph_response=getattr(exc, "response", None), graph_request=getattr(exc, "request", None), ignored=_ignored_test_event(docname, exc))
     except Exception as exc:
-        meta_debug_log("process_queue_exception", queue_name=docname, source_lead_id=frappe.db.get_value("Lead Intake Queue", docname, "source_lead_id"), status=frappe.db.get_value("Lead Intake Queue", docname, "status"), error=str(exc), traceback=frappe.get_traceback())
+        traceback = frappe.get_traceback()
+        _pipeline_failure(docname, stage, exc, traceback)
+        meta_debug_log("process_queue_exception", queue_name=docname, source_lead_id=frappe.db.get_value("Lead Intake Queue", docname, "source_lead_id"), status=frappe.db.get_value("Lead Intake Queue", docname, "status"), error=str(exc), traceback=traceback)
         frappe.db.rollback()
         log_exception("meta_queue_failed", queue=docname, error=str(exc))
         _retry_or_fail(docname, str(exc), retryable=False)
@@ -78,6 +103,9 @@ def _pending_rows(limit):
     for row in rows:
         if row.status == "Lead Received":
             pending.append(row)
+            continue
+        if _historical_meta_test(row.name):
+            meta_debug_log("queue_retry_skipped_meta_test", queue_name=row.name, source_lead_id=frappe.db.get_value("Lead Intake Queue", row.name, "source_lead_id"), status=row.status)
             continue
         next_retry = frappe.db.get_value("Lead Intake Queue", row.name, "next_retry_at")
         count = frappe.db.get_value("Lead Intake Queue", row.name, "retry_count") if has_field("Lead Intake Queue", "retry_count") else MAX_RETRIES
@@ -182,6 +210,22 @@ def _ignored_test_event(docname, exc):
 def _dummy_leadgen_id(leadgen_id):
     value = str(leadgen_id or "")
     return value in ("444444444444", "987654321") or (value.isdigit() and len(value) <= 12)
+
+def _historical_meta_test(docname):
+    fields = [field for field in ("customer_name", "custom_answers", "graph_payload", "graph_api_response") if has_field("Lead Intake Queue", field)]
+    row = frappe.db.get_value("Lead Intake Queue", docname, fields, as_dict=True) if fields else None
+    return any("<test lead: dummy data for " in str(value or "").lower() for value in (row or {}).values())
+
+def _pipeline_stage(stage, doc, **data):
+    _pipeline_logger().info(safe_json_dumps({"event": "meta_pipeline_stage", "stage": stage, "queue_name": doc.name, "source_lead_id": doc.source_lead_id, "status": doc.status, "data": data}))
+
+def _pipeline_failure(docname, stage, exc, traceback, **data):
+    _pipeline_logger().error(safe_json_dumps({"event": "meta_pipeline_failure", "stage": stage, "queue_name": docname, "source_lead_id": frappe.db.get_value("Lead Intake Queue", docname, "source_lead_id"), "status": frappe.db.get_value("Lead Intake Queue", docname, "status"), "exception_class": f"{type(exc).__module__}.{type(exc).__qualname__}", "exception": repr(exc), "traceback": traceback, "data": data}))
+
+def _pipeline_logger():
+    logger = frappe.logger("visa_crm.pipeline")
+    logger.setLevel("INFO")
+    return logger
 
 def _sync_webhook_event(queue_name, values):
     if not has_field("Lead Intake Queue", "meta_webhook_event"):
