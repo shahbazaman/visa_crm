@@ -1,17 +1,18 @@
 import frappe
+from visa_crm.api.meta_utils import has_field
 
 def find_customer(phone=None,email=None,name=None):
     if phone:
-        customer=frappe.db.get_value("Customer",{"mobile_no":phone},"name")
-        if customer:
-            return customer
-        customer=frappe.db.get_value("Customer",{"whatsapp_no":phone},"name")
-        if customer:
-            return customer
+        for field in ("mobile_no","whatsapp_no"):
+            if has_field("Customer",field):
+                customer=frappe.db.get_value("Customer",{field:phone},"name")
+                if customer:
+                    return customer
     if email:
-        customer=frappe.db.get_value("Customer",{"email_id":email},"name")
-        if customer:
-            return customer
+        if has_field("Customer","email_id"):
+            customer=frappe.db.get_value("Customer",{"email_id":email},"name")
+            if customer:
+                return customer
     if name:
         customer=frappe.db.get_value("Customer",{"customer_name":name},"name")
         if customer:
@@ -29,14 +30,25 @@ def find_lead(phone=None,email=None):
             return lead
     return None
 
-def create_customer_from_lead(lead):
+def create_customer_from_lead(lead,data=None):
+    data=data or {}
     doc=frappe.get_doc("CRM Lead",lead)
-    customer=frappe.get_doc({
-        "doctype":"Customer",
-        "customer_name":doc.lead_name or doc.first_name or "Unknown",
-        "mobile_no":doc.mobile_no,
-        "email_id":doc.email
-    })
-    customer.insert(ignore_permissions=True)
-    frappe.db.commit()
+    name=data.get("customer_name") or doc.lead_name or doc.first_name or "Unknown"
+    phone=data.get("phone") or getattr(doc,"mobile_no",None)
+    email=data.get("email") or getattr(doc,"email",None)
+    existing=find_customer(phone,email,name)
+    if existing:
+        return existing
+    customer=frappe.new_doc("Customer")
+    values={"customer_name":name,"customer_type":"Individual","mobile_no":phone,"whatsapp_no":data.get("whatsapp") or phone,"email_id":email}
+    for field,value in values.items():
+        if value is not None and customer.meta.has_field(field):
+            customer.set(field,value)
+    try:
+        customer.insert(ignore_permissions=True)
+    except frappe.DuplicateEntryError:
+        existing=find_customer(phone,email,name)
+        if existing:
+            return existing
+        raise
     return customer.name

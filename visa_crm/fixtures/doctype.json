@@ -15248,7 +15248,7 @@
     "non_negative": 0,
     "oldfieldname": null,
     "oldfieldtype": null,
-    "options": "Lead Received\nPending Processing\nFetching Meta Lead\nLead Downloaded\nDuplicate Found\nCustomer Matched\nLead Created\nAssigned\nFollowup Created\nCompleted\nFailed\nRetrying",
+    "options": "Lead Received\nPending Processing\nFetching Meta Lead\nLead Downloaded\nDuplicate Found\nCustomer Matched\nLead Created\nAssigned\nFollowup Created\nCompleted\nProcessed\nFailed\nRetrying\nIgnored Test Event",
     "parent": "Lead Intake Queue",
     "parentfield": "fields",
     "parenttype": "DocType",
@@ -15399,7 +15399,7 @@
     "sort_options": 0,
     "translatable": 0,
     "trigger": null,
-    "unique": 0,
+    "unique": 1,
     "width": null
    },
    {

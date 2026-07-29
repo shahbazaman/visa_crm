@@ -9,7 +9,11 @@ STAFF_ROLES={"System Manager","Sales Manager","Counselor","Visa Processing","Adm
 
 def after_communication_insert(doc,method=None):
     attach_context(doc)
-    enqueue_ai(doc.name)
+    queue_name=_queue_name(doc)
+    try:
+        enqueue_ai(doc.name,queue_name)
+    except Exception as exc:
+        _record_ai_enqueue_failure(doc.name,queue_name,exc,frappe.get_traceback())
 
 def attach_context(doc):
     data={"phone":getattr(doc,"phone",None),"email":getattr(doc,"email",None),"customer_name":getattr(doc,"customer_name",None) or getattr(doc,"contact_person",None)}
@@ -162,8 +166,51 @@ def inbox_counters():
         out["pending"]=frappe.db.count("Communication Event",{"conversation_status":"Pending"})
     return out
 
-def enqueue_ai(event_name):
-    frappe.enqueue("visa_crm.api.ai_intelligence.process_communication_ai",queue="long",enqueue_after_commit=True,event_name=event_name)
+def enqueue_ai(event_name,queue_name=None):
+    _persist_ai_state(queue_name,"Pending")
+    frappe.db.after_commit.add(lambda:_enqueue_ai_after_commit(event_name,queue_name))
+
+def _enqueue_ai_after_commit(event_name,queue_name=None):
+    try:
+        frappe.enqueue("visa_crm.api.ai_intelligence.process_communication_ai",queue="long",event_name=event_name)
+    except Exception as exc:
+        _record_ai_enqueue_failure(event_name,queue_name,exc,frappe.get_traceback(),commit=True)
+        return
+    try:
+        _persist_ai_state(queue_name,"Queued",ai_error="",ai_traceback="")
+        frappe.db.commit()
+    except Exception:
+        _ai_logger().error(safe_json_dumps({"event":"ai_enqueue_state_update_failed","communication_event":event_name,"queue_name":queue_name,"status":"Queued","traceback":frappe.get_traceback()}))
+
+def _record_ai_enqueue_failure(event_name,queue_name,exc,traceback,commit=False):
+    try:
+        _persist_ai_state(queue_name,"Failed",ai_error=str(exc),ai_traceback=traceback,increment_retry=True)
+        if commit:
+            frappe.db.commit()
+    except Exception:
+        traceback=f"{traceback}\nAI state persistence failure:\n{frappe.get_traceback()}"
+    _ai_logger().error(safe_json_dumps({"event":"ai_enqueue_failed","communication_event":event_name,"queue_name":queue_name,"status":"Failed","exception_class":f"{type(exc).__module__}.{type(exc).__qualname__}","error":repr(exc),"traceback":traceback}))
+
+def _persist_ai_state(queue_name,status,ai_error=None,ai_traceback=None,increment_retry=False):
+    if not queue_name or not has_doctype("Lead Intake Queue") or not frappe.db.exists("Lead Intake Queue",queue_name):
+        return
+    values={}
+    for field,value in {"ai_status":status,"ai_error":ai_error,"ai_traceback":ai_traceback}.items():
+        if value is not None and has_field("Lead Intake Queue",field):
+            values[field]=value
+    if increment_retry and has_field("Lead Intake Queue","ai_retry_count"):
+        values["ai_retry_count"]=(frappe.db.get_value("Lead Intake Queue",queue_name,"ai_retry_count") or 0)+1
+    if values:
+        frappe.db.set_value("Lead Intake Queue",queue_name,values,update_modified=False)
+
+def _queue_name(doc):
+    queue_name=getattr(doc,"channel_id",None)
+    return queue_name if queue_name and has_doctype("Lead Intake Queue") and frappe.db.exists("Lead Intake Queue",queue_name) else None
+
+def _ai_logger():
+    logger=frappe.logger("visa_crm.ai")
+    logger.setLevel("INFO")
+    return logger
 
 def _latest_visa(lead=None,customer=None):
     if not has_doctype("Visa Application"):

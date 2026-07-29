@@ -24,3 +24,5 @@ visa_crm.patches.add_call_audio_dedupe_fields
 visa_crm.patches.repair_duplicate_call_intelligence_audio
 visa_crm.patches.add_gemini_retry_fields
 visa_crm.patches.add_meta_crm_lead_mapping_fields
+visa_crm.patches.add_queue_ai_status_fields
+visa_crm.patches.stabilize_meta_production_blockers
