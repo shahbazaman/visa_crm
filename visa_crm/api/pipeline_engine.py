@@ -27,7 +27,7 @@ def stage_key(queue_name,stage):
     return f"{queue_name}:{stage}"
 
 def stages_for(queue_name):
-    return frappe.get_all("Lead Intake Stage",filters={"queue":queue_name},fields=["name","queue","stage","sequence","requirement_class","state","attempt_count","max_attempts","next_retry_at","lease_owner","lease_token","lease_expires_at","started_at","completed_at","duration_ms","last_error_class","last_error","last_traceback","result_doctype","result_name","result_json","warning","skip_reason"],order_by="sequence asc")
+    return frappe.get_all("Lead Intake Stage",filters={"queue":queue_name},fields=["name","queue","stage","sequence","requirement_class","state","attempt_count","max_attempts","next_retry_at","lease_owner","lease_token","lease_expires_at","heartbeat_at","started_at","completed_at","duration_ms","last_error_class","last_error","last_traceback","result_doctype","result_name","result_json","warning","skip_reason"],order_by="sequence asc")
 
 def next_eligible_stage(queue_name,include_ai=False,at=None):
     at=get_datetime(at or now_datetime())
@@ -58,13 +58,26 @@ def claim_stage(queue_name,stage=None,include_ai=False,lease_seconds=None,owner=
     token=uuid.uuid4().hex
     owner=owner or _worker_owner()
     expires=add_to_date(at,seconds=max(cint(lease_seconds or frappe.conf.get("visa_crm_stage_lease_seconds") or DEFAULT_LEASE_SECONDS),30))
-    frappe.db.sql("""update `tabLead Intake Stage` set state='RUNNING',attempt_count=attempt_count+1,lease_owner=%s,lease_token=%s,lease_expires_at=%s,started_at=%s,completed_at=null,duration_ms=0,last_error_class=null,last_error=null,last_traceback=null,warning=0,skip_reason=null,modified=%s where name=%s and ((state='NOT_STARTED') or (state='FAILED' and (next_retry_at is null or next_retry_at<=%s)) or (state='RUNNING' and lease_expires_at is not null and lease_expires_at<=%s))""",(owner,token,expires,at,at,candidate.name,at,at))
+    frappe.db.sql("""update `tabLead Intake Stage` set state='RUNNING',attempt_count=attempt_count+1,lease_owner=%s,lease_token=%s,lease_expires_at=%s,heartbeat_at=%s,started_at=%s,completed_at=null,duration_ms=0,last_error_class=null,last_error=null,last_traceback=null,warning=0,skip_reason=null,modified=%s where name=%s and ((state='NOT_STARTED') or (state='FAILED' and (next_retry_at is null or next_retry_at<=%s)) or (state='RUNNING' and lease_expires_at is not null and lease_expires_at<=%s))""",(owner,token,expires,at,at,at,candidate.name,at,at))
     if frappe.db._cursor.rowcount!=1:
         frappe.db.rollback()
         return None
     _update_queue_running(queue_name,candidate.stage,at)
     frappe.db.commit()
     return frappe._dict({"name":candidate.name,"queue":queue_name,"stage":candidate.stage,"lease_token":token,"lease_owner":owner,"lease_expires_at":expires,"attempt_count":cint(candidate.attempt_count)+1})
+
+def renew_stage_lease(claim,lease_seconds=None,commit=True):
+    _validate_claim(claim)
+    at=now_datetime()
+    expires=add_to_date(at,seconds=max(cint(lease_seconds or frappe.conf.get("visa_crm_stage_lease_seconds") or DEFAULT_LEASE_SECONDS),30))
+    frappe.db.sql("""update `tabLead Intake Stage` set heartbeat_at=%s,lease_expires_at=%s,modified=%s where name=%s and state='RUNNING' and lease_token=%s""",(at,expires,at,claim.name,claim.lease_token))
+    if frappe.db._cursor.rowcount!=1:
+        frappe.db.rollback()
+        raise StageClaimError(f"Stage lease is no longer valid: {claim.name}")
+    if commit:
+        frappe.db.commit()
+    claim.lease_expires_at=expires
+    return expires
 
 def complete_stage(claim,result=None,result_doctype=None,result_name=None,input_hash=None,output_hash=None,warning=False):
     _validate_claim(claim)
@@ -74,7 +87,7 @@ def complete_stage(claim,result=None,result_doctype=None,result_name=None,input_
     frappe.db.sql("""update `tabLead Intake Stage` set state='COMPLETED',completed_at=%s,duration_ms=%s,next_retry_at=null,lease_owner=null,lease_token=null,lease_expires_at=null,input_hash=%s,output_hash=%s,result_doctype=%s,result_name=%s,result_json=%s,warning=%s,last_error_class=null,last_error=null,last_traceback=null,modified=%s where name=%s and state='RUNNING' and lease_token=%s""",(now,duration,input_hash,output_hash,result_doctype,result_name,safe_json_dumps(result) if result is not None else None,cint(warning),now,claim.name,claim.lease_token))
     if frappe.db._cursor.rowcount!=1:
         raise StageClaimError(f"Stage lease is no longer valid: {claim.name}")
-    rollup_queue(claim.queue)
+    rollup_queue(claim.queue,progress=True)
 
 def fail_stage(claim,exc,traceback=None,retry_at=None,warning=None):
     _validate_claim(claim)
@@ -87,7 +100,7 @@ def fail_stage(claim,exc,traceback=None,retry_at=None,warning=None):
     frappe.db.sql("""update `tabLead Intake Stage` set state='FAILED',duration_ms=%s,next_retry_at=%s,lease_owner=null,lease_token=null,lease_expires_at=null,last_error_class=%s,last_error=%s,last_traceback=%s,warning=%s,modified=%s where name=%s and state='RUNNING' and lease_token=%s""",(duration,retry_at,_exception_class(exc),str(exc)[:4000],traceback,cint(warning),now,claim.name,claim.lease_token))
     if frappe.db._cursor.rowcount!=1:
         raise StageClaimError(f"Stage lease is no longer valid: {claim.name}")
-    rollup_queue(claim.queue)
+    rollup_queue(claim.queue,progress=True)
 
 def skip_stage(queue_name,stage,reason):
     if not reason:
@@ -96,14 +109,16 @@ def skip_stage(queue_name,stage,reason):
     if definition["requirement_class"]!="Optional":
         raise ValueError(f"Required stage cannot be skipped: {stage}")
     frappe.db.set_value("Lead Intake Stage",stage_key(queue_name,stage),{"state":"SKIPPED","skip_reason":reason,"completed_at":now_datetime(),"next_retry_at":None,"lease_owner":None,"lease_token":None,"lease_expires_at":None},update_modified=False)
-    rollup_queue(queue_name)
+    rollup_queue(queue_name,progress=True)
 
 def run_stage(queue_name,handler,stage=None,include_ai=False,lease_seconds=None,failure_handler=None):
     claim=claim_stage(queue_name,stage=stage,include_ai=include_ai,lease_seconds=lease_seconds)
     if not claim:
         return None
     try:
+        renew_stage_lease(claim,lease_seconds=lease_seconds)
         result=handler(queue_name,claim)
+        renew_stage_lease(claim,lease_seconds=lease_seconds)
         payload=result if isinstance(result,dict) else {"result":result}
         complete_stage(claim,result=payload,result_doctype=payload.get("result_doctype"),result_name=payload.get("result_name"),input_hash=payload.get("input_hash"),output_hash=payload.get("output_hash"),warning=payload.get("warning",False))
         frappe.db.commit()
@@ -127,7 +142,7 @@ def recover_expired_leases(at=None):
         if frappe.db._cursor.rowcount:
             queues.add(row.queue)
     for queue_name in queues:
-        rollup_queue(queue_name)
+        rollup_queue(queue_name,progress=True)
     if rows:
         frappe.db.commit()
     return len(queues),len(rows)
@@ -139,11 +154,11 @@ def retry_stage(queue_name,stage,force=False):
     if row.state=="RUNNING" and not force and (not row.lease_expires_at or get_datetime(row.lease_expires_at)>now_datetime()):
         return False
     frappe.db.set_value("Lead Intake Stage",row.name,{"state":"FAILED","next_retry_at":now_datetime(),"lease_owner":None,"lease_token":None,"lease_expires_at":None},update_modified=False)
-    rollup_queue(queue_name)
+    rollup_queue(queue_name,progress=True)
     frappe.db.commit()
     return True
 
-def rollup_queue(queue_name):
+def rollup_queue(queue_name,progress=False):
     rows=stages_for(queue_name)
     if not rows:
         return None
@@ -169,7 +184,9 @@ def rollup_queue(queue_name):
     next_action=min((get_datetime(row.next_retry_at) for row in rows if row.state=="FAILED" and row.next_retry_at),default=None)
     warnings=sum(1 for row in rows if row.warning or row.state=="FAILED" and STAGE_BY_NAME[row.stage]["requirement_class"]=="Optional")
     summary={row.stage:{"state":row.state,"attempts":cint(row.attempt_count),"duration_ms":cint(row.duration_ms),"next_retry_at":str(row.next_retry_at) if row.next_retry_at else None,"error":row.last_error} for row in rows}
-    values={"orchestration_status":overall,"pipeline_version":PIPELINE_VERSION,"current_stage":current,"last_progress_at":now_datetime(),"next_action_at":next_action,"warning_count":warnings,"stage_summary_json":safe_json_dumps(summary)}
+    values={"orchestration_status":overall,"pipeline_version":PIPELINE_VERSION,"current_stage":current,"next_action_at":next_action,"warning_count":warnings,"stage_summary_json":safe_json_dumps(summary)}
+    if progress:
+        values["last_progress_at"]=now_datetime()
     legacy=_legacy_status(overall,states,failed_business)
     if legacy:
         values["status"]=legacy

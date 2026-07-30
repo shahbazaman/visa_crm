@@ -1,6 +1,10 @@
 import hashlib
 import json
+import os
+import socket
+import uuid
 import frappe
+from frappe.utils import add_to_date,get_datetime,now,now_datetime
 from visa_crm.api.meta_graph import GRAPH_VERSION,LEAD_FIELDS,fetch_lead
 from visa_crm.api.meta_mapping import MAPPING_VERSION,normalize_lead
 from visa_crm.api.meta_utils import get_meta_settings,has_field,load_json,safe_json_dumps,set_values
@@ -9,7 +13,6 @@ from visa_crm.api.followup import create_meta_followup
 from visa_crm.api.lead_assignment import assign_lead
 from visa_crm.api.visa_application import create_for_lead
 from visa_crm.api.workflow import create_deal_if_supported,mark_lead_stage,qualify_lead
-from frappe.utils import now
 
 class NoEligibleCounselor(RuntimeError):
     pass
@@ -106,7 +109,7 @@ def communication_event(queue_name,claim=None):
         event=existing
     else:
         doc=frappe.new_doc("Communication Event")
-        values={"event_id":event_id,"source":"Meta Form","event_type":"Lead","direction":"Inbound","customer":queue.customer,"lead":queue.lead,"visa_application":queue.visa,"phone":queue.data.get("phone"),"email":queue.data.get("email"),"content":safe_json_dumps(queue.data.get("custom_answers")),"summary":f"Meta Lead Ads intake for {queue.data.get('customer_name') or queue.data.get('phone') or queue.data.get('email')}","event_datetime":now(),"channel_id":queue_name}
+        values={"event_id":event_id,"source":"Meta Form","event_type":"Lead","direction":"Inbound","customer":queue.customer,"lead":queue.lead,"visa_application":queue.visa,"phone":queue.data.get("phone"),"email":queue.data.get("email"),"content":safe_json_dumps(queue.data.get("custom_answers")),"summary":f"Meta Lead Ads intake for {queue.data.get('customer_name') or queue.data.get('phone') or queue.data.get('email')}","event_datetime":now(),"channel_id":queue_name,"lead_intake_queue":queue_name}
         for field,value in values.items():
             if doc.meta.has_field(field):
                 doc.set(field,value)
@@ -125,11 +128,14 @@ def follow_up(queue_name,claim=None):
     queue=_business_context(queue_name)
     todo=create_meta_followup(queue.data,queue.lead,queue.customer,None,queue_name,_context(queue_name,queue.data))
     set_values("Lead Intake Queue",queue_name,{"followup_reference":todo})
+    event=queue.queue.get("communication_event")
+    if event and frappe.db.exists("Communication Event",event) and has_field("Communication Event","followup_reference") and not frappe.db.get_value("Communication Event",event,"followup_reference"):
+        frappe.db.set_value("Communication Event",event,"followup_reference",todo,update_modified=False)
     return {"followup":todo,"result_doctype":"ToDo","result_name":todo,"output_hash":_hash({"followup":todo})}
 
 def counselor_assignment(queue_name,claim=None):
     queue=_business_context(queue_name)
-    employee=assign_lead(queue.lead,queue.queue,context=_context(queue_name,queue.data))
+    employee=assign_lead(queue.lead,queue.queue,context=_context(queue_name,queue.data),communication_event=queue.queue.get("communication_event"))
     if not employee:
         raise NoEligibleCounselor("No eligible counselor is configured for Meta lead assignment")
     set_values("Lead Intake Queue",queue_name,{"assigned_employee":employee})
@@ -149,14 +155,53 @@ def ai_dispatch(queue_name,claim=None):
     event=queue.get("communication_event")
     if not event or not frappe.db.exists("Communication Event",event):
         raise ValueError("Communication Event is required before AI dispatch")
+    key=_ai_key(event)
+    if not frappe.db.exists("Lead Intake AI Job",key):
+        doc=frappe.new_doc("Lead Intake AI Job")
+        doc.update({"idempotency_key":key,"queue":queue_name,"communication_event":event,"pipeline_version":1,"state":"PENDING","attempt_count":0})
+        doc.insert(ignore_permissions=True,ignore_if_duplicate=True)
     set_values("Lead Intake Queue",queue_name,{"ai_status":"Pending","ai_error":"","ai_traceback":""})
-    frappe.enqueue("visa_crm.api.ai_intelligence.process_communication_ai",queue="long",event_name=event,queue_name=queue_name)
-    set_values("Lead Intake Queue",queue_name,{"ai_status":"Queued"})
-    return {"communication_event":event,"ai_status":"Queued","result_doctype":"Communication Event","result_name":event,"output_hash":_hash({"event":event,"pipeline":"ai"})}
+    return {"communication_event":event,"ai_job":key,"ai_status":"Pending","result_doctype":"Lead Intake AI Job","result_name":key,"output_hash":_hash({"event":event,"pipeline":"ai"})}
 
 def ai_dispatch_failure(queue_name,claim,exc,traceback):
     current=frappe.db.get_value("Lead Intake Queue",queue_name,"ai_retry_count") if has_field("Lead Intake Queue","ai_retry_count") else 0
     set_values("Lead Intake Queue",queue_name,{"ai_status":"Failed","ai_error":str(exc),"ai_traceback":traceback,"ai_retry_count":(current or 0)+1})
+
+def dispatch_ai_job(queue_name):
+    if not frappe.db.exists("Lead Intake AI Job",{"queue":queue_name}):
+        return None
+    job=frappe.db.get_value("Lead Intake AI Job",{"queue":queue_name},["name","communication_event","state","next_retry_at","lease_expires_at"],as_dict=True)
+    now_dt=now_datetime()
+    if not job or job.state in ("QUEUED","RUNNING","COMPLETED") or job.next_retry_at and get_datetime(job.next_retry_at)>now_dt or job.lease_expires_at and get_datetime(job.lease_expires_at)>now_dt:
+        return job
+    token=uuid.uuid4().hex
+    owner=f"{frappe.local.site or 'site'}:{socket.gethostname()}:{os.getpid()}"
+    expires=add_to_date(now_dt,minutes=5)
+    frappe.db.sql("""update `tabLead Intake AI Job` set lease_owner=%s,lease_token=%s,lease_expires_at=%s,heartbeat_at=%s,attempt_count=attempt_count+1,modified=%s where name=%s and state in ('PENDING','FAILED') and (next_retry_at is null or next_retry_at<=%s) and (lease_expires_at is null or lease_expires_at<=%s)""",(owner,token,expires,now_dt,now_dt,job.name,now_dt,now_dt))
+    if frappe.db._cursor.rowcount!=1:
+        frappe.db.rollback()
+        return job
+    frappe.db.commit()
+    try:
+        queued=frappe.enqueue("visa_crm.api.ai_intelligence.process_communication_ai",queue="long",job_name=job.name,enqueue_after_commit=False,event_name=job.communication_event,queue_name=queue_name,ai_job_name=job.name)
+        rq_id=getattr(queued,"id",None) or getattr(queued,"job_id",None)
+        frappe.db.sql("""update `tabLead Intake AI Job` set state='QUEUED',job_id=%s,queued_at=%s,next_retry_at=null,lease_owner=null,lease_token=null,lease_expires_at=null,last_error_class=null,last_error=null,last_traceback=null,modified=%s where name=%s and lease_token=%s and state in ('PENDING','FAILED')""",(rq_id,now_dt,now_dt,job.name,token))
+        set_values("Lead Intake Queue",queue_name,{"ai_status":"Queued","ai_error":"","ai_traceback":""})
+        frappe.db.commit()
+        return frappe.db.get_value("Lead Intake AI Job",job.name,["name","state","job_id"],as_dict=True)
+    except Exception as exc:
+        traceback=frappe.get_traceback()
+        frappe.db.rollback()
+        retry_at=add_to_date(now_datetime(),minutes=min(60,2**min((frappe.db.get_value("Lead Intake AI Job",job.name,"attempt_count") or 1),6)))
+        frappe.db.set_value("Lead Intake AI Job",job.name,{"state":"FAILED","next_retry_at":retry_at,"lease_owner":None,"lease_token":None,"lease_expires_at":None,"last_error_class":f"{type(exc).__module__}.{type(exc).__qualname__}","last_error":str(exc),"last_traceback":traceback},update_modified=False)
+        current=frappe.db.get_value("Lead Intake Queue",queue_name,"ai_retry_count") or 0
+        set_values("Lead Intake Queue",queue_name,{"ai_status":"Failed","ai_error":str(exc),"ai_traceback":traceback,"ai_retry_count":current+1})
+        frappe.db.commit()
+        frappe.logger("visa_crm.ai").error(safe_json_dumps({"event":"ai_dispatch_failed","queue":queue_name,"ai_job":job.name,"error":str(exc),"traceback":traceback}))
+        return frappe.db.get_value("Lead Intake AI Job",job.name,["name","state","next_retry_at","last_error"],as_dict=True)
+
+def _ai_key(event):
+    return f"ai:{event}:1"
 
 def _successful_graph_payload(queue):
     for field in ("graph_payload","graph_api_response"):

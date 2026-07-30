@@ -4,7 +4,7 @@
  "autoname":"field:idempotency_key",
  "doctype":"DocType",
  "engine":"InnoDB",
- "field_order":["idempotency_key","queue","communication_event","pipeline_version","state","attempt_count","next_retry_at","job_id","queued_at","started_at","heartbeat_at","completed_at","last_error_class","last_error","last_traceback","result_json"],
+ "field_order":["idempotency_key","queue","communication_event","pipeline_version","state","attempt_count","next_retry_at","lease_owner","lease_token","lease_expires_at","job_id","queued_at","started_at","heartbeat_at","completed_at","last_error_class","last_error","last_traceback","result_json"],
  "fields":[
   {"fieldname":"idempotency_key","fieldtype":"Data","label":"Idempotency Key","reqd":1,"unique":1},
   {"fieldname":"queue","fieldtype":"Link","label":"Lead Intake Queue","options":"Lead Intake Queue","reqd":1},
@@ -13,6 +13,9 @@
   {"default":"PENDING","fieldname":"state","fieldtype":"Select","label":"State","options":"PENDING\nQUEUED\nRUNNING\nCOMPLETED\nFAILED","reqd":1},
   {"default":"0","fieldname":"attempt_count","fieldtype":"Int","label":"Attempt Count"},
   {"fieldname":"next_retry_at","fieldtype":"Datetime","label":"Next Retry At"},
+  {"fieldname":"lease_owner","fieldtype":"Data","label":"Lease Owner"},
+  {"fieldname":"lease_token","fieldtype":"Data","label":"Lease Token"},
+  {"fieldname":"lease_expires_at","fieldtype":"Datetime","label":"Lease Expires At"},
   {"fieldname":"job_id","fieldtype":"Data","label":"RQ Job ID"},
   {"fieldname":"queued_at","fieldtype":"Datetime","label":"Queued At"},
   {"fieldname":"started_at","fieldtype":"Datetime","label":"Started At"},

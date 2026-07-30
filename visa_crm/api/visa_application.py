@@ -7,7 +7,8 @@ def create_for_lead(lead, customer=None, data=None, queue_name=None):
     data = data or {}
     key=f"visa:{queue_name}" if queue_name else None
     existing=frappe.db.exists("Visa Application",{"meta_intake_key":key}) if key and frappe.get_meta("Visa Application").has_field("meta_intake_key") else None
-    existing=existing or frappe.db.exists("Visa Application", {"lead": lead})
+    if not key:
+        existing=existing or frappe.db.exists("Visa Application",{"lead":lead})
     if existing and not customer and not data:
         return existing
     lead_doc = frappe.get_doc("CRM Lead", lead)

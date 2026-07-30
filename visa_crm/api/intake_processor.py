@@ -13,7 +13,11 @@ def process_pending(limit=100):
     _recover_stale_fetches()
     rows=_pending_rows(limit)
     for row in rows:
-        process_queue(row.name)
+        try:
+            process_queue(row.name)
+        except Exception as exc:
+            frappe.db.rollback()
+            frappe.logger("visa_crm.pipeline").error(safe_json_dumps({"event":"queue_orchestration_failed","queue":row.name,"exception_class":f"{type(exc).__module__}.{type(exc).__qualname__}","error":str(exc),"traceback":frappe.get_traceback()}))
     meta_debug_log("process_pending_end",status="scheduler",count=len(rows),limit=limit)
     return len(rows)
 
@@ -27,6 +31,9 @@ def process_queue(docname,stage_budget=20):
     executed=[]
     for _ in range(max(int(stage_budget or 20),1)):
         candidate=next_eligible_stage(docname,include_ai=True)
+        if candidate and candidate.stage=="AI_GEMINI":
+            services.dispatch_ai_job(docname)
+            break
         if not candidate or candidate.stage not in HANDLERS:
             break
         outcome=run_stage(docname,HANDLERS[candidate.stage],stage=candidate.stage,include_ai=True,failure_handler=FAILURE_HANDLERS.get(candidate.stage))

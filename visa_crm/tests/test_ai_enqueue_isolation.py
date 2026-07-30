@@ -21,7 +21,7 @@ class TestAIEnqueueIsolation(FrappeTestCase):
 
     def tearDown(self):
         queue=frappe.get_doc("Lead Intake Queue",self.queue)
-        for doctype,filters in (("ToDo",{"meta_intake_key":f"followup:{self.queue}"}),("Communication Event",{"event_id":f"meta:{self.source}"}),("Visa Application",{"meta_intake_key":f"visa:{self.queue}"}),("Customer Identity",{"customer":queue.get("matched_customer")}),("CRM Lead",{"name":queue.get("matched_lead")}),("Customer",{"name":queue.get("matched_customer")}),("Lead Intake Stage",{"queue":self.queue}),("Lead Intake Queue",{"name":self.queue})):
+        for doctype,filters in (("Lead Intake AI Job",{"queue":self.queue}),("ToDo",{"meta_intake_key":f"followup:{self.queue}"}),("Communication Event",{"event_id":f"meta:{self.source}"}),("Visa Application",{"meta_intake_key":f"visa:{self.queue}"}),("Customer Identity",{"customer":queue.get("matched_customer")}),("CRM Lead",{"name":queue.get("matched_lead")}),("Customer",{"name":queue.get("matched_customer")}),("Lead Intake Stage",{"queue":self.queue}),("Lead Intake Queue",{"name":self.queue})):
             if frappe.db.exists("DocType",doctype):
                 frappe.db.delete(doctype,filters)
         frappe.db.commit()
@@ -38,6 +38,7 @@ class TestAIEnqueueIsolation(FrappeTestCase):
         self.assertIn("Redis offline",queue.ai_error)
         for doctype,name in (("CRM Lead",queue.matched_lead),("Customer",queue.matched_customer),("Visa Application",queue.visa_application),("Communication Event",queue.communication_event),("ToDo",queue.followup_reference)):
             self.assertTrue(frappe.db.exists(doctype,name),f"{doctype} was rolled back")
-        self.assertEqual(frappe.db.get_value("Lead Intake Stage",stage_key(self.queue,"AI_DISPATCH"),"state"),"FAILED")
+        self.assertEqual(frappe.db.get_value("Lead Intake Stage",stage_key(self.queue,"AI_DISPATCH"),"state"),"COMPLETED")
+        self.assertEqual(frappe.db.get_value("Lead Intake AI Job",{"queue":self.queue},"state"),"FAILED")
         for stage in ("CRM_LEAD","VISA_APPLICATION","COMMUNICATION_EVENT","FOLLOW_UP","COUNSELOR_ASSIGNMENT"):
             self.assertEqual(frappe.db.get_value("Lead Intake Stage",stage_key(self.queue,stage),"state"),"COMPLETED")
