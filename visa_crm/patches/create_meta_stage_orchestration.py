@@ -1,7 +1,7 @@
 import hashlib
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_field
-from visa_crm.api.meta_utils import has_doctype,has_field,safe_json_dumps
+from visa_crm.api.meta_utils import has_doctype,has_field,load_json,safe_json_dumps
 from visa_crm.api.stage_definitions import PIPELINE_VERSION,STAGES
 
 QUEUE_FIELDS=(
@@ -130,7 +130,7 @@ def _backfill_attribution():
 def _backfill_stages():
     if not has_doctype("Lead Intake Queue") or not has_doctype("Lead Intake Stage"):
         return
-    fields=["name","modified"]+[field for field in ("status","source_lead_id","raw_payload","graph_payload","graph_api_response","custom_answers","customer_name","phone","email","matched_customer","matched_lead","visa_application","communication_event","followup_reference","assigned_employee","ai_status","ai_error") if has_field("Lead Intake Queue",field)]
+    fields=["name","modified"]+[field for field in ("status","source_lead_id","raw_payload","graph_payload","graph_api_response","custom_answers","normalized_payload","customer_name","phone","email","matched_customer","matched_lead","visa_application","communication_event","followup_reference","assigned_employee","ai_status","ai_error") if has_field("Lead Intake Queue",field)]
     for queue in frappe.get_all("Lead Intake Queue",fields=fields,limit_page_length=0):
         for definition in STAGES:
             _ensure_stage(queue,definition)
@@ -151,9 +151,10 @@ def _evidence(queue,stage):
     processed=queue.get("status") in ("Processed","Completed","Processed With Warnings")
     if stage=="WEBHOOK":
         return "COMPLETED","Lead Intake Queue",queue.name,0,None
-    if stage=="GRAPH_DOWNLOAD" and (queue.get("graph_payload") or queue.get("graph_api_response")):
+    graph=load_json(queue.get("graph_payload"),{}) or load_json(queue.get("graph_api_response"),{})
+    if stage=="GRAPH_DOWNLOAD" and graph and not graph.get("error") and (graph.get("id") or graph.get("field_data")):
         return "COMPLETED",None,None,0,None
-    if stage=="NORMALIZE" and (queue.get("custom_answers") or queue.get("customer_name") or queue.get("phone") or queue.get("email")):
+    if stage=="NORMALIZE" and load_json(queue.get("normalized_payload"),{}):
         return "COMPLETED",None,None,0,None
     links={"CUSTOMER360":("Customer","matched_customer"),"CRM_LEAD":("CRM Lead","matched_lead"),"VISA_APPLICATION":("Visa Application","visa_application"),"COMMUNICATION_EVENT":("Communication Event","communication_event"),"FOLLOW_UP":("ToDo","followup_reference")}
     if stage in links:

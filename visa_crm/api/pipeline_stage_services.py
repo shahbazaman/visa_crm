@@ -7,7 +7,7 @@ import frappe
 from frappe.utils import add_to_date,get_datetime,now,now_datetime
 from visa_crm.api.meta_graph import GRAPH_VERSION,LEAD_FIELDS,fetch_lead
 from visa_crm.api.meta_mapping import MAPPING_VERSION,normalize_lead
-from visa_crm.api.meta_utils import get_meta_settings,has_field,load_json,safe_json_dumps,set_values
+from visa_crm.api.meta_utils import get_meta_settings,has_field,load_json,log_info,safe_json_dumps,set_values
 from visa_crm.api.customer360 import resolve_customer,resolve_lead
 from visa_crm.api.followup import create_meta_followup
 from visa_crm.api.lead_assignment import assign_lead
@@ -45,28 +45,76 @@ def graph_failure(queue_name,claim,exc,traceback):
 def normalize(queue_name,claim=None):
     queue=frappe.get_doc("Lead Intake Queue",queue_name)
     graph_payload=_successful_graph_payload(queue)
-    if not graph_payload:
-        raise ValueError("Graph payload is missing; NORMALIZE cannot run")
-    graph_hash=getattr(queue,"graph_payload_hash",None) or _hash(graph_payload)
     existing=load_json(getattr(queue,"normalized_payload",None),{})
     if existing and getattr(queue,"normalized_payload_hash",None) and getattr(queue,"normalization_version",None)==MAPPING_VERSION:
-        return {"normalized":existing,"input_hash":graph_hash,"output_hash":queue.normalized_payload_hash,"reused":True}
+        return {"normalized":existing,"input_hash":getattr(queue,"graph_payload_hash",None) or _hash(existing),"output_hash":queue.normalized_payload_hash,"reused":True}
+    if not graph_payload:
+        return _rebuild_normalized(queue_name,queue=queue,reason="normalize_stage_recovery")
+    graph_hash=getattr(queue,"graph_payload_hash",None) or _hash(graph_payload)
     context={"queue_name":queue.name,"source_lead_id":queue.source_lead_id,"status":queue.status}
     data=normalize_lead(graph_payload,get_meta_settings(),context)
-    data["page_id"]=data.get("page_id") or getattr(queue,"page_id",None)
-    data["form_id"]=data.get("form_id") or getattr(queue,"form_id",None)
+    return _persist_normalized(queue,data,graph_hash,reason="graph_normalization")
+
+def load_normalized(queue_name):
+    data=load_json(frappe.db.get_value("Lead Intake Queue",queue_name,"normalized_payload"),{})
+    return data or _rebuild_normalized(queue_name,reason="consumer_recovery")["normalized"]
+
+def _rebuild_normalized(queue_name,queue=None,reason="recovery"):
+    queue=queue or frappe.get_doc("Lead Intake Queue",queue_name)
+    graph_payload=_successful_graph_payload(queue)
+    if graph_payload:
+        graph_hash=getattr(queue,"graph_payload_hash",None) or _hash(graph_payload)
+        data=normalize_lead(graph_payload,get_meta_settings(),{"queue_name":queue.name,"source_lead_id":queue.source_lead_id,"status":queue.status})
+    else:
+        graph_payload=_graph_payload_from_queue(queue)
+        if not graph_payload:
+            raise ValueError(f"Normalized payload is missing for queue {queue_name} and durable reconstruction evidence is unavailable")
+        graph_hash=getattr(queue,"graph_payload_hash",None) or _hash(graph_payload)
+        data=normalize_lead(graph_payload,get_meta_settings(),{"queue_name":queue.name,"source_lead_id":queue.source_lead_id,"status":queue.status})
+    _merge_queue_evidence(data,queue)
+    result=_persist_normalized(queue,data,graph_hash,reason=reason)
+    log_info("normalized_payload_rebuilt",queue_name=queue.name,source_lead_id=queue.source_lead_id,reason=reason,graph_snapshot=bool(_successful_graph_payload(queue)),output_hash=result["output_hash"])
+    return result
+
+def _persist_normalized(queue,data,graph_hash,reason):
+    _merge_queue_evidence(data,queue)
     digest=_hash(data)
     values={field:data.get(field) for field in ("source_lead_id","customer_name","phone","email","country_interested","visa_type","campaign_name","campaign_id","adset_name","adset_id","ad_name","ad_id","page_id","form_id")}
     values.update({"status":"Lead Downloaded","custom_answers":safe_json_dumps(data.get("custom_answers") or {}),"normalized_payload":safe_json_dumps(data),"normalized_payload_hash":digest,"normalization_version":MAPPING_VERSION,"graph_payload_hash":graph_hash})
     set_values("Lead Intake Queue",queue.name,values)
     _sync_webhook_event(queue,{"queue_status":"Lead Downloaded"})
-    return {"normalized":data,"input_hash":graph_hash,"output_hash":digest,"reused":False}
+    return {"normalized":data,"input_hash":graph_hash,"output_hash":digest,"reused":False,"recovered":reason!="graph_normalization"}
 
-def load_normalized(queue_name):
-    data=load_json(frappe.db.get_value("Lead Intake Queue",queue_name,"normalized_payload"),{})
-    if not data:
-        raise ValueError(f"Normalized payload is missing for queue {queue_name}")
-    return data
+def _merge_queue_evidence(data,queue):
+    answers=load_json(getattr(queue,"custom_answers",None),{})
+    if isinstance(answers,dict):
+        data["custom_answers"]={**answers,**(data.get("custom_answers") or {})}
+        data["meta_fields"]={**answers,**(data.get("meta_fields") or {})}
+    for field in ("source_lead_id","customer_name","phone","email","country_interested","visa_type","campaign_name","campaign_id","adset_name","adset_id","ad_name","ad_id","page_id","form_id"):
+        if not data.get(field) and getattr(queue,field,None):
+            data[field]=getattr(queue,field)
+
+def _graph_payload_from_queue(queue):
+    answers=load_json(getattr(queue,"custom_answers",None),{})
+    fields=[]
+    if isinstance(answers,dict):
+        for name,value in answers.items():
+            if value is None or value=="":
+                continue
+            fields.append({"name":name,"values":value if isinstance(value,list) else [value]})
+    if not fields:
+        for name in ("customer_name","phone","email","country_interested","visa_type"):
+            value=getattr(queue,name,None)
+            if value:
+                fields.append({"name":name,"values":[value]})
+    if not fields:
+        return None
+    payload={"id":queue.source_lead_id,"field_data":fields}
+    for field in ("form_id","page_id","campaign_id","campaign_name","adset_id","adset_name","ad_id","ad_name"):
+        value=getattr(queue,field,None)
+        if value:
+            payload[field]=value
+    return payload
 
 def customer360(queue_name,claim=None):
     data=load_normalized(queue_name)

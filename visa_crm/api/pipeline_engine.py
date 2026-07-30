@@ -3,7 +3,7 @@ import socket
 import uuid
 import frappe
 from frappe.utils import add_to_date,cint,get_datetime,now_datetime,time_diff_in_seconds
-from visa_crm.api.meta_utils import safe_json_dumps
+from visa_crm.api.meta_utils import load_json,safe_json_dumps
 from visa_crm.api.stage_definitions import AI_STAGES,BUSINESS_STAGES,PIPELINE_VERSION,STAGES,STAGE_BY_NAME
 
 DEFAULT_LEASE_SECONDS=300
@@ -21,7 +21,26 @@ def ensure_stage_ledger(queue_name):
         doc.update({"stage_key":stage_key(queue_name,definition["stage"]),"queue":queue_name,"stage":definition["stage"],"sequence":definition["sequence"],"parent_stage":definition.get("parent_stage"),"requirement_class":definition["requirement_class"],"state":"NOT_STARTED","attempt_count":0,"max_attempts":definition["max_attempts"]})
         doc.insert(ignore_permissions=True,ignore_if_duplicate=True)
     _ensure_webhook_complete(queue_name)
+    repair_normalization_checkpoint(queue_name)
     rollup_queue(queue_name)
+
+def repair_normalization_checkpoint(queue_name):
+    if load_json(frappe.db.get_value("Lead Intake Queue",queue_name,"normalized_payload"),{}):
+        return False
+    row=_stage_row(queue_name,"NORMALIZE")
+    if not row or row.state!="COMPLETED":
+        return False
+    queue=frappe.db.get_value("Lead Intake Queue",queue_name,["graph_payload","graph_api_response","custom_answers","customer_name","phone","email"],as_dict=True) or {}
+    graph=load_json(queue.get("graph_payload"),{}) or load_json(queue.get("graph_api_response"),{})
+    if not (queue.get("custom_answers") or queue.get("customer_name") or queue.get("phone") or queue.get("email") or graph and not graph.get("error") and (graph.get("id") or graph.get("field_data"))):
+        return False
+    now=now_datetime()
+    frappe.db.set_value("Lead Intake Stage",row.name,{"state":"NOT_STARTED","completed_at":None,"duration_ms":0,"next_retry_at":None,"lease_owner":None,"lease_token":None,"lease_expires_at":None,"heartbeat_at":None,"result_doctype":None,"result_name":None,"result_json":None,"last_error_class":None,"last_error":None,"last_traceback":None,"warning":0,"skip_reason":None},update_modified=False)
+    customer=_stage_row(queue_name,"CUSTOMER360")
+    if customer and customer.state=="FAILED" and "Normalized payload is missing" in str(frappe.db.get_value("Lead Intake Stage",customer.name,"last_error") or ""):
+        frappe.db.set_value("Lead Intake Stage",customer.name,{"next_retry_at":now,"max_attempts":max(cint(customer.max_attempts),cint(customer.attempt_count)+1)},update_modified=False)
+    _logger().info(safe_json_dumps({"event":"normalization_checkpoint_repaired","queue":queue_name,"reason":"completed_normalize_stage_without_durable_normalized_payload"}))
+    return True
 
 def stage_key(queue_name,stage):
     return f"{queue_name}:{stage}"
