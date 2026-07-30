@@ -18,13 +18,10 @@ class TestMetaPipelineIntegration(FrappeTestCase):
         queue.raw_payload=frappe.as_json({"value":{"leadgen_id":leadgen_id,"page_id":"PAGE-PRODUCTION","form_id":"FORM-WEBHOOK"},"change":{"field":"leadgen"}})
         queue.insert(ignore_permissions=True)
         graph={"id":leadgen_id,"created_time":"2026-07-29T10:00:00+0000","field_data":[{"name":"full_name","values":[f"Production Lead {suffix}"]},{"name":"phone","values":[phone]},{"name":"email","values":[email]},{"name":"visa_type","values":["Tourist"]},{"name":"destination","values":["UAE"]},{"name":"budget","values":["5000"]}],"form_id":"FORM-GRAPH","campaign_name":"Production Campaign","campaign_id":"CAM-100","adset_name":"Production Adset","adset_id":"SET-100","ad_name":"Production Ad","ad_id":"AD-100"}
-        commits=[]
-        def commit():
-            commits.append(1)
-            frappe.db.after_commit.run()
-        with patch.object(intake_processor,"get_meta_settings",return_value=frappe._dict()),patch.object(intake_processor,"fetch_lead",return_value=graph),patch.object(frappe.db,"commit",side_effect=commit),patch("visa_crm.api.communication_center.frappe.enqueue") as enqueue:
-            intake_processor.process_queue(queue.name)
+        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings",return_value=frappe._dict()),patch("visa_crm.api.pipeline_stage_services.fetch_lead",return_value=graph),patch("visa_crm.api.pipeline_stage_services.frappe.enqueue") as enqueue:
+            result=intake_processor.process_queue(queue.name)
             queue.reload()
+        self.assertTrue(result["ok"])
         self.assertEqual(queue.status,"Processed")
         self.assertTrue(queue.matched_lead)
         self.assertTrue(queue.matched_customer)
@@ -57,4 +54,6 @@ class TestMetaPipelineIntegration(FrappeTestCase):
         intake_processor.process_queue(queue.name)
         self.assertEqual(frappe.db.count("CRM Lead",{"facebook_lead_id":leadgen_id}),1)
         enqueue.assert_called_once()
-        self.assertGreaterEqual(len(commits),3)
+        states=dict(frappe.get_all("Lead Intake Stage",filters={"queue":queue.name},fields=["stage","state"],as_list=True))
+        for stage in ("GRAPH_DOWNLOAD","NORMALIZE","CUSTOMER360","CRM_LEAD","LEAD_WORKFLOW","VISA_APPLICATION","COMMUNICATION_EVENT","FOLLOW_UP","COUNSELOR_ASSIGNMENT","AI_DISPATCH"):
+            self.assertEqual(states[stage],"COMPLETED")

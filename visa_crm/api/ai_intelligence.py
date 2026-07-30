@@ -5,9 +5,11 @@ from visa_crm.api.meta_utils import has_doctype, has_field, safe_json_dumps
 
 AI_FIELDS=("summary","sentiment","lead_score","ai_next_best_action","ai_followup_suggestion","ai_lost_lead_analysis","ai_employee_coaching","ai_manager_summary","ai_reminder_suggestion","ai_customer_priority","ai_visa_recommendation","ai_quality_analysis","ai_timeline_summary")
 
-def process_communication_ai(event_name):
+def process_communication_ai(event_name,queue_name=None):
     if not frappe.db.exists("Communication Event",event_name):
         return
+    if queue_name:
+        return _process_staged_ai(event_name,queue_name)
     doc=frappe.get_doc("Communication Event",event_name)
     try:
         insights=analyze_event(doc)
@@ -17,6 +19,38 @@ def process_communication_ai(event_name):
         frappe.db.commit()
     except Exception:
         frappe.log_error(title="AI Intelligence Processing Failed",message=safe_json_dumps({"event":event_name,"traceback":frappe.get_traceback()}))
+
+def _process_staged_ai(event_name,queue_name):
+    from visa_crm.api.pipeline_engine import claim_stage,complete_stage,fail_stage,skip_stage
+    claim=claim_stage(queue_name,"AI_GEMINI",include_ai=True)
+    if not claim:
+        return
+    active_claim=claim
+    try:
+        frappe.db.set_value("Lead Intake Queue",queue_name,{"ai_status":"Running","ai_error":"","ai_traceback":""},update_modified=False)
+        doc=frappe.get_doc("Communication Event",event_name)
+        insights=analyze_event(doc)
+        _update_event(doc,insights)
+        _auto_task(doc,insights)
+        _timeline(doc,insights)
+        complete_stage(claim,result={"communication_event":event_name,"insights":list(insights)})
+        skip_stage(queue_name,"AI_TRANSLATION","No separate translation was required for the normalized AI response")
+        summary_claim=claim_stage(queue_name,"AI_SUMMARY",include_ai=True)
+        if summary_claim:
+            active_claim=summary_claim
+            complete_stage(summary_claim,result={"communication_event":event_name,"summary":insights.get("summary")},result_doctype="Communication Event",result_name=event_name)
+            active_claim=None
+        skip_stage(queue_name,"AI_EMBEDDING","No embedding provider is configured for this pipeline version")
+        frappe.db.set_value("Lead Intake Queue",queue_name,{"ai_status":"Completed","ai_error":"","ai_traceback":""},update_modified=False)
+        frappe.db.commit()
+    except Exception as exc:
+        traceback=frappe.get_traceback()
+        frappe.db.rollback()
+        if active_claim:
+            fail_stage(active_claim,exc,traceback=traceback)
+        frappe.db.set_value("Lead Intake Queue",queue_name,{"ai_status":"Failed","ai_error":str(exc),"ai_traceback":traceback},update_modified=False)
+        frappe.db.commit()
+        frappe.logger("visa_crm.ai").error(safe_json_dumps({"event":"staged_ai_failed","queue":queue_name,"communication_event":event_name,"exception_class":f"{type(exc).__module__}.{type(exc).__qualname__}","error":str(exc),"traceback":traceback}))
 
 def analyze_event(doc):
     text="\n".join([str(getattr(doc,k,"") or "") for k in ("content","summary","source","direction")])

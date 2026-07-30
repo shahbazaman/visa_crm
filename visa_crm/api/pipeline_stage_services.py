@@ -144,6 +144,20 @@ def assignment_failure(queue_name,claim,exc,traceback):
     if lead and frappe.db.exists("CRM Lead",lead):
         _set_assignment_status(lead,"Needs Assignment")
 
+def ai_dispatch(queue_name,claim=None):
+    queue=frappe.get_doc("Lead Intake Queue",queue_name)
+    event=queue.get("communication_event")
+    if not event or not frappe.db.exists("Communication Event",event):
+        raise ValueError("Communication Event is required before AI dispatch")
+    set_values("Lead Intake Queue",queue_name,{"ai_status":"Pending","ai_error":"","ai_traceback":""})
+    frappe.enqueue("visa_crm.api.ai_intelligence.process_communication_ai",queue="long",event_name=event,queue_name=queue_name)
+    set_values("Lead Intake Queue",queue_name,{"ai_status":"Queued"})
+    return {"communication_event":event,"ai_status":"Queued","result_doctype":"Communication Event","result_name":event,"output_hash":_hash({"event":event,"pipeline":"ai"})}
+
+def ai_dispatch_failure(queue_name,claim,exc,traceback):
+    current=frappe.db.get_value("Lead Intake Queue",queue_name,"ai_retry_count") if has_field("Lead Intake Queue","ai_retry_count") else 0
+    set_values("Lead Intake Queue",queue_name,{"ai_status":"Failed","ai_error":str(exc),"ai_traceback":traceback,"ai_retry_count":(current or 0)+1})
+
 def _successful_graph_payload(queue):
     for field in ("graph_payload","graph_api_response"):
         data=load_json(getattr(queue,field,None),{})

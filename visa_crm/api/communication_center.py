@@ -10,6 +10,9 @@ STAFF_ROLES={"System Manager","Sales Manager","Counselor","Visa Processing","Adm
 def after_communication_insert(doc,method=None):
     attach_context(doc)
     queue_name=_queue_name(doc)
+    if queue_name:
+        _persist_ai_state(queue_name,"Pending")
+        return
     try:
         enqueue_ai(doc.name,queue_name)
     except Exception as exc:
