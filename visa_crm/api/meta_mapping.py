@@ -3,6 +3,7 @@ import re
 import frappe
 from visa_crm.api.meta_utils import load_json, meta_debug_log, normalize_phone, safe_json_dumps
 
+MAPPING_VERSION="1"
 DEFAULT_FIELD_MAP = {
     "customer_name": ["full_name", "name", "first_name", "last_name"],
     "phone": ["phone_number", "phone", "mobile", "mobile_number"],

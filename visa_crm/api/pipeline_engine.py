@@ -98,7 +98,7 @@ def skip_stage(queue_name,stage,reason):
     frappe.db.set_value("Lead Intake Stage",stage_key(queue_name,stage),{"state":"SKIPPED","skip_reason":reason,"completed_at":now_datetime(),"next_retry_at":None,"lease_owner":None,"lease_token":None,"lease_expires_at":None},update_modified=False)
     rollup_queue(queue_name)
 
-def run_stage(queue_name,handler,stage=None,include_ai=False,lease_seconds=None):
+def run_stage(queue_name,handler,stage=None,include_ai=False,lease_seconds=None,failure_handler=None):
     claim=claim_stage(queue_name,stage=stage,include_ai=include_ai,lease_seconds=lease_seconds)
     if not claim:
         return None
@@ -111,6 +111,8 @@ def run_stage(queue_name,handler,stage=None,include_ai=False,lease_seconds=None)
     except Exception as exc:
         traceback=frappe.get_traceback()
         frappe.db.rollback()
+        if failure_handler:
+            failure_handler(queue_name,claim,exc,traceback)
         fail_stage(claim,exc,traceback=traceback)
         frappe.db.commit()
         _logger().error(safe_json_dumps({"event":"stage_failed","queue":queue_name,"stage":claim.stage,"attempt":claim.attempt_count,"exception_class":_exception_class(exc),"error":str(exc),"traceback":traceback}))
