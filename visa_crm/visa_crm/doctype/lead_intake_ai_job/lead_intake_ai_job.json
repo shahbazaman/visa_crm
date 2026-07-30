@@ -1,0 +1,37 @@
+{
+ "actions":[],
+ "allow_rename":0,
+ "autoname":"field:idempotency_key",
+ "doctype":"DocType",
+ "engine":"InnoDB",
+ "field_order":["idempotency_key","queue","communication_event","pipeline_version","state","attempt_count","next_retry_at","job_id","queued_at","started_at","heartbeat_at","completed_at","last_error_class","last_error","last_traceback","result_json"],
+ "fields":[
+  {"fieldname":"idempotency_key","fieldtype":"Data","label":"Idempotency Key","reqd":1,"unique":1},
+  {"fieldname":"queue","fieldtype":"Link","label":"Lead Intake Queue","options":"Lead Intake Queue","reqd":1},
+  {"fieldname":"communication_event","fieldtype":"Link","label":"Communication Event","options":"Communication Event","reqd":1},
+  {"default":"1","fieldname":"pipeline_version","fieldtype":"Int","label":"Pipeline Version","reqd":1},
+  {"default":"PENDING","fieldname":"state","fieldtype":"Select","label":"State","options":"PENDING\nQUEUED\nRUNNING\nCOMPLETED\nFAILED","reqd":1},
+  {"default":"0","fieldname":"attempt_count","fieldtype":"Int","label":"Attempt Count"},
+  {"fieldname":"next_retry_at","fieldtype":"Datetime","label":"Next Retry At"},
+  {"fieldname":"job_id","fieldtype":"Data","label":"RQ Job ID"},
+  {"fieldname":"queued_at","fieldtype":"Datetime","label":"Queued At"},
+  {"fieldname":"started_at","fieldtype":"Datetime","label":"Started At"},
+  {"fieldname":"heartbeat_at","fieldtype":"Datetime","label":"Heartbeat At"},
+  {"fieldname":"completed_at","fieldtype":"Datetime","label":"Completed At"},
+  {"fieldname":"last_error_class","fieldtype":"Data","label":"Last Error Class"},
+  {"fieldname":"last_error","fieldtype":"Long Text","label":"Last Error"},
+  {"fieldname":"last_traceback","fieldtype":"Code","label":"Last Traceback","options":"Python"},
+  {"fieldname":"result_json","fieldtype":"Long Text","label":"Result JSON"}
+ ],
+ "index_web_pages_for_search":0,
+ "module":"Visa CRM",
+ "name":"Lead Intake AI Job",
+ "permissions":[
+  {"create":1,"delete":1,"email":1,"export":1,"print":1,"read":1,"report":1,"role":"System Manager","share":1,"write":1},
+  {"export":1,"print":1,"read":1,"report":1,"role":"Sales Manager"}
+ ],
+ "search_fields":"queue,communication_event,state",
+ "sort_field":"modified",
+ "sort_order":"DESC",
+ "track_changes":1
+}

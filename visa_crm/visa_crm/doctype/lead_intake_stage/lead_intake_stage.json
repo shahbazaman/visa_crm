@@ -4,7 +4,7 @@
  "autoname":"field:stage_key",
  "doctype":"DocType",
  "engine":"InnoDB",
- "field_order":["stage_key","queue","stage","sequence","parent_stage","requirement_class","state","attempt_count","max_attempts","next_retry_at","lease_owner","lease_token","lease_expires_at","started_at","completed_at","duration_ms","last_error_class","last_error","last_traceback","input_hash","output_hash","result_doctype","result_name","result_json","warning","skip_reason"],
+ "field_order":["stage_key","queue","stage","sequence","parent_stage","requirement_class","state","attempt_count","max_attempts","next_retry_at","lease_owner","lease_token","lease_expires_at","heartbeat_at","started_at","completed_at","duration_ms","last_error_class","last_error","last_traceback","input_hash","output_hash","result_doctype","result_name","result_json","warning","skip_reason"],
  "fields":[
   {"fieldname":"stage_key","fieldtype":"Data","label":"Stage Key","reqd":1,"unique":1},
   {"fieldname":"queue","fieldtype":"Link","label":"Lead Intake Queue","options":"Lead Intake Queue","reqd":1},
@@ -19,6 +19,7 @@
   {"fieldname":"lease_owner","fieldtype":"Data","label":"Lease Owner"},
   {"fieldname":"lease_token","fieldtype":"Data","label":"Lease Token"},
   {"fieldname":"lease_expires_at","fieldtype":"Datetime","label":"Lease Expires At"},
+  {"fieldname":"heartbeat_at","fieldtype":"Datetime","label":"Heartbeat At"},
   {"fieldname":"started_at","fieldtype":"Datetime","label":"Started At"},
   {"fieldname":"completed_at","fieldtype":"Datetime","label":"Completed At"},
   {"fieldname":"duration_ms","fieldtype":"Int","label":"Duration (ms)"},
