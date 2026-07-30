@@ -2,11 +2,31 @@ import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 CRM_SYNC_METHOD = "crm.lead_syncing.background_sync.sync_leads_from_all_enabled_sources"
+CRM_SYNC_METHODS = (
+    CRM_SYNC_METHOD,
+    "crm.lead_syncing.background_sync.sync_leads_from_sources_5_minutes",
+    "crm.lead_syncing.background_sync.sync_leads_from_sources_10_minutes",
+    "crm.lead_syncing.background_sync.sync_leads_from_sources_15_minutes",
+    "crm.lead_syncing.background_sync.sync_leads_from_sources_hourly",
+    "crm.lead_syncing.background_sync.sync_leads_from_sources_daily",
+    "crm.lead_syncing.background_sync.sync_leads_from_sources_monthly"
+)
 
 def execute():
     _queue_fields()
+    enforce_builtin_crm_meta_sync_disabled()
+
+def enforce_builtin_crm_meta_sync_disabled():
     result = disable_builtin_meta_sync()
-    frappe.logger("visa_crm.meta").info(f"CRM Meta sync audit: {result}")
+    frappe.logger("visa_crm.meta").info({"event": "crm_builtin_meta_sync_disabled", "result": result})
+    return result
+
+def prevent_builtin_meta_sync_enable(doc, method=None):
+    if not _custom_pipeline_active() or not _is_meta_source(doc):
+        return
+    if getattr(doc, "enabled", 0):
+        frappe.logger("visa_crm.meta").info({"event": "crm_builtin_meta_source_enable_blocked", "source": doc.name or "new", "type": getattr(doc, "type", None)})
+    doc.enabled = 0
 
 def disable_builtin_meta_sync():
     custom_active = _custom_pipeline_active()
@@ -86,7 +106,7 @@ def _disable_scheduled_job():
     if not method_field:
         return []
     fields = ["name", method_field] + [field for field in ("stopped", "disabled") if meta.has_field(field)]
-    rows = frappe.get_all("Scheduled Job Type", filters={method_field: CRM_SYNC_METHOD}, fields=fields)
+    rows = frappe.get_all("Scheduled Job Type", filters={method_field: ["in", CRM_SYNC_METHODS]}, fields=fields)
     changed = []
     for row in rows:
         values = {}

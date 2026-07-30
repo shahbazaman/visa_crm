@@ -6,6 +6,8 @@ app_email = "shahbazaman2003@gmail.com"
 app_license = "mit"
 after_install = "visa_crm.install.after_install"
 app_include_css = ["/assets/visa_crm/css/visa_crm.css","/assets/visa_crm/css/visa_portal.css"]
+after_migrate = "visa_crm.patches.disable_builtin_crm_meta_sync.enforce_builtin_crm_meta_sync_disabled"
+override_doctype_class = {"Lead Sync Source": "visa_crm.overrides.lead_sync_source.VisaCRMLeadSyncSource"}
 doc_events = {
     "File": {"after_insert": ["visa_crm.api.gemini_service.auto_create_call_intelligence"]},
     "Communication Event": {
@@ -25,7 +27,8 @@ doc_events = {
         "before_save": ["visa_crm.api.crm_lifecycle.validate_lead_transition", "visa_crm.api.lead_creator.log_crm_lead_hook"],
         "after_insert": ["visa_crm.api.lead_creator.log_crm_lead_hook"],
         "after_save": ["visa_crm.api.crm_lifecycle.on_lead_update"]
-    }
+    },
+    "Lead Sync Source": {"before_validate": ["visa_crm.patches.disable_builtin_crm_meta_sync.prevent_builtin_meta_sync_enable"]}
 }
 doctype_js = {
     "Call Intelligence": "public/js/call_intelligence.js",

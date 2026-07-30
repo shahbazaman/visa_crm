@@ -5,6 +5,15 @@ from visa_crm.api.meta_graph import MetaGraphError, fetch_lead
 from visa_crm.api.meta_utils import get_meta_settings, has_doctype, has_field, load_json, safe_json_dumps
 
 CRM_SYNC_METHOD = "crm.lead_syncing.background_sync.sync_leads_from_all_enabled_sources"
+CRM_SYNC_METHODS = (
+    CRM_SYNC_METHOD,
+    "crm.lead_syncing.background_sync.sync_leads_from_sources_5_minutes",
+    "crm.lead_syncing.background_sync.sync_leads_from_sources_10_minutes",
+    "crm.lead_syncing.background_sync.sync_leads_from_sources_15_minutes",
+    "crm.lead_syncing.background_sync.sync_leads_from_sources_hourly",
+    "crm.lead_syncing.background_sync.sync_leads_from_sources_daily",
+    "crm.lead_syncing.background_sync.sync_leads_from_sources_monthly"
+)
 
 @frappe.whitelist()
 def generate_report(queue_name=None, leadgen_id=None, write_file=1):
@@ -185,14 +194,14 @@ def audit(queue_name=None, leadgen_id=None):
     return report
 
 def _crm_scheduler():
-    out = {"method": CRM_SYNC_METHOD, "found": False, "rows": []}
+    out = {"method": CRM_SYNC_METHOD, "methods": CRM_SYNC_METHODS, "found": False, "rows": []}
     if not has_doctype("Scheduled Job Type"):
         return out
     meta = frappe.get_meta("Scheduled Job Type")
     if not meta.has_field("method"):
         return out
     fields = ["name", "method"] + [field for field in ("stopped", "disabled", "frequency", "cron_format") if meta.has_field(field)]
-    rows = frappe.get_all("Scheduled Job Type", filters={"method": CRM_SYNC_METHOD}, fields=fields)
+    rows = frappe.get_all("Scheduled Job Type", filters={"method": ["in", CRM_SYNC_METHODS]}, fields=fields)
     out.update({"found": bool(rows), "rows": rows, "active": any(not row.get("stopped") and not row.get("disabled") for row in rows)})
     return out
 
