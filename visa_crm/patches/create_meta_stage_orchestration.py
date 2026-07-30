@@ -178,23 +178,5 @@ def _evidence(queue,stage):
     return "NOT_STARTED",None,None,0,None
 
 def _backfill_queue_summary(queue):
-    stages=frappe.get_all("Lead Intake Stage",filters={"queue":queue.name},fields=["stage","state","sequence","warning","next_retry_at"],order_by="sequence asc")
-    completed={row.stage for row in stages if row.state=="COMPLETED"}
-    failed=[row for row in stages if row.state=="FAILED"]
-    lead_complete="CRM_LEAD" in completed
-    if queue.get("status")=="Ignored Test Event":
-        overall="IGNORED"
-    elif lead_complete and failed:
-        overall="COMPLETED_WITH_WARNINGS"
-    elif lead_complete and all(row.state in ("COMPLETED","SKIPPED") for row in stages if row.stage not in ("AI_GEMINI","AI_TRANSLATION","AI_SUMMARY","AI_EMBEDDING")):
-        overall="COMPLETED"
-    elif lead_complete:
-        overall="PARTIALLY_COMPLETED"
-    elif failed:
-        overall="FAILED"
-    else:
-        overall="PENDING"
-    current=next((row.stage for row in stages if row.state in ("RUNNING","FAILED","NOT_STARTED")),None)
-    summary={row.stage:row.state for row in stages}
-    values={"orchestration_status":overall,"pipeline_version":PIPELINE_VERSION,"current_stage":current,"warning_count":sum(1 for row in stages if row.warning or row.state=="FAILED" and row.stage in ("COUNSELOR_ASSIGNMENT","AI_DISPATCH","AI_GEMINI","AI_TRANSLATION","AI_SUMMARY","AI_EMBEDDING")),"stage_summary_json":safe_json_dumps(summary)}
-    frappe.db.set_value("Lead Intake Queue",queue.name,values,update_modified=False)
+    from visa_crm.api.pipeline_engine import rollup_queue
+    rollup_queue(queue.name)

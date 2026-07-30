@@ -29,3 +29,4 @@ visa_crm.patches.stabilize_meta_production_blockers
 visa_crm.patches.create_meta_stage_orchestration
 visa_crm.patches.add_meta_assignment_state
 visa_crm.patches.complete_meta_pipeline_resilience_schema
+visa_crm.patches.finalize_meta_pipeline_resilience
