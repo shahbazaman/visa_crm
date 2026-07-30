@@ -33,17 +33,16 @@ def meta_verify():
 def receive():
     raw = frappe.request.get_data() or b""
     payload = frappe.request.get_json(silent=True) or _decode_json(raw)
-    logged_events = _log_raw_webhook(payload if isinstance(payload, dict) else {}, raw)
     if not _valid_signature(raw):
         frappe.response["http_status_code"] = 403
         log_info("meta_webhook_bad_signature", payload_size=len(raw))
-        frappe.db.commit()
         return {"ok": False}
     if not isinstance(payload, dict):
         frappe.response["http_status_code"] = 400
         log_info("meta_webhook_invalid_payload", payload_type=type(payload).__name__)
         frappe.db.commit()
         return {"ok": False}
+    logged_events = _log_raw_webhook(payload, raw)
     log_info("meta_webhook_payload_received", payload=payload)
     stored = updates = duplicates = 0
     for item in _webhook_events(payload):
@@ -56,14 +55,11 @@ def receive():
             _link_event(event_log, existing, frappe.db.get_value("Lead Intake Queue", existing, "status"))
             duplicates += 1
             continue
-        doc = frappe.get_doc({"doctype": "Lead Intake Queue", "status": "Lead Received", "lead_source": _lead_source(), "source_lead_id": item["source_lead_id"], "raw_payload": safe_json_dumps(item)})
-        for field, value in {"event_type": item.get("event_type"), "page_id": item.get("page_id"), "form_id": item.get("form_id"), "meta_webhook_event": event_log}.items():
-            set_if_has(doc, field, value)
-        try:
-            doc.insert(ignore_permissions=True, ignore_if_duplicate=True)
-            _link_event(event_log, doc.name, "Lead Received")
+        queue_name,created=_insert_queue(item,event_log)
+        _link_event(event_log,queue_name,frappe.db.get_value("Lead Intake Queue",queue_name,"status"))
+        if created:
             stored += 1
-        except frappe.DuplicateEntryError:
+        else:
             duplicates += 1
     frappe.db.commit()
     frappe.response["http_status_code"] = 200
@@ -82,12 +78,12 @@ def replay_payload(payload):
             _link_event(event_log, existing, frappe.db.get_value("Lead Intake Queue", existing, "status"))
             duplicates += 1
             continue
-        doc = frappe.get_doc({"doctype": "Lead Intake Queue", "status": "Lead Received", "lead_source": _lead_source(), "source_lead_id": item["source_lead_id"], "raw_payload": safe_json_dumps(item)})
-        for field, value in {"event_type": item.get("event_type"), "page_id": item.get("page_id"), "form_id": item.get("form_id"), "meta_webhook_event": event_log}.items():
-            set_if_has(doc, field, value)
-        doc.insert(ignore_permissions=True, ignore_if_duplicate=True)
-        _link_event(event_log, doc.name, "Lead Received")
-        stored += 1
+        queue_name,created=_insert_queue(item,event_log)
+        _link_event(event_log,queue_name,frappe.db.get_value("Lead Intake Queue",queue_name,"status"))
+        if created:
+            stored += 1
+        else:
+            duplicates += 1
     frappe.db.commit()
     return {"ok": True, "stored": stored, "updates": updates, "duplicates": duplicates}
 
@@ -125,6 +121,22 @@ def _lead_events(payload):
 
 def _queue_exists(source_lead_id):
     return frappe.db.exists("Lead Intake Queue", {"source_lead_id": source_lead_id})
+
+def _insert_queue(item,event_log=None):
+    existing=_queue_exists(item["source_lead_id"])
+    if existing:
+        return existing,False
+    doc=frappe.get_doc({"doctype":"Lead Intake Queue","status":"Lead Received","lead_source":_lead_source(),"source_lead_id":item["source_lead_id"],"raw_payload":safe_json_dumps(item)})
+    for field,value in {"event_type":item.get("event_type"),"page_id":item.get("page_id"),"form_id":item.get("form_id"),"meta_webhook_event":event_log}.items():
+        set_if_has(doc,field,value)
+    try:
+        doc.insert(ignore_permissions=True)
+        return doc.name,True
+    except frappe.DuplicateEntryError:
+        canonical=_queue_exists(item["source_lead_id"])
+        if not canonical:
+            raise
+        return canonical,False
 
 def _lead_source():
     settings = get_meta_settings()

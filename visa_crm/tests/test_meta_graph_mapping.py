@@ -35,6 +35,15 @@ class TestMetaGraphAndMapping(unittest.TestCase):
         self.assertEqual(data["notes"],"Need tourist visa")
         self.assertIn("unmapped_form_answer",data["meta_raw_fields"])
 
+    def test_raw_meta_fields_preserve_multiple_values_and_collisions(self):
+        payload={"id":"L-MULTI","field_data":[{"name":"interests","values":["Tourist","Business"]},{"name":"interests!","values":["Family"]}]}
+        data=normalize_lead(payload,None,{"queue_name":"Q-MULTI"})
+        raw=lead_creator.load_json(data["meta_raw_fields"],[])
+        self.assertEqual(raw[0]["values"],["Tourist","Business"])
+        self.assertEqual(raw[1]["values"],["Family"])
+        self.assertEqual(data["custom_answers"]["interests"],"Tourist")
+        self.assertEqual(data["custom_answers"]["interests__2"],"Family")
+
     def test_meta_fields_are_assigned_to_crm_lead(self):
         payload={"id":"L2","field_data":[{"name":"full_name","values":["John Doe"]},{"name":"phone","values":["+971501234567"]},{"name":"email","values":["john@example.com"]}]}
         data=normalize_lead(payload,None,{"queue_name":"Q2"})

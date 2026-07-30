@@ -3,7 +3,7 @@ import re
 import frappe
 from visa_crm.api.meta_utils import load_json, meta_debug_log, normalize_phone, safe_json_dumps
 
-MAPPING_VERSION="1"
+MAPPING_VERSION="2"
 DEFAULT_FIELD_MAP = {
     "customer_name": ["full_name", "name", "first_name", "last_name"],
     "phone": ["phone_number", "phone", "mobile", "mobile_number"],
@@ -35,7 +35,8 @@ def normalize_lead(graph_payload, settings=None, context=None):
     context = context or {}
     meta_debug_log("normalize_lead_start", **context)
     try:
-        answers = _answers(graph_payload)
+        raw_fields=_raw_fields(graph_payload)
+        answers=_answers(raw_fields)
         mapping = _aliases(settings)
         data = {field: _first_value(answers, keys) for field, keys in mapping.items()}
         if not data.get("customer_name"):
@@ -46,19 +47,27 @@ def normalize_lead(graph_payload, settings=None, context=None):
         data["email"] = (data.get("email") or "").strip().lower() or None
         for target, source in {"campaign_name": "campaign_name", "adset_name": "adset_name", "ad_name": "ad_name"}.items():
             data[target] = graph_payload.get(source) or graph_payload.get(source.replace("_name", ""))
-        data.update({"source_lead_id": str(graph_payload.get("id") or ""), "form_id": graph_payload.get("form_id"), "page_id": graph_payload.get("page_id"), "campaign_id": graph_payload.get("campaign_id"), "ad_id": graph_payload.get("ad_id"), "adset_id": graph_payload.get("adset_id"), "custom_answers": answers, "meta_fields": answers, "meta_raw_fields": safe_json_dumps(answers)})
+        data.update({"source_lead_id":str(graph_payload.get("id") or ""),"form_id":graph_payload.get("form_id"),"page_id":graph_payload.get("page_id"),"campaign_id":graph_payload.get("campaign_id"),"ad_id":graph_payload.get("ad_id"),"adset_id":graph_payload.get("adset_id"),"custom_answers":answers,"meta_fields":answers,"meta_raw_fields":safe_json_dumps(raw_fields)})
         meta_debug_log("normalize_lead_end", source_lead_id=data.get("source_lead_id") or context.get("source_lead_id"), mapped_fields=list(data.keys()), **{k: v for k, v in context.items() if k != "source_lead_id"})
         return data
     except Exception:
         meta_debug_log("normalize_lead_exception", traceback=frappe.get_traceback(), **context)
         raise
 
-def _answers(payload):
+def _raw_fields(payload):
+    return [{"name":item.get("name"),"values":list(item.get("values") or []),"raw":item} for item in payload.get("field_data") or []]
+
+def _answers(raw_fields):
     answers = {}
-    for item in payload.get("field_data") or []:
+    for item in raw_fields:
         key = _norm_key(item.get("name"))
         values = item.get("values") or []
-        answers[key] = str(values[0]).strip() if values and values[0] is not None else None
+        candidate=key
+        suffix=2
+        while candidate in answers:
+            candidate=f"{key}__{suffix}"
+            suffix+=1
+        answers[candidate]=str(values[0]).strip() if values and values[0] is not None else None
     return answers
 
 def _derived_fields(mapped):
