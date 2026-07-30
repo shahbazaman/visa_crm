@@ -62,7 +62,8 @@ def claim_stage(queue_name,stage=None,include_ai=False,lease_seconds=None,owner=
     if frappe.db._cursor.rowcount!=1:
         frappe.db.rollback()
         return None
-    _update_queue_running(queue_name,candidate.stage,at)
+    if candidate.stage not in AI_STAGES:
+        _update_queue_running(queue_name,candidate.stage,at)
     frappe.db.commit()
     return frappe._dict({"name":candidate.name,"queue":queue_name,"stage":candidate.stage,"lease_token":token,"lease_owner":owner,"lease_expires_at":expires,"attempt_count":cint(candidate.attempt_count)+1})
 
@@ -127,7 +128,11 @@ def run_stage(queue_name,handler,stage=None,include_ai=False,lease_seconds=None,
         traceback=frappe.get_traceback()
         frappe.db.rollback()
         if failure_handler:
-            failure_handler(queue_name,claim,exc,traceback)
+            try:
+                failure_handler(queue_name,claim,exc,traceback)
+            except Exception:
+                frappe.db.rollback()
+                _logger().error(safe_json_dumps({"event":"stage_failure_handler_failed","queue":queue_name,"stage":claim.stage,"original_error":str(exc),"traceback":frappe.get_traceback()}))
         fail_stage(claim,exc,traceback=traceback)
         frappe.db.commit()
         _logger().error(safe_json_dumps({"event":"stage_failed","queue":queue_name,"stage":claim.stage,"attempt":claim.attempt_count,"exception_class":_exception_class(exc),"error":str(exc),"traceback":traceback}))
@@ -153,7 +158,10 @@ def retry_stage(queue_name,stage,force=False):
         return False
     if row.state=="RUNNING" and not force and (not row.lease_expires_at or get_datetime(row.lease_expires_at)>now_datetime()):
         return False
-    frappe.db.set_value("Lead Intake Stage",row.name,{"state":"FAILED","next_retry_at":now_datetime(),"lease_owner":None,"lease_token":None,"lease_expires_at":None},update_modified=False)
+    values={"state":"FAILED","next_retry_at":now_datetime(),"lease_owner":None,"lease_token":None,"lease_expires_at":None}
+    if cint(row.max_attempts) and cint(row.attempt_count)>=cint(row.max_attempts):
+        values["max_attempts"]=cint(row.attempt_count)+1
+    frappe.db.set_value("Lead Intake Stage",row.name,values,update_modified=False)
     rollup_queue(queue_name,progress=True)
     frappe.db.commit()
     return True
@@ -164,20 +172,25 @@ def rollup_queue(queue_name,progress=False):
         return None
     states={row.stage:row.state for row in rows}
     business=[row for row in rows if row.stage in BUSINESS_STAGES]
-    failed_business=[row for row in business if row.state=="FAILED"]
+    required=[row for row in business if row.requirement_class!="Optional"]
+    optional=[row for row in business if row.requirement_class=="Optional"]
+    failed_required=[row for row in required if row.state=="FAILED"]
+    failed_optional=[row for row in optional if row.state=="FAILED"]
     lead_complete=states.get("CRM_LEAD")=="COMPLETED"
     if frappe.db.get_value("Lead Intake Queue",queue_name,"status")=="Ignored Test Event":
         overall="IGNORED"
-    elif any(row.state=="RUNNING" for row in rows):
+    elif any(row.state=="RUNNING" for row in business):
         overall="RUNNING"
-    elif lead_complete and failed_business:
+    elif failed_required:
+        overall="PARTIALLY_COMPLETED" if lead_complete else "FAILED"
+    elif lead_complete and not all(row.state in TERMINAL_STATES for row in required):
+        overall="PARTIALLY_COMPLETED"
+    elif lead_complete and failed_optional:
         overall="COMPLETED_WITH_WARNINGS"
-    elif lead_complete and all(row.state in TERMINAL_STATES for row in business):
+    elif lead_complete and all(row.state in TERMINAL_STATES for row in required) and all(row.state in TERMINAL_STATES for row in optional):
         overall="COMPLETED"
     elif lead_complete:
         overall="PARTIALLY_COMPLETED"
-    elif failed_business:
-        overall="FAILED"
     else:
         overall="PENDING"
     current=_current_stage(rows)
@@ -187,7 +200,7 @@ def rollup_queue(queue_name,progress=False):
     values={"orchestration_status":overall,"pipeline_version":PIPELINE_VERSION,"current_stage":current,"next_action_at":next_action,"warning_count":warnings,"stage_summary_json":safe_json_dumps(summary)}
     if progress:
         values["last_progress_at"]=now_datetime()
-    legacy=_legacy_status(overall,states,failed_business)
+    legacy=_legacy_status(overall,states,failed_required)
     if legacy:
         values["status"]=legacy
     frappe.db.set_value("Lead Intake Queue",queue_name,values,update_modified=False)
@@ -231,16 +244,16 @@ def _current_stage(rows):
     running=next((row.stage for row in rows if row.state=="RUNNING"),None)
     if running:
         return running
-    return next((row.stage for row in rows if row.state=="FAILED" and _attempts_available(row)),next((row.stage for row in rows if row.state=="NOT_STARTED"),None))
+    return next((row.stage for row in rows if row.state=="FAILED" and _attempts_available(row)),next((row.stage for row in rows if row.state=="FAILED"),next((row.stage for row in rows if row.state=="NOT_STARTED"),None)))
 
 def _legacy_status(overall,states,failed):
     if overall=="IGNORED":
         return "Ignored Test Event"
     if overall=="COMPLETED":
         return "Processed"
-    if overall in ("COMPLETED_WITH_WARNINGS","PARTIALLY_COMPLETED") and states.get("CRM_LEAD")=="COMPLETED":
+    if overall=="COMPLETED_WITH_WARNINGS" and states.get("CRM_LEAD")=="COMPLETED":
         return "Processed With Warnings"
-    if overall=="FAILED":
+    if overall in ("FAILED","PARTIALLY_COMPLETED"):
         exhausted=any(not _attempts_available(row) for row in failed)
         return "Action Required" if exhausted else "Needs Retry"
     return None
