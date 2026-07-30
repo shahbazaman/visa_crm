@@ -1,7 +1,7 @@
 from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from visa_crm.api import intake_processor
+from visa_crm.api import ai_intelligence,intake_processor
 from visa_crm.api.pipeline_engine import stage_key
 
 class TestAIEnqueueIsolation(FrappeTestCase):
@@ -42,3 +42,21 @@ class TestAIEnqueueIsolation(FrappeTestCase):
         self.assertEqual(frappe.db.get_value("Lead Intake AI Job",{"queue":self.queue},"state"),"FAILED")
         for stage in ("CRM_LEAD","VISA_APPLICATION","COMMUNICATION_EVENT","FOLLOW_UP","COUNSELOR_ASSIGNMENT"):
             self.assertEqual(frappe.db.get_value("Lead Intake Stage",stage_key(self.queue,stage),"state"),"COMPLETED")
+
+    def test_gemini_offline_fails_only_ai_stage(self):
+        employee=frappe.get_all("Employee",pluck="name",limit=1)[0]
+        with patch("visa_crm.api.pipeline_stage_services.fetch_lead",return_value=self.graph),patch("visa_crm.api.pipeline_stage_services.assign_lead",return_value=employee),patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"):
+            intake_processor.process_queue(self.queue)
+        queue=frappe.get_doc("Lead Intake Queue",self.queue)
+        job=frappe.db.get_value("Lead Intake AI Job",{"queue":self.queue},"name")
+        with patch("visa_crm.api.ai_intelligence.analyze_event",side_effect=RuntimeError("Gemini offline")):
+            ai_intelligence.process_communication_ai(queue.communication_event,self.queue,job)
+        queue.reload()
+        self.assertEqual(queue.status,"Processed")
+        self.assertEqual(queue.orchestration_status,"COMPLETED")
+        self.assertEqual(queue.ai_status,"Failed")
+        self.assertIn("Gemini offline",queue.ai_error)
+        self.assertEqual(frappe.db.get_value("Lead Intake Stage",stage_key(self.queue,"AI_GEMINI"),"state"),"FAILED")
+        self.assertEqual(frappe.db.get_value("Lead Intake AI Job",job,"state"),"FAILED")
+        for doctype,name in (("CRM Lead",queue.matched_lead),("Customer",queue.matched_customer),("Visa Application",queue.visa_application),("Communication Event",queue.communication_event),("ToDo",queue.followup_reference)):
+            self.assertTrue(frappe.db.exists(doctype,name),f"{doctype} was rolled back by Gemini failure")
