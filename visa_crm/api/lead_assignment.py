@@ -5,7 +5,9 @@ from visa_crm.api.meta_utils import has_doctype, has_field, log_info, meta_debug
 def assign_lead(lead, queue_doc=None, strategy=None, context=None):
     context = context or {}
     meta_debug_log("counselor_assignment_start", lead=lead, **context)
-    employee = _least_workload_employee() if (strategy or "least_workload") == "least_workload" else _round_robin_employee()
+    queue_name=getattr(queue_doc,"name",None)
+    existing=_existing_assignment(queue_name)
+    employee=existing or (_least_workload_employee() if (strategy or "least_workload") == "least_workload" else _round_robin_employee())
     if not employee:
         log_info("meta_assignment_skipped", reason="no_employee", lead=lead)
         meta_debug_log("counselor_assignment_end", lead=lead, employee=None, **context)
@@ -15,8 +17,8 @@ def assign_lead(lead, queue_doc=None, strategy=None, context=None):
         for field in ("assigned_to", "assigned_employee", "counselor", "employee"):
             set_if_has(doc, field, employee)
         doc.save(ignore_permissions=True)
-    _assignment_log(lead, employee)
-    _assignment_history(lead, employee, strategy or "least_workload")
+    _assignment_log(lead, employee, queue_name)
+    _assignment_history(lead, employee, strategy or "least_workload", queue_name)
     if queue_doc:
         queue_doc.assigned_employee = employee
     log_info("meta_lead_assigned", lead=lead, employee=employee)
@@ -60,10 +62,12 @@ def _filter_by_groups(employees, groups):
                 linked.extend(frappe.get_all("Employee Group", filters={"name": group}, pluck=field))
     return [employee for employee in employees if employee in linked] or employees
 
-def _assignment_log(lead, employee):
+def _assignment_log(lead, employee, queue_name=None):
     if not lead or not employee or not has_doctype("Lead Assignment"):
         return
-    existing = frappe.db.exists("Lead Assignment", {"lead": lead, "assigned_to": employee, "status": ["in", ["Pending", "Accepted", "In Progress"]]})
+    key=f"assignment:{queue_name}" if queue_name else None
+    existing=frappe.db.exists("Lead Assignment",{"meta_intake_key":key}) if key and has_field("Lead Assignment","meta_intake_key") else None
+    existing = existing or frappe.db.exists("Lead Assignment", {"lead": lead, "assigned_to": employee, "status": ["in", ["Pending", "Accepted", "In Progress"]]})
     if existing:
         return
     doc = frappe.new_doc("Lead Assignment")
@@ -75,13 +79,17 @@ def _assignment_log(lead, employee):
     doc.assigned_on = now()
     doc.status = "Pending"
     doc.priority = "Medium"
+    set_if_has(doc,"meta_intake_key",key)
     doc.insert(ignore_permissions=True)
 
-def _assignment_history(lead, employee, strategy):
+def _assignment_history(lead, employee, strategy, queue_name=None):
     if not lead or not employee or not has_doctype("Counselor Assignment History"):
         return
+    key=f"assignment-history:{queue_name}" if queue_name else None
+    if key and has_field("Counselor Assignment History","meta_intake_key") and frappe.db.exists("Counselor Assignment History",{"meta_intake_key":key}):
+        return
     doc = frappe.new_doc("Counselor Assignment History")
-    for field, value in {"lead": lead, "assigned_to": employee, "assigned_by": _link_value(doc, "assigned_by"), "assigned_on": now(), "strategy": strategy}.items():
+    for field, value in {"lead": lead, "assigned_to": employee, "assigned_by": _link_value(doc, "assigned_by"), "assigned_on": now(), "strategy": strategy,"meta_intake_key":key}.items():
         set_if_has(doc, field, value)
     doc.insert(ignore_permissions=True)
 
@@ -105,3 +113,8 @@ def _employee_for_user(user):
             if found:
                 return found
     return None
+
+def _existing_assignment(queue_name):
+    if not queue_name or not has_doctype("Lead Assignment") or not has_field("Lead Assignment","meta_intake_key"):
+        return None
+    return frappe.db.get_value("Lead Assignment",{"meta_intake_key":f"assignment:{queue_name}"},"assigned_to")

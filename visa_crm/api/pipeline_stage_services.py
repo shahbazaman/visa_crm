@@ -6,9 +6,13 @@ from visa_crm.api.meta_mapping import MAPPING_VERSION,normalize_lead
 from visa_crm.api.meta_utils import get_meta_settings,has_field,load_json,safe_json_dumps,set_values
 from visa_crm.api.customer360 import resolve_customer,resolve_lead
 from visa_crm.api.followup import create_meta_followup
+from visa_crm.api.lead_assignment import assign_lead
 from visa_crm.api.visa_application import create_for_lead
 from visa_crm.api.workflow import create_deal_if_supported,mark_lead_stage,qualify_lead
 from frappe.utils import now
+
+class NoEligibleCounselor(RuntimeError):
+    pass
 
 def graph_download(queue_name,claim=None):
     queue=frappe.get_doc("Lead Intake Queue",queue_name)
@@ -123,6 +127,23 @@ def follow_up(queue_name,claim=None):
     set_values("Lead Intake Queue",queue_name,{"followup_reference":todo})
     return {"followup":todo,"result_doctype":"ToDo","result_name":todo,"output_hash":_hash({"followup":todo})}
 
+def counselor_assignment(queue_name,claim=None):
+    queue=_business_context(queue_name)
+    employee=assign_lead(queue.lead,queue.queue,context=_context(queue_name,queue.data))
+    if not employee:
+        raise NoEligibleCounselor("No eligible counselor is configured for Meta lead assignment")
+    set_values("Lead Intake Queue",queue_name,{"assigned_employee":employee})
+    _set_assignment_status(queue.lead,"Assigned")
+    event=queue.queue.get("communication_event")
+    if event and frappe.db.exists("Communication Event",event) and has_field("Communication Event","employee") and not frappe.db.get_value("Communication Event",event,"employee"):
+        frappe.db.set_value("Communication Event",event,"employee",employee,update_modified=False)
+    return {"employee":employee,"result_doctype":"Employee","result_name":employee,"output_hash":_hash({"employee":employee})}
+
+def assignment_failure(queue_name,claim,exc,traceback):
+    lead=frappe.db.get_value("Lead Intake Queue",queue_name,"matched_lead")
+    if lead and frappe.db.exists("CRM Lead",lead):
+        _set_assignment_status(lead,"Needs Assignment")
+
 def _successful_graph_payload(queue):
     for field in ("graph_payload","graph_api_response"):
         data=load_json(getattr(queue,field,None),{})
@@ -164,3 +185,7 @@ def _business_context(queue_name):
         raise ValueError("Customer360 stage has no durable Customer")
     visa=queue.get("visa_application")
     return frappe._dict({"queue":queue,"data":data,"lead":lead,"customer":customer,"visa":visa})
+
+def _set_assignment_status(lead,status):
+    if has_field("CRM Lead","assignment_status"):
+        frappe.db.set_value("CRM Lead",lead,"assignment_status",status,update_modified=False)
