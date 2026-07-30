@@ -1,5 +1,6 @@
 import inspect
 import frappe
+from frappe.utils import cint
 from visa_crm.api.meta_utils import load_json, meta_debug_log, safe_json_dumps
 
 DEFAULT_SOURCE = "Meta Instant Form"
@@ -11,7 +12,7 @@ def create_crm_lead(data, context=None):
     meta_debug_log("lead_creation_start", **context)
     _log_values("create_crm_lead_start", data, context)
     meta_fields = _meta_fields(data)
-    frappe.logger("visa_crm.meta").info({"meta_fields_before_create": meta_fields})
+    _debug("meta_fields_before_create",{"meta_fields":meta_fields})
     lead = frappe.new_doc("CRM Lead")
     _set_flag(lead, "visa_crm_pipeline_context", context)
     _trace("after_construction", lead, meta_fields=meta_fields)
@@ -37,8 +38,8 @@ def create_crm_lead(data, context=None):
     _trace("after_lead_set", lead, mapped_fields=values)
     _fill_required_text(lead, name)
     before = {field: lead.get(field) for field in MAPPED_FIELDS if lead.meta.has_field(field)}
-    frappe.logger("visa_crm.meta").info({"crm_lead_field_metadata": _field_metadata(lead)})
-    frappe.logger("visa_crm.meta").info({"lead_document_before_insert": lead.as_dict()})
+    _debug("crm_lead_field_metadata",{"metadata":_field_metadata(lead)})
+    _debug("lead_document_before_insert",{"lead":lead.as_dict()})
     _trace("before_insert", lead, mapped_fields=values)
     try:
         lead.insert(ignore_permissions=True)
@@ -54,10 +55,10 @@ def create_crm_lead(data, context=None):
     lead.reload()
     _trace("after_reload", lead, mapped_fields=values)
     after = {field: lead.get(field) for field in MAPPED_FIELDS if lead.meta.has_field(field)}
-    frappe.logger("visa_crm.meta").info({"lead_document_after_insert": lead.as_dict()})
+    _debug("lead_document_after_insert",{"lead":lead.as_dict()})
     changed = {field: {"before": value, "after": after.get(field)} for field, value in before.items() if value != after.get(field)}
     if changed:
-        frappe.logger("visa_crm.meta").warning({"lead_fields_changed_during_insert": changed, "lead": lead.name})
+        _debug("lead_fields_changed_during_insert",{"changes":changed,"lead":lead.name},warning=True)
     meta_debug_log("lead_creation_end", lead=lead.name, source=source, **context)
     return lead.name
 
@@ -134,7 +135,7 @@ def _validator(exc):
     return "frappe.utils.validate_phone_number" if isinstance(exc, frappe.InvalidPhoneNumberError) else exc.__class__.__name__
 
 def log_crm_lead_hook(doc, method=None):
-    if not (getattr(doc, "source_lead_id", None) or getattr(doc, "source", None) == DEFAULT_SOURCE):
+    if not _trace_enabled() or not (getattr(doc, "source_lead_id", None) or getattr(doc, "source", None) == DEFAULT_SOURCE):
         return
     current = {field: doc.get(field) for field in MAPPED_FIELDS if doc.meta.has_field(field)}
     previous = getattr(doc.flags, "visa_crm_meta_trace_fields", {}) or {}
@@ -144,6 +145,8 @@ def log_crm_lead_hook(doc, method=None):
     _trace(f"hook_{method}", doc, controller=_controller_source(doc, method))
 
 def _trace(stage, doc, **data):
+    if not _trace_enabled():
+        return
     frappe.logger("visa_crm.meta").info({"crm_lead_stage": stage, "lead_document": doc.as_dict(), **data})
     current = {field: doc.get(field) for field in TRACE_FIELDS if doc.meta.has_field(field)}
     previous = _get_flag(doc, "visa_crm_pipeline_trace_fields")
@@ -158,6 +161,9 @@ def _trace(stage, doc, **data):
     _set_flag(doc, "visa_crm_pipeline_trace_fields", current)
 
 def _set_traced(doc, field, value):
+    if not _trace_enabled():
+        doc.set(field,value)
+        return
     source = _location()
     old = doc.get(field)
     _pipeline_logger().info(safe_json_dumps({"event": "crm_lead_set_before", "field": field, "old": _typed(old), "candidate": _typed(value), "source": source, "context": _get_flag(doc, "visa_crm_pipeline_context", {}) or {}}))
@@ -166,7 +172,17 @@ def _set_traced(doc, field, value):
     _pipeline_logger().info(safe_json_dumps({"event": "crm_lead_set_after", "field": field, "old": _typed(old), "new": _typed(new), "changed": old != new, "source": source, "context": _get_flag(doc, "visa_crm_pipeline_context", {}) or {}}))
 
 def _log_values(stage, values, context=None):
-    _pipeline_logger().info(safe_json_dumps({"event": stage, "context": context or {}, "values": _typed_mapping(values)}))
+    if _trace_enabled():
+        _pipeline_logger().info(safe_json_dumps({"event": stage, "context": context or {}, "values": _typed_mapping(values)}))
+
+def _debug(event,data,warning=False):
+    if not _trace_enabled():
+        return
+    logger=frappe.logger("visa_crm.meta")
+    getattr(logger,"warning" if warning else "info")({event:data})
+
+def _trace_enabled():
+    return bool(cint(frappe.conf.get("visa_crm_meta_trace_lead") or 0))
 
 def _typed_mapping(values):
     if not isinstance(values, dict):
