@@ -1,5 +1,6 @@
+import hashlib
 import frappe
-from visa_crm.api.customer import create_customer_from_lead
+from visa_crm.api.customer import create_customer,create_customer_from_lead
 from visa_crm.api.lead_creator import create_crm_lead
 from visa_crm.api.meta_utils import has_doctype, has_field, meta_debug_log, normalize_phone
 
@@ -11,20 +12,53 @@ def match_lead_data(data, context=None):
     meta_debug_log("customer_360_matching_start", **context)
     phones = [normalize_phone(data.get("phone")), normalize_phone(data.get("whatsapp"))]
     emails = [(data.get("email") or "").strip().lower()]
-    customer = _match("Customer", phones, emails, data.get("customer_name"))
-    lead = _match("CRM Lead", phones, emails, data.get("customer_name"), data.get("source_lead_id"))
+    customer = _identity_customer(data) or _match("Customer", phones, emails)
+    lead = _match("CRM Lead", phones, emails, source_lead_id=data.get("source_lead_id"))
     meta_debug_log("customer_360_matching_end", matched_customer=customer, matched_lead=lead, **context)
     return {"customer": customer, "lead": lead}
 
 def link_or_create_lead(data, context=None):
     context = context or {}
-    matches = match_lead_data(data, context)
+    matches=match_lead_data(data,context)
     if not matches["lead"]:
-        matches["lead"] = create_crm_lead(data, context)
+        matches["lead"]=create_crm_lead(data,context)
     if not matches["customer"]:
-        matches["customer"] = create_customer_from_lead(matches["lead"], data)
-    _link_lead_customer(matches["lead"], matches["customer"])
+        matches["customer"]=create_customer_from_lead(matches["lead"],data)
+    _link_lead_customer(matches["lead"],matches["customer"])
     return matches
+
+def resolve_customer(data,context=None):
+    context=context or {}
+    customer=_identity_customer(data)
+    lead=_match("CRM Lead",[],[],source_lead_id=data.get("source_lead_id"))
+    if not customer and lead:
+        customer=_linked_customer(lead)
+    if not customer:
+        phones=[normalize_phone(data.get("phone")),normalize_phone(data.get("whatsapp"))]
+        emails=[(data.get("email") or "").strip().lower()]
+        customer=_match("Customer",phones,emails)
+    if not customer:
+        customer=create_customer(data)
+    _claim_identities(customer,data)
+    meta_debug_log("customer_360_customer_resolved",customer=customer,**context)
+    return customer
+
+def resolve_lead(data,customer,context=None):
+    context=context or {}
+    phones=[normalize_phone(data.get("phone")),normalize_phone(data.get("whatsapp"))]
+    emails=[(data.get("email") or "").strip().lower()]
+    lead=_match("CRM Lead",phones,emails,source_lead_id=data.get("source_lead_id"))
+    if not lead:
+        try:
+            lead=create_crm_lead(data,context)
+        except frappe.DuplicateEntryError:
+            lead=_match("CRM Lead",phones,emails,source_lead_id=data.get("source_lead_id"))
+            if not lead:
+                raise
+    _populate_lead_blanks(lead,data)
+    _link_lead_customer(lead,customer)
+    meta_debug_log("customer_360_lead_resolved",lead=lead,customer=customer,**context)
+    return lead
 
 def update_customer_profile(doc):
     if not doc.customer_360_match:
@@ -43,7 +77,7 @@ def update_customer_profile(doc):
 def link_customer(call_doc):
     if call_doc.customer_360_match:
         return
-    customer = _match("Customer", [call_doc.customer_phone_extracted], [], call_doc.customer_name)
+    customer = _match("Customer", [call_doc.customer_phone_extracted], [])
     if customer:
         call_doc.db_set("customer_360_match", customer, update_modified=False)
         if call_doc.communication_event:
@@ -69,8 +103,6 @@ def _match(doctype, phones, emails, name=None, source_lead_id=None):
                 found = frappe.db.get_value(doctype, {field: email}, "name")
                 if found:
                     return found
-    if name and has_field(doctype, "customer_name"):
-        return frappe.db.get_value(doctype, {"customer_name": name}, "name")
     return None
 
 def _link_lead_customer(lead, customer):
@@ -87,3 +119,52 @@ def _link_lead_customer(lead, customer):
         frappe.db.set_value("CRM Lead", lead, lead_values, update_modified=False)
     if has_field("Customer", "crm_lead") and not frappe.db.get_value("Customer", customer, "crm_lead"):
         frappe.db.set_value("Customer", customer, "crm_lead", lead, update_modified=False)
+
+def _identity_customer(data):
+    if not has_doctype("Customer Identity"):
+        return None
+    for identity_type,value in _identities(data):
+        customer=frappe.db.get_value("Customer Identity",_identity_hash(identity_type,value),"customer")
+        if customer and frappe.db.exists("Customer",customer):
+            return customer
+    return None
+
+def _claim_identities(customer,data):
+    if not has_doctype("Customer Identity"):
+        return
+    for identity_type,value in _identities(data):
+        digest=_identity_hash(identity_type,value)
+        existing=frappe.db.get_value("Customer Identity",digest,"customer")
+        if existing:
+            if existing!=customer:
+                raise frappe.ValidationError(f"{identity_type} identity is already linked to Customer {existing}")
+            continue
+        doc=frappe.new_doc("Customer Identity")
+        doc.update({"identity_hash":digest,"identity_type":identity_type,"masked_value":_mask(value),"customer":customer,"verified":0,"source":"Meta Lead Ads"})
+        doc.insert(ignore_permissions=True)
+
+def _identities(data):
+    values=[("External ID",str(data.get("source_lead_id") or "").strip()),("Phone",normalize_phone(data.get("phone"))),("WhatsApp",normalize_phone(data.get("whatsapp"))),("Email",(data.get("email") or "").strip().lower())]
+    return [(kind,value) for kind,value in values if value]
+
+def _identity_hash(identity_type,value):
+    return hashlib.sha256(f"{identity_type}:{value}".encode("utf-8")).hexdigest()
+
+def _mask(value):
+    value=str(value)
+    return value if len(value)<=4 else f"{value[:2]}{'*'*(len(value)-4)}{value[-2:]}"
+
+def _linked_customer(lead):
+    for field in ("customer360","customer_360","customer_360_match"):
+        if has_field("CRM Lead",field):
+            customer=frappe.db.get_value("CRM Lead",lead,field)
+            if customer and frappe.db.exists("Customer",customer):
+                return customer
+    return None
+
+def _populate_lead_blanks(lead,data):
+    mapping={"facebook_lead_id":"source_lead_id","facebook_form_id":"form_id","facebook_page_id":"page_id","meta_campaign_id":"campaign_id","meta_campaign_name":"campaign_name","meta_adset_id":"adset_id","meta_adset_name":"adset_name","meta_ad_id":"ad_id","meta_ad_name":"ad_name"}
+    current=frappe.db.get_value("CRM Lead",lead,list(mapping),as_dict=True) or {}
+    values={target:data.get(source) for target,source in mapping.items() if data.get(source) and not current.get(target)}
+    if values:
+        frappe.db.set_value("CRM Lead",lead,values,update_modified=False)

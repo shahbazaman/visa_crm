@@ -13,10 +13,6 @@ def find_customer(phone=None,email=None,name=None):
             customer=frappe.db.get_value("Customer",{"email_id":email},"name")
             if customer:
                 return customer
-    if name:
-        customer=frappe.db.get_value("Customer",{"customer_name":name},"name")
-        if customer:
-            return customer
     return None
 
 def find_lead(phone=None,email=None):
@@ -33,10 +29,18 @@ def find_lead(phone=None,email=None):
 def create_customer_from_lead(lead,data=None):
     data=data or {}
     doc=frappe.get_doc("CRM Lead",lead)
-    name=data.get("customer_name") or doc.lead_name or doc.first_name or "Unknown"
-    phone=data.get("phone") or getattr(doc,"mobile_no",None)
-    email=data.get("email") or getattr(doc,"email",None)
-    existing=find_customer(phone,email,name)
+    values=dict(data)
+    values["customer_name"]=data.get("customer_name") or doc.lead_name or doc.first_name
+    values["phone"]=data.get("phone") or getattr(doc,"mobile_no",None)
+    values["email"]=data.get("email") or getattr(doc,"email",None)
+    return create_customer(values)
+
+def create_customer(data):
+    data=data or {}
+    name=data.get("customer_name") or f"Meta Lead {data.get('source_lead_id') or ''}".strip()
+    phone=data.get("phone")
+    email=data.get("email")
+    existing=find_customer(phone,email)
     if existing:
         return existing
     customer=frappe.new_doc("Customer")
@@ -47,7 +51,7 @@ def create_customer_from_lead(lead,data=None):
     try:
         customer.insert(ignore_permissions=True)
     except frappe.DuplicateEntryError:
-        existing=find_customer(phone,email,name)
+        existing=find_customer(phone,email)
         if existing:
             return existing
         raise

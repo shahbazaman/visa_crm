@@ -4,6 +4,7 @@ import frappe
 from visa_crm.api.meta_graph import GRAPH_VERSION,LEAD_FIELDS,fetch_lead
 from visa_crm.api.meta_mapping import MAPPING_VERSION,normalize_lead
 from visa_crm.api.meta_utils import get_meta_settings,has_field,load_json,safe_json_dumps,set_values
+from visa_crm.api.customer360 import resolve_customer,resolve_lead
 
 def graph_download(queue_name,claim=None):
     queue=frappe.get_doc("Lead Intake Queue",queue_name)
@@ -56,6 +57,24 @@ def load_normalized(queue_name):
         raise ValueError(f"Normalized payload is missing for queue {queue_name}")
     return data
 
+def customer360(queue_name,claim=None):
+    data=load_normalized(queue_name)
+    context=_context(queue_name,data)
+    customer=resolve_customer(data,context)
+    set_values("Lead Intake Queue",queue_name,{"matched_customer":customer,"status":"Customer Matched"})
+    return {"customer":customer,"result_doctype":"Customer","result_name":customer,"input_hash":frappe.db.get_value("Lead Intake Queue",queue_name,"normalized_payload_hash"),"output_hash":_hash({"customer":customer})}
+
+def crm_lead(queue_name,claim=None):
+    data=load_normalized(queue_name)
+    customer=frappe.db.get_value("Lead Intake Queue",queue_name,"matched_customer")
+    if not customer or not frappe.db.exists("Customer",customer):
+        raise ValueError("Customer360 stage has no durable Customer")
+    context=_context(queue_name,data)
+    lead=resolve_lead(data,customer,context)
+    set_values("Lead Intake Queue",queue_name,{"matched_customer":customer,"matched_lead":lead,"status":"Lead Created"})
+    _sync_webhook_event(frappe.get_doc("Lead Intake Queue",queue_name),{"queue_status":"Lead Created","crm_lead":lead,"customer":customer})
+    return {"lead":lead,"customer":customer,"result_doctype":"CRM Lead","result_name":lead,"input_hash":frappe.db.get_value("Lead Intake Queue",queue_name,"normalized_payload_hash"),"output_hash":_hash({"lead":lead,"customer":customer})}
+
 def _successful_graph_payload(queue):
     for field in ("graph_payload","graph_api_response"):
         data=load_json(getattr(queue,field,None),{})
@@ -82,3 +101,6 @@ def _sync_webhook_event(queue,values):
 def _hash(value):
     payload=json.dumps(value,default=str,ensure_ascii=False,separators=(",",":"),sort_keys=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+def _context(queue_name,data):
+    return {"queue_name":queue_name,"source_lead_id":data.get("source_lead_id"),"status":frappe.db.get_value("Lead Intake Queue",queue_name,"status")}
