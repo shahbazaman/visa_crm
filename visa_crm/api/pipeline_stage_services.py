@@ -201,6 +201,25 @@ def dispatch_ai_job(queue_name):
         frappe.logger("visa_crm.ai").error(safe_json_dumps({"event":"ai_dispatch_failed","queue":queue_name,"ai_job":job.name,"error":str(exc),"traceback":traceback}))
         return frappe.db.get_value("Lead Intake AI Job",job.name,["name","state","next_retry_at","last_error"],as_dict=True)
 
+def recover_stale_ai_jobs(at=None):
+    if not frappe.db.exists("DocType","Lead Intake AI Job"):
+        return 0
+    at=get_datetime(at or now_datetime())
+    cutoff=add_to_date(at,minutes=-max(int(frappe.conf.get("visa_crm_ai_stale_minutes") or 60),15))
+    rows=frappe.get_all("Lead Intake AI Job",filters={"state":["in",["QUEUED","RUNNING"]]},fields=["name","queue","state","queued_at","heartbeat_at"])
+    recovered=0
+    for row in rows:
+        stage_state=frappe.db.get_value("Lead Intake Stage",f"{row.queue}:AI_GEMINI","state") if frappe.db.exists("DocType","Lead Intake Stage") else None
+        stale=row.state=="QUEUED" and row.queued_at and get_datetime(row.queued_at)<=cutoff or row.state=="RUNNING" and (stage_state=="FAILED" or row.heartbeat_at and get_datetime(row.heartbeat_at)<=cutoff)
+        if not stale:
+            continue
+        frappe.db.set_value("Lead Intake AI Job",row.name,{"state":"FAILED","next_retry_at":at,"lease_owner":None,"lease_token":None,"lease_expires_at":None,"last_error_class":"AIWorkerLeaseExpired","last_error":"AI worker did not complete before the stale timeout"},update_modified=False)
+        set_values("Lead Intake Queue",row.queue,{"ai_status":"Failed","ai_error":"AI worker did not complete before the stale timeout"})
+        recovered+=1
+    if recovered:
+        frappe.db.commit()
+    return recovered
+
 def _ai_key(event):
     return f"ai:{event}:1"
 

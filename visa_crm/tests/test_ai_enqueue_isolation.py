@@ -1,8 +1,10 @@
 from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import add_to_date,now_datetime
 from visa_crm.api import ai_intelligence,intake_processor
 from visa_crm.api.pipeline_engine import stage_key
+from visa_crm.api import pipeline_stage_services as services
 
 class TestAIEnqueueIsolation(FrappeTestCase):
     def setUp(self):
@@ -60,3 +62,18 @@ class TestAIEnqueueIsolation(FrappeTestCase):
         self.assertEqual(frappe.db.get_value("Lead Intake AI Job",job,"state"),"FAILED")
         for doctype,name in (("CRM Lead",queue.matched_lead),("Customer",queue.matched_customer),("Visa Application",queue.visa_application),("Communication Event",queue.communication_event),("ToDo",queue.followup_reference)):
             self.assertTrue(frappe.db.exists(doctype,name),f"{doctype} was rolled back by Gemini failure")
+
+    def test_stale_queued_ai_job_is_recovered_and_redispatched(self):
+        employee=frappe.get_all("Employee",pluck="name",limit=1)[0]
+        with patch("visa_crm.api.pipeline_stage_services.fetch_lead",return_value=self.graph),patch("visa_crm.api.pipeline_stage_services.assign_lead",return_value=employee),patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"):
+            intake_processor.process_queue(self.queue)
+        job=frappe.db.get_value("Lead Intake AI Job",{"queue":self.queue},"name")
+        frappe.db.set_value("Lead Intake AI Job",job,"queued_at",add_to_date(now_datetime(),hours=-2),update_modified=False)
+        frappe.db.commit()
+        self.assertEqual(services.recover_stale_ai_jobs(),1)
+        self.assertEqual(frappe.db.get_value("Lead Intake AI Job",job,"state"),"FAILED")
+        self.assertEqual(frappe.db.get_value("Lead Intake Queue",self.queue,"status"),"Processed")
+        with patch("visa_crm.api.pipeline_stage_services.frappe.enqueue") as enqueue:
+            services.dispatch_ai_job(self.queue)
+        self.assertEqual(enqueue.call_count,1)
+        self.assertEqual(frappe.db.get_value("Lead Intake AI Job",job,"state"),"QUEUED")

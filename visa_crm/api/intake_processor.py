@@ -10,6 +10,7 @@ FAILURE_HANDLERS={"GRAPH_DOWNLOAD":services.graph_failure,"COUNSELOR_ASSIGNMENT"
 def process_pending(limit=100):
     meta_debug_log("process_pending_start",status="scheduler",limit=limit)
     recover_expired_leases()
+    services.recover_stale_ai_jobs()
     _recover_stale_fetches()
     rows=_pending_rows(limit)
     for row in rows:
