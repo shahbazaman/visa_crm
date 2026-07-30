@@ -137,9 +137,6 @@ def process_real_lead(leadgen_id):
     from visa_crm.api.intake_processor import process_queue
     process_queue(queue)
     result = _pipeline_row(queue)
-    visa = _ensure_visa_application(result)
-    if visa:
-        result = _pipeline_row(queue)
     return {"ok": True, "queue": queue, "graph": graph, "pipeline": result}
 
 @frappe.whitelist()
@@ -169,6 +166,20 @@ def intake_pipeline(queue_name=None):
         return []
     rows = frappe.get_all("Lead Intake Queue", fields=["name"], order_by="modified desc", limit=20)
     return [_timeline(row.name) for row in rows]
+
+@frappe.whitelist()
+def retry_pipeline_stage(queue_name,stage):
+    _admin()
+    from visa_crm.api.pipeline_engine import retry_stage
+    if not retry_stage(queue_name,stage,force=False):
+        return {"ok":False,"queue":queue_name,"stage":stage,"message":"Stage is not failed or its active lease has not expired"}
+    return {"ok":True,"queue":queue_name,"stage":stage}
+
+@frappe.whitelist()
+def resume_pipeline(queue_name):
+    _admin()
+    from visa_crm.api.intake_processor import process_queue
+    return process_queue(queue_name)
 
 def _admin():
     if "System Manager" not in frappe.get_roles():
@@ -355,8 +366,8 @@ def _blockers(report):
     return blockers
 
 def _is_meta_row(row):
-    text = " ".join(str(row.get(field) or "") for field in row.keys()).lower()
-    return any(token in text for token in ("meta", "facebook", "fb", "instagram"))
+    from visa_crm.patches.disable_builtin_crm_meta_sync import _is_meta_source
+    return _is_meta_source(row)
 
 def _is_enabled(row):
     if "enabled" in row and row.get("enabled") is not None:
@@ -415,19 +426,15 @@ def _pipeline_row(queue_name):
 
 def _timeline(queue_name):
     row = _pipeline_row(queue_name)
-    stages = [("Webhook", bool(queue_name), row.get("created")), ("Queue", bool(queue_name), row.get("created")), ("Graph", row.get("status") in ("Lead Downloaded", "Customer Matched", "Lead Created", "Processed") or bool(row.get("lead")), row.get("modified")), ("Customer360", bool(row.get("customer") or row.get("lead")), row.get("modified")), ("CRM Lead", bool(row.get("lead")), row.get("modified")), ("Visa", bool(row.get("visa_application")), row.get("modified")), ("Communication", bool(row.get("communication_event")), row.get("modified")), ("AI", False, None)]
-    row["timeline"] = [{"stage": name, "state": "green" if ok else "yellow", "timestamp": ts} for name, ok, ts in stages]
+    if has_doctype("Lead Intake Stage"):
+        from visa_crm.api.pipeline_engine import stages_for
+        stages=stages_for(queue_name)
+        row["timeline"]=[{"stage":stage.stage,"state":stage.state,"color":{"COMPLETED":"green","SKIPPED":"gray","FAILED":"red","RUNNING":"yellow","NOT_STARTED":"gray"}.get(stage.state,"gray"),"started_at":stage.started_at,"heartbeat_at":stage.get("heartbeat_at"),"completed_at":stage.completed_at,"duration_ms":stage.duration_ms,"attempt_count":stage.attempt_count,"next_retry_at":stage.next_retry_at,"worker":stage.lease_owner,"error_class":stage.last_error_class,"error":stage.last_error,"traceback":stage.last_traceback,"result_doctype":stage.result_doctype,"result_name":stage.result_name,"warning":stage.warning,"skip_reason":stage.skip_reason} for stage in stages]
+    else:
+        stages=[("WEBHOOK",bool(queue_name),row.get("created")),("GRAPH_DOWNLOAD",bool(row.get("graph_response")),row.get("modified")),("CUSTOMER360",bool(row.get("customer")),row.get("modified")),("CRM_LEAD",bool(row.get("lead")),row.get("modified"))]
+        row["timeline"]=[{"stage":name,"state":"COMPLETED" if ok else "NOT_STARTED","color":"green" if ok else "gray","completed_at":ts} for name,ok,ts in stages]
+    row["ai_job"]=frappe.db.get_value("Lead Intake AI Job",{"queue":queue_name},["name","state","attempt_count","next_retry_at","queued_at","started_at","heartbeat_at","completed_at","last_error_class","last_error"],as_dict=True) if has_doctype("Lead Intake AI Job") else None
     return row
-
-def _ensure_visa_application(row):
-    lead = row.get("lead") if row else None
-    if not lead or row.get("visa_application"):
-        return None
-    try:
-        from visa_crm.api.visa_application import create_for_lead
-        return create_for_lead(lead)
-    except Exception:
-        return None
 
 def _latest_linked(doctype, filters):
     if not filters or not has_doctype(doctype):

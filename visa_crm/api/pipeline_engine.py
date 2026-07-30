@@ -118,7 +118,7 @@ def run_stage(queue_name,handler,stage=None,include_ai=False,lease_seconds=None,
     try:
         renew_stage_lease(claim,lease_seconds=lease_seconds)
         result=handler(queue_name,claim)
-        renew_stage_lease(claim,lease_seconds=lease_seconds)
+        renew_stage_lease(claim,lease_seconds=lease_seconds,commit=False)
         payload=result if isinstance(result,dict) else {"result":result}
         complete_stage(claim,result=payload,result_doctype=payload.get("result_doctype"),result_name=payload.get("result_name"),input_hash=payload.get("input_hash"),output_hash=payload.get("output_hash"),warning=payload.get("warning",False))
         frappe.db.commit()

@@ -186,7 +186,8 @@ def dispatch_ai_job(queue_name):
         queued=frappe.enqueue("visa_crm.api.ai_intelligence.process_communication_ai",queue="long",job_name=job.name,enqueue_after_commit=False,event_name=job.communication_event,queue_name=queue_name,ai_job_name=job.name)
         rq_id=getattr(queued,"id",None) or getattr(queued,"job_id",None)
         frappe.db.sql("""update `tabLead Intake AI Job` set state='QUEUED',job_id=%s,queued_at=%s,next_retry_at=null,lease_owner=null,lease_token=null,lease_expires_at=null,last_error_class=null,last_error=null,last_traceback=null,modified=%s where name=%s and lease_token=%s and state in ('PENDING','FAILED')""",(rq_id,now_dt,now_dt,job.name,token))
-        set_values("Lead Intake Queue",queue_name,{"ai_status":"Queued","ai_error":"","ai_traceback":""})
+        state="QUEUED" if frappe.db._cursor.rowcount==1 else frappe.db.get_value("Lead Intake AI Job",job.name,"state")
+        set_values("Lead Intake Queue",queue_name,{"ai_status":{"RUNNING":"Running","COMPLETED":"Completed","FAILED":"Failed"}.get(state,"Queued"),"ai_error":"","ai_traceback":""})
         frappe.db.commit()
         return frappe.db.get_value("Lead Intake AI Job",job.name,["name","state","job_id"],as_dict=True)
     except Exception as exc:

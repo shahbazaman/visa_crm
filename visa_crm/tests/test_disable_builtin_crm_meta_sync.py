@@ -30,6 +30,12 @@ class TestDisableBuiltinCRMMetaSync(unittest.TestCase):
             disable_sync.prevent_builtin_meta_sync_enable(source)
         self.assertEqual(source.enabled,1)
 
+    def test_descriptive_fb_text_does_not_disable_non_meta_provider(self):
+        source=MetaSource(name="FB Consulting Referrals",source_type="Other")
+        with patch.object(disable_sync,"_custom_pipeline_active",return_value=True):
+            disable_sync.prevent_builtin_meta_sync_enable(source)
+        self.assertEqual(source.enabled,1)
+
     def test_all_registered_crm_sync_wrappers_are_stopped(self):
         rows=[SimpleNamespace(name=f"job-{index}",method=method,stopped=0,get=lambda key,default=None:0) for index,method in enumerate(disable_sync.CRM_SYNC_METHODS)]
         meta=SimpleNamespace(has_field=lambda field:field in ("method","stopped"))

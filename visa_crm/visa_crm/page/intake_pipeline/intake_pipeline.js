@@ -1,8 +1,13 @@
 frappe.pages["intake-pipeline"].on_page_load=function(wrapper){
     const page=frappe.ui.make_app_page({parent:wrapper,title:"Lead Intake Pipeline",single_column:true});
-    const root=$(`<div class="visa-prod"><button class="btn btn-primary btn-sm" data-refresh>Refresh</button><div class="visa-pipeline"></div></div>`).appendTo(page.body);
-    function dot(s){return `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${s==="green"?"#16a34a":s==="red"?"#dc2626":"#f59e0b"}"></span>`}
-    function row(x){return `<div class="visa-card"><b>${frappe.utils.escape_html(x.queue||"")}</b><div>${frappe.utils.escape_html(x.status||"")}</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">${(x.timeline||[]).map(t=>`<span>${dot(t.state)} ${frappe.utils.escape_html(t.stage)}</span>`).join("")}</div><pre>${frappe.utils.escape_html(JSON.stringify(x,null,2))}</pre></div>`}
+    const root=$(`<div class="visa-prod visa-intake-ops"><div class="visa-intake-toolbar"><button class="btn btn-primary btn-sm" data-refresh>Refresh</button></div><div class="visa-pipeline"></div></div>`).appendTo(page.body);
+    function esc(value){return frappe.utils.escape_html(String(value??""))}
+    function link(dt,name){const route=String(dt||"").toLowerCase().replace(/\s+/g,"-");return dt&&name?`<a href="/app/${route}/${encodeURIComponent(name)}">${esc(name)}</a>`:""}
+    function stage(t,queue){const actions=t.state==="FAILED"?`<button class="btn btn-xs btn-default" data-retry="${esc(t.stage)}" data-queue="${esc(queue)}">Retry</button>`:"";return `<div class="visa-stage visa-stage-${String(t.color||"gray").toLowerCase()}"><div class="visa-stage-head"><b>${esc(t.stage)}</b><span>${esc(t.state)}</span></div><div class="text-muted">${esc(t.completed_at||t.started_at||"Not started")} ${t.duration_ms?` · ${esc(t.duration_ms)} ms`:""}</div><div>Attempts: ${esc(t.attempt_count||0)} ${link(t.result_doctype,t.result_name)}</div>${t.error?`<div class="visa-stage-error">${esc(t.error)}</div>`:""}${actions}</div>`}
+    function row(x){const ai=x.ai_job?`<div class="visa-ai-state"><b>AI:</b> ${esc(x.ai_job.state)} · Attempts ${esc(x.ai_job.attempt_count||0)}${x.ai_job.last_error?`<div class="visa-stage-error">${esc(x.ai_job.last_error)}</div>`:""}</div>`:"";return `<section class="visa-card visa-intake-record"><div class="visa-intake-head"><div><a href="/app/lead-intake-queue/${encodeURIComponent(x.queue)}"><b>${esc(x.queue)}</b></a><div>${esc(x.status||"")} · ${esc(x.orchestration_status||"")}</div></div><button class="btn btn-xs btn-default" data-resume="${esc(x.queue)}">Resume</button></div><div class="visa-stage-grid">${(x.timeline||[]).map(t=>stage(t,x.queue)).join("")}</div>${ai}</section>`}
     function load(){frappe.call({method:"visa_crm.api.meta_pipeline_audit.intake_pipeline",callback:r=>root.find(".visa-pipeline").html((r.message||[]).map(row).join("")||"<p>No queue records.</p>")})}
-    root.on("click","[data-refresh]",load);load();
+    root.on("click","[data-refresh]",load);
+    root.on("click","[data-retry]",function(){frappe.call({method:"visa_crm.api.meta_pipeline_audit.retry_pipeline_stage",args:{queue_name:this.dataset.queue,stage:this.dataset.retry},freeze:true,callback:load})});
+    root.on("click","[data-resume]",function(){frappe.call({method:"visa_crm.api.meta_pipeline_audit.resume_pipeline",args:{queue_name:this.dataset.resume},freeze:true,callback:load})});
+    load();
 };

@@ -1,4 +1,5 @@
 import frappe
+import re
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 CRM_SYNC_METHOD = "crm.lead_syncing.background_sync.sync_leads_from_all_enabled_sources"
@@ -76,8 +77,17 @@ def _lead_sync_sources():
     return meta_rows, other_enabled
 
 def _is_meta_source(row):
-    text = " ".join(str(row.get(field) or "") for field in row.keys()).lower()
-    return any(token in text for token in ("meta", "facebook", "fb", "instagram"))
+    provider_fields=("type","platform","provider","source")
+    provider_values={"meta","facebook","instagram","meta ads","meta lead ads","facebook lead ads","meta ads facebook"}
+    for field in provider_fields:
+        value=_normalized(row.get(field))
+        if value in provider_values:
+            return True
+    descriptive=" ".join(_normalized(row.get(field)) for field in ("name","title","lead_source") if row.get(field))
+    return any(phrase in descriptive for phrase in ("meta lead ads","meta ads facebook","facebook lead ads"))
+
+def _normalized(value):
+    return re.sub(r"\s+"," ",re.sub(r"[^a-z0-9]+"," ",str(value or "").lower())).strip()
 
 def _is_enabled(row):
     if "enabled" in row and row.get("enabled") is not None:
