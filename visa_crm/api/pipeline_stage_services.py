@@ -5,6 +5,10 @@ from visa_crm.api.meta_graph import GRAPH_VERSION,LEAD_FIELDS,fetch_lead
 from visa_crm.api.meta_mapping import MAPPING_VERSION,normalize_lead
 from visa_crm.api.meta_utils import get_meta_settings,has_field,load_json,safe_json_dumps,set_values
 from visa_crm.api.customer360 import resolve_customer,resolve_lead
+from visa_crm.api.followup import create_meta_followup
+from visa_crm.api.visa_application import create_for_lead
+from visa_crm.api.workflow import create_deal_if_supported,mark_lead_stage,qualify_lead
+from frappe.utils import now
 
 def graph_download(queue_name,claim=None):
     queue=frappe.get_doc("Lead Intake Queue",queue_name)
@@ -75,6 +79,50 @@ def crm_lead(queue_name,claim=None):
     _sync_webhook_event(frappe.get_doc("Lead Intake Queue",queue_name),{"queue_status":"Lead Created","crm_lead":lead,"customer":customer})
     return {"lead":lead,"customer":customer,"result_doctype":"CRM Lead","result_name":lead,"input_hash":frappe.db.get_value("Lead Intake Queue",queue_name,"normalized_payload_hash"),"output_hash":_hash({"lead":lead,"customer":customer})}
 
+def lead_workflow(queue_name,claim=None):
+    queue=_business_context(queue_name)
+    context=_context(queue_name,queue.data)
+    mark_lead_stage(queue.lead,"Lead",context)
+    qualify_lead(queue.lead,context)
+    deal=create_deal_if_supported(queue.lead,queue.data)
+    return {"lead":queue.lead,"deal":deal,"result_doctype":"CRM Lead","result_name":queue.lead,"output_hash":_hash({"lead":queue.lead,"deal":deal})}
+
+def visa_application(queue_name,claim=None):
+    queue=_business_context(queue_name)
+    visa=create_for_lead(queue.lead,queue.customer,queue.data,queue_name=queue_name)
+    set_values("Lead Intake Queue",queue_name,{"visa_application":visa})
+    _sync_webhook_event(frappe.get_doc("Lead Intake Queue",queue_name),{"visa_application":visa})
+    return {"visa_application":visa,"result_doctype":"Visa Application","result_name":visa,"output_hash":_hash({"visa_application":visa})}
+
+def communication_event(queue_name,claim=None):
+    queue=_business_context(queue_name)
+    event_id=f"meta:{queue.data.get('source_lead_id')}"
+    existing=frappe.db.get_value("Communication Event",{"event_id":event_id},"name")
+    if existing:
+        event=existing
+    else:
+        doc=frappe.new_doc("Communication Event")
+        values={"event_id":event_id,"source":"Meta Form","event_type":"Lead","direction":"Inbound","customer":queue.customer,"lead":queue.lead,"visa_application":queue.visa,"phone":queue.data.get("phone"),"email":queue.data.get("email"),"content":safe_json_dumps(queue.data.get("custom_answers")),"summary":f"Meta Lead Ads intake for {queue.data.get('customer_name') or queue.data.get('phone') or queue.data.get('email')}","event_datetime":now(),"channel_id":queue_name}
+        for field,value in values.items():
+            if doc.meta.has_field(field):
+                doc.set(field,value)
+        try:
+            doc.insert(ignore_permissions=True)
+            event=doc.name
+        except frappe.DuplicateEntryError:
+            event=frappe.db.get_value("Communication Event",{"event_id":event_id},"name")
+            if not event:
+                raise
+    set_values("Lead Intake Queue",queue_name,{"communication_event":event})
+    _sync_webhook_event(frappe.get_doc("Lead Intake Queue",queue_name),{"communication_event":event})
+    return {"communication_event":event,"result_doctype":"Communication Event","result_name":event,"output_hash":_hash({"communication_event":event})}
+
+def follow_up(queue_name,claim=None):
+    queue=_business_context(queue_name)
+    todo=create_meta_followup(queue.data,queue.lead,queue.customer,None,queue_name,_context(queue_name,queue.data))
+    set_values("Lead Intake Queue",queue_name,{"followup_reference":todo})
+    return {"followup":todo,"result_doctype":"ToDo","result_name":todo,"output_hash":_hash({"followup":todo})}
+
 def _successful_graph_payload(queue):
     for field in ("graph_payload","graph_api_response"):
         data=load_json(getattr(queue,field,None),{})
@@ -104,3 +152,15 @@ def _hash(value):
 
 def _context(queue_name,data):
     return {"queue_name":queue_name,"source_lead_id":data.get("source_lead_id"),"status":frappe.db.get_value("Lead Intake Queue",queue_name,"status")}
+
+def _business_context(queue_name):
+    queue=frappe.get_doc("Lead Intake Queue",queue_name)
+    data=load_normalized(queue_name)
+    lead=queue.get("matched_lead")
+    customer=queue.get("matched_customer")
+    if not lead or not frappe.db.exists("CRM Lead",lead):
+        raise ValueError("CRM Lead stage has no durable Lead")
+    if not customer or not frappe.db.exists("Customer",customer):
+        raise ValueError("Customer360 stage has no durable Customer")
+    visa=queue.get("visa_application")
+    return frappe._dict({"queue":queue,"data":data,"lead":lead,"customer":customer,"visa":visa})

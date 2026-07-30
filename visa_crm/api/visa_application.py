@@ -1,16 +1,18 @@
 import frappe
 from visa_crm.api.meta_utils import has_doctype, set_if_has
 
-def create_for_lead(lead, customer=None, data=None):
+def create_for_lead(lead, customer=None, data=None, queue_name=None):
     if not has_doctype("Visa Application"):
         frappe.throw("Visa Application DocType is not installed")
     data = data or {}
-    existing = frappe.db.exists("Visa Application", {"lead": lead})
+    key=f"visa:{queue_name}" if queue_name else None
+    existing=frappe.db.exists("Visa Application",{"meta_intake_key":key}) if key and frappe.get_meta("Visa Application").has_field("meta_intake_key") else None
+    existing=existing or frappe.db.exists("Visa Application", {"lead": lead})
     if existing and not customer and not data:
         return existing
     lead_doc = frappe.get_doc("CRM Lead", lead)
     customer = customer or getattr(lead_doc, "customer360", None) or getattr(lead_doc, "customer_360", None) or getattr(lead_doc, "customer_360_match", None)
-    values = {"lead": lead, "customer": customer, "applicant_name": data.get("customer_name") or getattr(lead_doc, "lead_name", None) or getattr(lead_doc, "first_name", None), "visa_type": data.get("visa_type") or getattr(lead_doc, "visa_type", None), "country": data.get("country_interested") or getattr(lead_doc, "country_interested", None), "status": "Draft"}
+    values = {"lead": lead, "customer": customer, "applicant_name": data.get("customer_name") or getattr(lead_doc, "lead_name", None) or getattr(lead_doc, "first_name", None), "visa_type": data.get("visa_type") or getattr(lead_doc, "visa_type", None), "country": data.get("country_interested") or getattr(lead_doc, "country_interested", None), "status": "Draft","meta_intake_key":key}
     if existing:
         doc = frappe.get_doc("Visa Application", existing)
         changed = False
