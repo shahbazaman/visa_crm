@@ -26,3 +26,4 @@ visa_crm.patches.add_gemini_retry_fields
 visa_crm.patches.add_meta_crm_lead_mapping_fields
 visa_crm.patches.add_queue_ai_status_fields
 visa_crm.patches.stabilize_meta_production_blockers
+visa_crm.patches.create_meta_stage_orchestration

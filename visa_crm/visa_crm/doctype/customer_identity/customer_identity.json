@@ -1,0 +1,27 @@
+{
+ "actions":[],
+ "allow_rename":0,
+ "autoname":"field:identity_hash",
+ "doctype":"DocType",
+ "engine":"InnoDB",
+ "field_order":["identity_type","identity_hash","masked_value","customer","verified","source"],
+ "fields":[
+  {"fieldname":"identity_type","fieldtype":"Select","label":"Identity Type","options":"Phone\nWhatsApp\nEmail\nExternal ID","reqd":1},
+  {"fieldname":"identity_hash","fieldtype":"Data","label":"Identity Hash","reqd":1,"unique":1},
+  {"fieldname":"masked_value","fieldtype":"Data","label":"Masked Value"},
+  {"fieldname":"customer","fieldtype":"Link","label":"Customer","options":"Customer","reqd":1},
+  {"default":"0","fieldname":"verified","fieldtype":"Check","label":"Verified"},
+  {"fieldname":"source","fieldtype":"Data","label":"Source"}
+ ],
+ "index_web_pages_for_search":0,
+ "module":"Visa CRM",
+ "name":"Customer Identity",
+ "permissions":[
+  {"create":1,"delete":1,"email":1,"export":1,"print":1,"read":1,"report":1,"role":"System Manager","share":1,"write":1},
+  {"export":1,"print":1,"read":1,"report":1,"role":"Sales Manager"}
+ ],
+ "search_fields":"identity_type,masked_value,customer",
+ "sort_field":"modified",
+ "sort_order":"DESC",
+ "track_changes":1
+}
