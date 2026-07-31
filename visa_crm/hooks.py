@@ -9,7 +9,7 @@ app_include_css = ["/assets/visa_crm/css/visa_crm.css","/assets/visa_crm/css/vis
 after_migrate = "visa_crm.patches.disable_builtin_crm_meta_sync.enforce_builtin_crm_meta_sync_disabled"
 override_doctype_class = {"Lead Sync Source": "visa_crm.overrides.lead_sync_source.VisaCRMLeadSyncSource"}
 doc_events = {
-    "File": {"after_insert": ["visa_crm.api.gemini_service.auto_create_call_intelligence"]},
+    "File": {"after_insert": ["visa_crm.api.android_metadata.handle_file_upload","visa_crm.api.gemini_service.auto_create_call_intelligence"]},
     "Communication Event": {
         "before_insert": ["visa_crm.api.communication_event.auto_link"],
         "after_insert": ["visa_crm.api.communication_center.after_communication_insert"]
@@ -44,9 +44,10 @@ scheduler_events = {
     "cron": {
         "* * * * *": [
             "visa_crm.api.gemini_service.process_unprocessed_audio_files",
+            "visa_crm.api.android_metadata.process_pending_metadata_pairs",
+            "visa_crm.api.gemini_service.retry_failed_calls",
             "visa_crm.api.intake_processor.process_pending"
         ],
-        "*/10 * * * *": ["visa_crm.api.gemini_service.retry_failed_calls"],
         "0 * * * *": ["visa_crm.api.crm_lifecycle.process_overdue_followups"]
     },
     "daily": [

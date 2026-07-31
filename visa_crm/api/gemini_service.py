@@ -12,7 +12,7 @@ from frappe.utils.file_manager import get_file_path
 AUDIO_EXTENSIONS = (".m4a", ".mp3", ".wav", ".aac", ".mpeg", ".ogg", ".webm", ".mp4")
 GEMINI_RETRYABLE_STATUS = "Gemini Retry Scheduled"
 GEMINI_PAUSED_STATUS = "Gemini Rate Limit Paused"
-GEMINI_MAX_RETRIES = 5
+GEMINI_MAX_RETRIES = 0
 
 # Max lengths to avoid Data-too-long DB errors for Data fields
 _MAX_DATA = 255
@@ -63,6 +63,18 @@ def _clean_text(value):
     while text.endswith("|"):
         text = text[:-1].strip()
     return _trunc(text)
+
+def _validate_ai_document(doc):
+    missing=[field.label or field.fieldname for field in doc.meta.fields if field.reqd and not doc.get(field.fieldname)]
+    if missing:
+        frappe.throw(f"{doc.doctype} AI output is missing mandatory fields: {', '.join(missing)}")
+    for field in doc.meta.fields:
+        value=doc.get(field.fieldname)
+        if field.fieldtype=="Select" and value and field.options:
+            allowed=[row.strip() for row in str(field.options).splitlines() if row.strip()]
+            if allowed and value not in allowed:
+                frappe.throw(f"{doc.doctype}.{field.fieldname} has invalid AI value: {value}")
+    return doc
 
 def append_ai_error(doc, message):
     if not message:
@@ -123,29 +135,34 @@ def _schedule_gemini_retry(docname, error, stage):
     if doc.meta.has_field("next_retry_at") and doc.next_retry_at and frappe.utils.get_datetime(doc.next_retry_at) > now_datetime() and doc.processing_status == GEMINI_RETRYABLE_STATUS:
         return
     count = cint(doc.retry_count or 0) + 1
-    if count >= GEMINI_MAX_RETRIES:
-        values = {"processing_status": GEMINI_PAUSED_STATUS, "retry_count": count, "processing_completed_on": now(), "ai_error": _safe_error(f"{stage}: Gemini rate limit. Max retries reached. Please retry manually after quota resets. {error}")}
-        frappe.db.set_value("Call Intelligence", docname, values)
-        frappe.db.commit()
-        _notify_gemini_rate_limit(docname, None, count, stage)
-        frappe.logger("visa_crm.gemini").warning(f"Gemini rate limit paused for {docname}; max retries reached")
-        return
-    delay = min(240, 15 * (2 ** max(count - 1, 0)))
-    retry_at = add_to_date(now_datetime(), minutes=delay)
-    values = {"processing_status": GEMINI_RETRYABLE_STATUS, "retry_count": count, "processing_completed_on": now(), "ai_error": _safe_error(f"{stage}: Gemini rate limit. Retry {count}/{GEMINI_MAX_RETRIES} scheduled at {retry_at}. {error}")}
+    delays=(30,120,300,600,1800)
+    delay=delays[count-1] if 1<=count<=len(delays) else 3600
+    retry_at=add_to_date(now_datetime(),seconds=delay)
+    values={"processing_status":GEMINI_RETRYABLE_STATUS,"retry_count":count,"processing_completed_on":now(),"ai_error":_safe_error(f"{stage}: Gemini retry {count} scheduled at {retry_at}. {error}")}
     if doc.meta.has_field("next_retry_at"):
         values["next_retry_at"] = retry_at
     frappe.db.set_value("Call Intelligence", docname, values)
+    _append_gemini_retry(docname,{"at":str(now_datetime()),"stage":stage,"attempt":count,"error":_safe_error(error),"next_retry_at":str(retry_at)})
     frappe.db.commit()
-    _notify_gemini_rate_limit(docname, retry_at, count, stage)
-    frappe.logger("visa_crm.gemini").warning(f"Gemini rate limit for {docname}; retry {count}/{GEMINI_MAX_RETRIES} at {retry_at}")
+    _notify_gemini_rate_limit(docname,retry_at,count,stage)
+    frappe.logger("visa_crm.gemini").warning(f"Gemini rate limit for {docname}; retry {count} at {retry_at}")
+
+def _append_gemini_retry(docname,item):
+    if not frappe.get_meta("Call Intelligence").has_field("gemini_retry_history_json"):
+        return
+    try:
+        history=json.loads(frappe.db.get_value("Call Intelligence",docname,"gemini_retry_history_json") or "[]")
+    except Exception:
+        history=[]
+    history.append(item)
+    frappe.db.set_value("Call Intelligence",docname,"gemini_retry_history_json",json.dumps(history[-200:],default=str),update_modified=False)
 
 def _notify_gemini_rate_limit(docname, retry_at, count, stage):
     try:
         users = frappe.get_all("Has Role", filters={"role": "System Manager", "parenttype": "User"}, pluck="parent", limit=20)
         for user in users:
             if user and frappe.db.exists("User", user):
-                content = f"{stage} hit Gemini rate limit. Retry {count}/{GEMINI_MAX_RETRIES} scheduled at {retry_at}." if retry_at else f"{stage} hit Gemini rate limit. Max retries reached; manual retry needed after quota resets."
+                content=f"{stage} hit Gemini rate limit. Retry {count} scheduled at {retry_at}." if retry_at else f"{stage} hit Gemini rate limit."
                 frappe.get_doc({"doctype": "Notification Log", "subject": "Gemini rate limit on Call Intelligence", "type": "Alert", "for_user": user, "document_type": "Call Intelligence", "document_name": docname, "email_content": content}).insert(ignore_permissions=True)
         frappe.db.commit()
     except Exception:
@@ -205,11 +222,12 @@ def wait_until_active(file_uri, timeout_sec=60):
     return False
 
 
-def analyze_audio(file_uri):
+def analyze_audio(file_uri,call_doc=None):
     api_key = get_api_key()
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
 
-    prompt = """
+    metadata_context=_call_metadata_context(call_doc)
+    prompt = f"""
 You are an assistant that analyzes audio conversations. Reply using ONLY labeled fields in this exact format.
 Each field must be on the same line as its label, and fields must be separated by a pipe character (`|`).
 If a field is unknown, write `None`.
@@ -249,6 +267,8 @@ AI Feedback: <feedback>
 Strengths: <strengths>
 Weaknesses: <weaknesses>
 Coaching Tips: <coaching tips>
+Trusted Android call metadata follows. Use it for speaker attribution and never guess or replace these values:
+{metadata_context}
 """
 
     payload = {
@@ -276,6 +296,20 @@ Coaching Tips: <coaching tips>
             return part["text"]
 
     raise ValueError("Gemini response contains no text part")
+
+def _call_metadata_context(call_doc):
+    if not call_doc:
+        return "No Android metadata supplied."
+    values={
+        "Employee Name":getattr(call_doc,"employee_name",None),
+        "Employee ID":getattr(call_doc,"employee_id",None),
+        "Direction":getattr(call_doc,"call_direction",None),
+        "Duration Seconds":getattr(call_doc,"duration_seconds",None) or getattr(call_doc,"call_duration_seconds",None),
+        "Customer Phone":getattr(call_doc,"customer_phone",None) or getattr(call_doc,"customer_phone_extracted",None),
+        "Start Time":getattr(call_doc,"start_time",None),
+        "End Time":getattr(call_doc,"end_time",None)
+    }
+    return "\n".join(f"{key}: {value}" for key,value in values.items() if value is not None) or "No Android metadata supplied."
 
 
 def contains_malayalam(text):
@@ -457,6 +491,7 @@ def create_lead_if_missing(doc):
         "first_name": _trunc(doc.customer_name or "Unknown Caller"),
         "mobile_no": _trunc(doc.customer_phone_extracted),
     })
+    _validate_ai_document(lead)
     lead.insert(ignore_permissions=True)
     doc.lead_match = lead.name
     frappe.db.commit()
@@ -470,6 +505,7 @@ def create_customer_if_missing(doc):
         "customer_name": _trunc(doc.customer_name or "Unknown Customer"),
         "mobile_no": _trunc(doc.customer_phone_extracted),
     })
+    _validate_ai_document(customer)
     customer.insert(ignore_permissions=True)
     doc.customer_360_match = customer.name
     frappe.db.commit()
@@ -487,6 +523,7 @@ def create_opportunity(doc):
         "party_name": doc.lead_match,
         "status": "Open",
     })
+    _validate_ai_document(opp)
     opp.insert(ignore_permissions=True)
     frappe.db.commit()
 
@@ -502,7 +539,7 @@ def create_followup_todo(doc):
         task_text += doc.tasks + "\n"
     if doc.follow_up_commitments and doc.follow_up_commitments != "None":
         task_text += doc.follow_up_commitments
-    task_text = _trunc(task_text,140)
+    task_text=_trunc(task_text.strip(),140) or f"Follow up on Call Intelligence {doc.name}"
     todo = frappe.get_doc({
         "doctype": "ToDo",
         "description": task_text,
@@ -515,6 +552,7 @@ def create_followup_todo(doc):
         if user:
             todo.allocated_to = user
     try:
+        _validate_ai_document(todo)
         todo.insert(
             ignore_permissions=True
         )
@@ -545,7 +583,7 @@ def create_communication_event(doc):
     event = frappe.get_doc({
         "doctype": "Communication Event",
         "event_type": "Call",
-        "direction": "Inbound",
+        "direction": getattr(doc,"call_direction",None) or "Inbound",
         "event_datetime": frappe.utils.now(),
         "customer": doc.customer_360_match,
         "lead": doc.lead_match,
@@ -556,10 +594,17 @@ def create_communication_event(doc):
         "recording": doc.recording_file,
         "status": "Closed",
     })
+    _validate_ai_document(event)
     event.insert(ignore_permissions=True)
     doc.communication_event = event.name
     doc.db_update()
     frappe.db.commit()
+    try:
+        from visa_crm.api.android_metadata import enrich_communication_event
+        enrich_communication_event(event.name,doc)
+        frappe.db.commit()
+    except Exception:
+        frappe.logger("visa_crm.android").warning(frappe.get_traceback())
     if doc.customer_360_match:
         from visa_crm.api.communication_timeline import add_to_customer_timeline
         add_to_customer_timeline(doc.customer_360_match,event)
@@ -611,6 +656,7 @@ def create_employee_evaluation(doc):
             eval_doc.needs_coaching = 1
         elif score_val < 7:
             eval_doc.needs_review = 1
+        _validate_ai_document(eval_doc)
         eval_doc.insert(ignore_permissions=True)
         frappe.db.commit()
     except Exception:
@@ -673,6 +719,7 @@ def assign_lead(doc):
         "priority": "Medium",
         "status": "Pending",
     })
+    _validate_ai_document(assignment)
     assignment.insert(ignore_permissions=True)
     frappe.db.commit()
 
@@ -737,6 +784,7 @@ def update_employee_kpi(doc):
     if kpi_name:
         kpi.save(ignore_permissions=True)
     else:
+        _validate_ai_document(kpi)
         kpi.insert(ignore_permissions=True)
 
     update_leaderboard()
@@ -756,6 +804,7 @@ def log_ai_usage(doc, file_uri=None, status="Success", error_message=None):
             "gemini_file_uri": file_uri,
             "error_message": _trunc(error_message, 500) if error_message else None,
         })
+        _validate_ai_document(usage)
         usage.insert(ignore_permissions=True)
         frappe.db.commit()
     except Exception:
@@ -767,9 +816,11 @@ def save_ai_results(call_docname, parsed, raw_response, file_uri):
     filename = os.path.basename(doc.recording_file) if doc.recording_file else None
     phone_data = extract_phone_data(filename)
 
-    # Truncate short fields to avoid DB errors
-    doc.customer_phone_extracted = _trunc(phone_data.get("customer_phone"))
-    doc.employee_phone_extracted = _trunc(phone_data.get("employee_phone"))
+    # Android metadata is authoritative; AI and filename values are fallbacks only.
+    metadata_customer=getattr(doc,"customer_phone",None)
+    metadata_employee=getattr(doc,"employee_phone",None)
+    doc.customer_phone_extracted=_trunc(metadata_customer or parsed.get("Customer Phone Number") or doc.customer_phone_extracted or phone_data.get("customer_phone"))
+    doc.employee_phone_extracted=_trunc(metadata_employee or parsed.get("Employee Phone") or doc.employee_phone_extracted or phone_data.get("employee_phone"))
 
     doc.summary = parsed.get("Summary")
     doc.emotion = _trunc(parsed.get("Emotion"))
@@ -866,7 +917,14 @@ def save_ai_results(call_docname, parsed, raw_response, file_uri):
         if lead:
             doc.lead_match = lead
 
-        employee = frappe.db.get_value("Employee", {"employee_number": doc.employee_phone_extracted})
+        employee=getattr(doc,"employee_match",None)
+        employee_id=getattr(doc,"employee_id",None)
+        if not employee and employee_id and frappe.db.exists("Employee",employee_id):
+            employee=employee_id
+        if not employee and employee_id and frappe.get_meta("Employee").has_field("employee_number"):
+            employee=frappe.db.get_value("Employee",{"employee_number":employee_id})
+        if not employee and doc.employee_phone_extracted and frappe.get_meta("Employee").has_field("employee_number"):
+            employee=frappe.db.get_value("Employee",{"employee_number":doc.employee_phone_extracted})
         if employee:
             doc.employee_match = employee
 
@@ -925,7 +983,7 @@ def save_ai_results(call_docname, parsed, raw_response, file_uri):
                 lost = frappe.get_doc({
                     "doctype": "Lost Lead Intelligence",
                     "lead": doc.lead_match,
-                    "reason": "Low Score",
+                    "reason": "Other",
                     "call": doc.name,
                     "emotion": doc.emotion,
                     "country": doc.country_of_interest,
@@ -934,6 +992,7 @@ def save_ai_results(call_docname, parsed, raw_response, file_uri):
                     "lead_score": doc.lead_score,
                     "date": frappe.utils.today(),
                 })
+                _validate_ai_document(lost)
                 lost.insert(ignore_permissions=True)
                 frappe.db.commit()
     except Exception:
@@ -1005,7 +1064,7 @@ def process_unprocessed_audio_files():
 def retry_failed_calls():
     _schedule_existing_rate_limited_calls()
     statuses = ["Failed Upload to Gemini", "Failed Transcription", GEMINI_RETRYABLE_STATUS]
-    filters = {"processing_status": ["in", statuses], "retry_count": ["<", GEMINI_MAX_RETRIES]}
+    filters={"processing_status":["in",statuses]}
     docs = frappe.get_all("Call Intelligence", filters=filters, fields=["name"])
     for d in docs:
         if not _retry_due(d.name):
@@ -1019,7 +1078,7 @@ def _retry_due(docname):
     return not retry_at or frappe.utils.get_datetime(retry_at) <= now_datetime()
 
 def _schedule_existing_rate_limited_calls():
-    docs = frappe.get_all("Call Intelligence", filters={"processing_status": ["in", ["Failed Upload to Gemini", "Failed Transcription", "Failed to Upload"]], "retry_count": ["<", GEMINI_MAX_RETRIES]}, fields=["name", "ai_error"], limit=500)
+    docs=frappe.get_all("Call Intelligence",filters={"processing_status":["in",["Failed Upload to Gemini","Failed Transcription","Failed to Upload"]]},fields=["name","ai_error"],limit=500)
     for doc in docs:
         if _is_rate_limited(doc.ai_error):
             _schedule_gemini_retry(doc.name, doc.ai_error, "Gemini previous failure")
@@ -1042,6 +1101,12 @@ def unattended_leads():
 def enqueue_processing(doc, method=None):
     if not doc.recording_file:
         return
+    try:
+        from visa_crm.api.android_metadata import should_wait_for_metadata
+        if should_wait_for_metadata(doc):
+            return
+    except Exception:
+        frappe.logger("visa_crm.android").warning(frappe.get_traceback())
 
     if method == "after_save" and not doc.get_doc_before_save():
         # Skip the save hook for a new document; after_insert will handle it.
@@ -1149,14 +1214,19 @@ def prevent_duplicate_call_intelligence(doc, method=None):
 
 def _file_fields():
     fields = ["name", "file_name", "file_url", "attached_to_doctype", "attached_to_name", "attached_to_field"]
-    for field in ("content_hash", "file_size"):
-        if frappe.db.has_column("File", field):
+    for field in ("content_hash","file_size","description"):
+        if frappe.db.has_column("File",field):
             fields.append(field)
     return fields
 
 def _new_call_intelligence(file_doc):
     doc = frappe.get_doc({"doctype": "Call Intelligence", "recording_file": file_doc.file_url, "processing_status": "Pending"})
     _set_audio_identity(doc, file_doc)
+    try:
+        from visa_crm.api.android_metadata import prepare_call_doc
+        prepare_call_doc(doc,file_doc)
+    except Exception:
+        frappe.logger("visa_crm.android").warning(frappe.get_traceback())
     return doc
 
 def _set_audio_identity(call_doc, file_doc):
@@ -1182,6 +1252,17 @@ def _store_audio_identity_on_new_doc(doc):
         doc.file_size = size
 
 def _existing_audio_call(file_doc, exclude=None):
+    recording_id=getattr(file_doc,"recording_id",None)
+    if not recording_id:
+        try:
+            from visa_crm.api.android_metadata import extract_metadata
+            recording_id=extract_metadata(file_doc).get("metadata",{}).get("recording_id")
+        except Exception:
+            recording_id=None
+    if recording_id and frappe.get_meta("Call Intelligence").has_field("recording_id"):
+        existing=_first_original_call({"recording_id":recording_id},exclude)
+        if existing and existing!=exclude:
+            return existing
     file_url = getattr(file_doc, "file_url", None) or getattr(file_doc, "recording_file", None)
     if file_url:
         existing = _first_original_call({"recording_file": file_url}, exclude)
@@ -1293,6 +1374,16 @@ def process_call_intelligence(docname):
             frappe.log_error(f"{docname} not found", "Gemini Processing")
             return
         call_doc = frappe.get_doc("Call Intelligence", docname)
+        try:
+            from visa_crm.api.android_metadata import enrich_audio_file,should_wait_for_metadata
+            if should_wait_for_metadata(call_doc):
+                return "Waiting for Android metadata"
+            file_doc=frappe.db.get_value("File",{"file_url":call_doc.recording_file},"name")
+            if file_doc:
+                enrich_audio_file(file_doc)
+                call_doc.reload()
+        except Exception:
+            frappe.logger("visa_crm.android").warning(frappe.get_traceback())
         if not call_doc.recording_file:
             set_call_status(docname, "Failed Upload to Gemini", "No recording_file present", overwrite=True)
             frappe.db.set_value("Call Intelligence", docname, "processing_completed_on", now())
@@ -1316,11 +1407,13 @@ def process_call_intelligence(docname):
         frappe.db.set_value("Call Intelligence", docname, "file_size", size)
         _store_call_fingerprint(call_doc, size)
 
-        # extract phones
+        # Use legacy filename extraction only when canonical Android metadata is absent.
         filename = os.path.basename(file_path)
         phone_data = extract_phone_data(filename)
-        frappe.db.set_value("Call Intelligence", docname, "customer_phone_extracted", _trunc(phone_data.get("customer_phone")))
-        frappe.db.set_value("Call Intelligence", docname, "employee_phone_extracted", _trunc(phone_data.get("employee_phone")))
+        customer_phone=getattr(call_doc,"customer_phone",None) or call_doc.customer_phone_extracted or phone_data.get("customer_phone")
+        employee_phone=getattr(call_doc,"employee_phone",None) or call_doc.employee_phone_extracted or phone_data.get("employee_phone")
+        frappe.db.set_value("Call Intelligence",docname,"customer_phone_extracted",_trunc(customer_phone))
+        frappe.db.set_value("Call Intelligence",docname,"employee_phone_extracted",_trunc(employee_phone))
 
         frappe.db.set_value("Call Intelligence", docname, "processing_started_on", now())
         set_call_status(docname, "Uploading to Gemini")
@@ -1346,7 +1439,7 @@ def process_call_intelligence(docname):
             return
 
         try:
-            response = analyze_audio(file_uri)
+            response=analyze_audio(file_uri,call_doc)
         except Exception as e:
             if _is_rate_limited(e):
                 _schedule_gemini_retry(docname, e, "Gemini analysis")

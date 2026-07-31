@@ -2,6 +2,15 @@ frappe.ui.form.on("Call Intelligence", {
 
     refresh(frm) {
 
+        if (frm.doc.metadata_status) {
+            const color = frm.doc.metadata_status === "Valid" ? "green" : frm.doc.metadata_status === "Waiting" ? "orange" : "red";
+            frm.dashboard.add_indicator(__("Metadata: {0}", [frm.doc.metadata_status]), color);
+        }
+        if (frm.doc.integrity_status) {
+            const color = frm.doc.integrity_status === "Mismatch" ? "red" : "green";
+            frm.dashboard.add_indicator(__("Integrity: {0}", [frm.doc.integrity_status]), color);
+        }
+
         if (!frm.doc.__islocal) {
 
             frm.add_custom_button(

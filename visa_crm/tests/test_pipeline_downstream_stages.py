@@ -9,7 +9,7 @@ class TestPipelineDownstreamStages(FrappeTestCase):
         suffix=frappe.generate_hash(length=10)
         self.source=f"DOWN-{suffix}"
         phone=f"+9715{''.join(str(ord(char)%10) for char in suffix)[:8]}"
-        data={"source_lead_id":self.source,"customer_name":f"Downstream {suffix}","phone":phone,"email":f"{suffix}@example.com","visa_type":"Tourist","country_interested":"UAE","meta_fields":{"full_name":f"Downstream {suffix}","phone":phone},"meta_raw_fields":"{}"}
+        data={"source_lead_id":self.source,"customer_name":f"Downstream {suffix}","phone":phone,"email":f"{suffix}@example.com","visa_type":"Tourist","country_interested":"UAE","destination":"Dubai","travel_month":"December","budget":"5000","passport":"Valid","notes":"Call after 5 PM","campaign_name":"Summer Visa","campaign_id":"CMP-1","adset_name":"UAE Travelers","adset_id":"SET-1","ad_name":"Dubai Visa","ad_id":"AD-1","page_id":"PAGE-1","form_id":"FORM-1","custom_answers":{"preferred_contact":"WhatsApp"},"meta_fields":{"full_name":f"Downstream {suffix}","phone":phone},"meta_raw_fields":"{}"}
         doc=frappe.new_doc("Lead Intake Queue")
         doc.source_lead_id=self.source
         doc.status="Lead Downloaded"
@@ -48,3 +48,15 @@ class TestPipelineDownstreamStages(FrappeTestCase):
             self.assertEqual(frappe.db.count("Reminder Scheduler",{"meta_intake_key":f"reminder:{self.queue}"}),1)
         if frappe.db.exists("DocType","Activity Timeline") and frappe.get_meta("Activity Timeline").has_field("meta_intake_key"):
             self.assertEqual(frappe.db.count("Activity Timeline",{"meta_intake_key":f"activity:{self.queue}"}),1)
+        visa=frappe.get_doc("Visa Application",visa1)
+        self.assertEqual(visa.destination,"Dubai")
+        self.assertEqual(visa.travel_month,"December")
+        self.assertEqual(str(visa.budget),"5000")
+        self.assertEqual(visa.passport_status,"Valid")
+        self.assertIn("preferred_contact",visa.meta_answers_json)
+        event=frappe.get_doc("Communication Event",event1)
+        self.assertEqual(event.meta_campaign_id,"CMP-1")
+        self.assertEqual(event.facebook_lead_id,self.source)
+        self.assertEqual(event.visa_application,visa1)
+        self.assertEqual(event.lead_intake_queue,self.queue)
+        self.assertIn("Summer Visa",event.meta_attribution_json)

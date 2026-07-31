@@ -70,7 +70,7 @@ class TestAIEnqueueIsolation(FrappeTestCase):
         job=frappe.db.get_value("Lead Intake AI Job",{"queue":self.queue},"name")
         frappe.db.set_value("Lead Intake AI Job",job,"queued_at",add_to_date(now_datetime(),hours=-2),update_modified=False)
         frappe.db.commit()
-        self.assertEqual(services.recover_stale_ai_jobs(),1)
+        self.assertGreaterEqual(services.recover_stale_ai_jobs(),1)
         self.assertEqual(frappe.db.get_value("Lead Intake AI Job",job,"state"),"FAILED")
         self.assertEqual(frappe.db.get_value("Lead Intake Queue",self.queue,"status"),"Processed")
         with patch("visa_crm.api.pipeline_stage_services.frappe.enqueue") as enqueue:

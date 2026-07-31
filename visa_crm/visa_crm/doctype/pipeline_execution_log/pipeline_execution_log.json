@@ -1,0 +1,38 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-07-31 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["queue","stage","execution_type","execution_time","duration_ms","worker_id","result","retry_count","warning_count","failure_reason","next_retry_at","traceback","details_json"],
+ "fields": [
+  {"fieldname":"queue","fieldtype":"Link","label":"Lead Intake Queue","options":"Lead Intake Queue"},
+  {"fieldname":"stage","fieldtype":"Data","in_list_view":1,"label":"Stage"},
+  {"fieldname":"execution_type","fieldtype":"Select","in_list_view":1,"label":"Execution Type","options":"Scheduler\nStage\nRetry\nAutomatic Retry\nStale Recovery\nWorker Restart\nAI Retry\nAndroid Pairing\nCompletion"},
+  {"fieldname":"execution_time","fieldtype":"Datetime","in_list_view":1,"label":"Execution Time","reqd":1},
+  {"fieldname":"duration_ms","fieldtype":"Int","label":"Duration (ms)"},
+  {"fieldname":"worker_id","fieldtype":"Data","label":"Worker ID"},
+  {"fieldname":"result","fieldtype":"Select","in_list_view":1,"label":"Result","options":"RUNNING\nSUCCESS\nFAILED\nRECOVERED\nSKIPPED\nWARNING","reqd":1},
+  {"fieldname":"retry_count","fieldtype":"Int","label":"Retry Count"},
+  {"fieldname":"warning_count","fieldtype":"Int","label":"Warning Count"},
+  {"fieldname":"failure_reason","fieldtype":"Long Text","label":"Failure Reason"},
+  {"fieldname":"next_retry_at","fieldtype":"Datetime","label":"Next Retry"},
+  {"fieldname":"traceback","fieldtype":"Code","label":"Traceback","options":"Python"},
+  {"fieldname":"details_json","fieldtype":"Long Text","label":"Details JSON"}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-07-31 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Visa CRM",
+ "name": "Pipeline Execution Log",
+ "owner": "Administrator",
+ "permissions": [
+  {"create":1,"delete":0,"email":0,"export":1,"print":1,"read":1,"report":1,"role":"System Manager","share":0,"write":0},
+  {"create":0,"delete":0,"email":0,"export":1,"print":1,"read":1,"report":1,"role":"Sales Manager","share":0,"write":0}
+ ],
+ "sort_field": "execution_time",
+ "sort_order": "DESC",
+ "states": []
+}

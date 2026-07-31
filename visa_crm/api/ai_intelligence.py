@@ -2,6 +2,7 @@ import json
 import frappe
 from frappe.utils import add_to_date,cint,now_datetime,nowdate
 from visa_crm.api.meta_utils import has_doctype, has_field, safe_json_dumps
+from visa_crm.api.execution_history import record
 
 AI_FIELDS=("summary","sentiment","lead_score","ai_next_best_action","ai_followup_suggestion","ai_lost_lead_analysis","ai_employee_coaching","ai_manager_summary","ai_reminder_suggestion","ai_customer_priority","ai_visa_recommendation","ai_quality_analysis","ai_timeline_summary")
 
@@ -49,6 +50,7 @@ def _process_staged_ai(event_name,queue_name,ai_job_name=None):
         frappe.db.set_value("Lead Intake Queue",queue_name,{"ai_status":"Completed","ai_error":"","ai_traceback":""},update_modified=False)
         if ai_job_name:
             frappe.db.set_value("Lead Intake AI Job",ai_job_name,{"state":"COMPLETED","completed_at":now_datetime(),"heartbeat_at":now_datetime(),"next_retry_at":None,"result_json":safe_json_dumps(insights),"last_error_class":None,"last_error":None,"last_traceback":None},update_modified=False)
+        record(queue=queue_name,stage="AI_GEMINI",execution_type="Completion",result="SUCCESS",retry_count=frappe.db.get_value("Lead Intake AI Job",ai_job_name,"attempt_count") if ai_job_name else 0,details={"communication_event":event_name,"insight_fields":list(insights)})
         frappe.db.commit()
     except Exception as exc:
         traceback=frappe.get_traceback()
@@ -58,7 +60,14 @@ def _process_staged_ai(event_name,queue_name,ai_job_name=None):
         frappe.db.set_value("Lead Intake Queue",queue_name,{"ai_status":"Failed","ai_error":str(exc),"ai_traceback":traceback},update_modified=False)
         if ai_job_name:
             attempt=frappe.db.get_value("Lead Intake AI Job",ai_job_name,"attempt_count") or 1
-            frappe.db.set_value("Lead Intake AI Job",ai_job_name,{"state":"FAILED","next_retry_at":add_to_date(now_datetime(),minutes=min(360,2**min(max(attempt,1),8))),"heartbeat_at":now_datetime(),"last_error_class":f"{type(exc).__module__}.{type(exc).__qualname__}","last_error":str(exc),"last_traceback":traceback},update_modified=False)
+            from visa_crm.api.pipeline_stage_services import ai_retry_at,_append_ai_retry_history
+            retry_at=ai_retry_at(attempt,now_datetime())
+            frappe.db.set_value("Lead Intake AI Job",ai_job_name,{"state":"FAILED","next_retry_at":retry_at,"heartbeat_at":now_datetime(),"last_error_class":f"{type(exc).__module__}.{type(exc).__qualname__}","last_error":str(exc),"last_traceback":traceback},update_modified=False)
+            _append_ai_retry_history(ai_job_name,{"at":str(now_datetime()),"attempt":attempt,"result":"FAILED","error":str(exc),"next_retry_at":str(retry_at)})
+        else:
+            retry_at=None
+            attempt=0
+        record(queue=queue_name,stage="AI_GEMINI",execution_type="AI Retry",result="FAILED",retry_count=attempt,failure_reason=str(exc),next_retry=retry_at,traceback=traceback,details={"communication_event":event_name,"ai_job":ai_job_name})
         frappe.db.commit()
         frappe.logger("visa_crm.ai").error(safe_json_dumps({"event":"staged_ai_failed","queue":queue_name,"communication_event":event_name,"exception_class":f"{type(exc).__module__}.{type(exc).__qualname__}","error":str(exc),"traceback":traceback}))
 
@@ -142,10 +151,11 @@ def _auto_task(doc,insights,queue_name=None):
     key=f"ai-task:{queue_name}" if queue_name else None
     if key and has_field("ToDo","meta_intake_key") and frappe.db.exists("ToDo",{"meta_intake_key":key}):
         return
-    if frappe.db.exists("ToDo",{"reference_type":ref_type,"reference_name":ref,"description":insights.get("auto_task")}):
+    description=str(insights.get("auto_task") or "").strip() or f"Follow up on Communication Event {doc.name}"
+    if frappe.db.exists("ToDo",{"reference_type":ref_type,"reference_name":ref,"description":description}):
         return
     todo=frappe.new_doc("ToDo")
-    todo.description=insights.get("auto_task")
+    todo.description=description
     todo.reference_type=ref_type
     todo.reference_name=ref
     todo.status="Open"
@@ -154,6 +164,7 @@ def _auto_task(doc,insights,queue_name=None):
         todo.allocated_to=assigned
     if key and has_field("ToDo","meta_intake_key"):
         todo.meta_intake_key=key
+    _validate_ai_document(todo)
     todo.insert(ignore_permissions=True)
 
 def _timeline(doc,insights,queue_name=None):
@@ -175,7 +186,14 @@ def _timeline(doc,insights,queue_name=None):
             tl.set(field,message)
     if key and has_field("Lead Timeline","meta_intake_key"):
         tl.meta_intake_key=key
+    _validate_ai_document(tl)
     tl.insert(ignore_permissions=True)
+
+def _validate_ai_document(doc):
+    missing=[field.label or field.fieldname for field in doc.meta.fields if field.reqd and not doc.get(field.fieldname)]
+    if missing:
+        frappe.throw(f"{doc.doctype} AI output is missing mandatory fields: {', '.join(missing)}")
+    return doc
 
 def _staff():
     if frappe.session.user=="Guest" or not ({"System Manager","Sales Manager","Counselor","Visa Processing","Administrator"} & set(frappe.get_roles())):

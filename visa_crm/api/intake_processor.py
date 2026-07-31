@@ -3,24 +3,38 @@ from frappe.utils import add_to_date,get_datetime,now,now_datetime
 from visa_crm.api.meta_utils import has_field,load_json,log_info,meta_debug_log,safe_json_dumps,set_values
 from visa_crm.api.pipeline_engine import ensure_stage_ledger,next_eligible_stage,recover_expired_leases,rollup_queue,run_stage,stages_for
 from visa_crm.api import pipeline_stage_services as services
+from visa_crm.api.execution_history import ExecutionTimer
 
 HANDLERS={"GRAPH_DOWNLOAD":services.graph_download,"NORMALIZE":services.normalize,"CUSTOMER360":services.customer360,"CRM_LEAD":services.crm_lead,"LEAD_WORKFLOW":services.lead_workflow,"VISA_APPLICATION":services.visa_application,"COMMUNICATION_EVENT":services.communication_event,"FOLLOW_UP":services.follow_up,"COUNSELOR_ASSIGNMENT":services.counselor_assignment,"AI_DISPATCH":services.ai_dispatch}
 FAILURE_HANDLERS={"GRAPH_DOWNLOAD":services.graph_failure,"COUNSELOR_ASSIGNMENT":services.assignment_failure,"AI_DISPATCH":services.ai_dispatch_failure}
 
 def process_pending(limit=100):
+    timer=ExecutionTimer(stage="META_PIPELINE_SCHEDULER",execution_type="Scheduler",details={"limit":limit})
     meta_debug_log("process_pending_start",status="scheduler",limit=limit)
-    recover_expired_leases()
-    services.recover_stale_ai_jobs()
-    _recover_stale_fetches()
-    rows=_pending_rows(limit)
-    for row in rows:
-        try:
-            process_queue(row.name)
-        except Exception as exc:
-            frappe.db.rollback()
-            frappe.logger("visa_crm.pipeline").error(safe_json_dumps({"event":"queue_orchestration_failed","queue":row.name,"exception_class":f"{type(exc).__module__}.{type(exc).__qualname__}","error":str(exc),"traceback":frappe.get_traceback()}))
-    meta_debug_log("process_pending_end",status="scheduler",count=len(rows),limit=limit)
-    return len(rows)
+    rows=[]
+    failures=0
+    try:
+        recover_expired_leases()
+        services.recover_stale_ai_jobs()
+        _recover_stale_fetches()
+        rows=_pending_rows(limit)
+        for row in rows:
+            try:
+                process_queue(row.name)
+            except Exception as exc:
+                failures+=1
+                frappe.db.rollback()
+                frappe.logger("visa_crm.pipeline").error(safe_json_dumps({"event":"queue_orchestration_failed","queue":row.name,"exception_class":f"{type(exc).__module__}.{type(exc).__qualname__}","error":str(exc),"traceback":frappe.get_traceback()}))
+        timer.finish(result="WARNING" if failures else "SUCCESS",warning_count=failures,details={"queue_count":len(rows),"failure_count":failures})
+        frappe.db.commit()
+        meta_debug_log("process_pending_end",status="scheduler",count=len(rows),limit=limit)
+        return len(rows)
+    except Exception as exc:
+        traceback=frappe.get_traceback()
+        frappe.db.rollback()
+        timer.finish(result="FAILED",failure_reason=str(exc),traceback=traceback,details={"queue_count":len(rows)})
+        frappe.db.commit()
+        raise
 
 def process_queue(docname,stage_budget=20):
     if not frappe.db.exists("Lead Intake Queue",docname):

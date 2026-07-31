@@ -13,7 +13,8 @@ def create_for_lead(lead, customer=None, data=None, queue_name=None):
         return existing
     lead_doc = frappe.get_doc("CRM Lead", lead)
     customer = customer or getattr(lead_doc, "customer360", None) or getattr(lead_doc, "customer_360", None) or getattr(lead_doc, "customer_360_match", None)
-    values = {"lead": lead, "customer": customer, "applicant_name": data.get("customer_name") or getattr(lead_doc, "lead_name", None) or getattr(lead_doc, "first_name", None), "visa_type": data.get("visa_type") or getattr(lead_doc, "visa_type", None), "country": data.get("country_interested") or getattr(lead_doc, "country_interested", None), "status": "Draft","meta_intake_key":key}
+    answers=data.get("custom_answers") or data.get("meta_fields") or {}
+    values={"lead":lead,"customer":customer,"applicant_name":data.get("customer_name") or getattr(lead_doc,"lead_name",None) or getattr(lead_doc,"first_name",None),"visa_type":data.get("visa_type") or getattr(lead_doc,"visa_type",None),"country":data.get("country_interested") or getattr(lead_doc,"country_interested",None),"destination":data.get("destination") or data.get("country_interested"),"travel_month":data.get("travel_month"),"budget":data.get("budget"),"passport_status":data.get("passport") or data.get("passport_status"),"notes":data.get("notes") or data.get("message"),"campaign_source":data.get("campaign_name") or data.get("lead_source"),"meta_campaign_id":data.get("campaign_id"),"meta_campaign_name":data.get("campaign_name"),"meta_answers_json":frappe.as_json(answers) if answers else None,"status":"Draft","meta_intake_key":key}
     if existing:
         doc = frappe.get_doc("Visa Application", existing)
         changed = False

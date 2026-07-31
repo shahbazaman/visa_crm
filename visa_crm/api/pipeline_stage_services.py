@@ -4,7 +4,7 @@ import os
 import socket
 import uuid
 import frappe
-from frappe.utils import add_to_date,get_datetime,now,now_datetime
+from frappe.utils import add_to_date,cint,get_datetime,now,now_datetime
 from visa_crm.api.meta_graph import GRAPH_VERSION,LEAD_FIELDS,fetch_lead
 from visa_crm.api.meta_mapping import MAPPING_VERSION,normalize_lead
 from visa_crm.api.meta_utils import get_meta_settings,has_field,load_json,log_info,safe_json_dumps,set_values
@@ -13,6 +13,7 @@ from visa_crm.api.followup import create_meta_followup
 from visa_crm.api.lead_assignment import assign_lead
 from visa_crm.api.visa_application import create_for_lead
 from visa_crm.api.workflow import create_deal_if_supported,mark_lead_stage,qualify_lead
+from visa_crm.api.execution_history import record
 
 class NoEligibleCounselor(RuntimeError):
     pass
@@ -152,12 +153,18 @@ def visa_application(queue_name,claim=None):
 def communication_event(queue_name,claim=None):
     queue=_business_context(queue_name)
     event_id=f"meta:{queue.data.get('source_lead_id')}"
+    attribution={"campaign_id":queue.data.get("campaign_id"),"campaign_name":queue.data.get("campaign_name"),"adset_id":queue.data.get("adset_id"),"adset_name":queue.data.get("adset_name"),"ad_id":queue.data.get("ad_id"),"ad_name":queue.data.get("ad_name"),"page_id":queue.data.get("page_id"),"form_id":queue.data.get("form_id"),"lead_id":queue.data.get("source_lead_id")}
+    timeline={"webhook":str(queue.queue.creation),"graph":str(queue.queue.get("processing_started_at") or ""),"communication":now()}
+    values={"event_id":event_id,"source":"Meta Form","source_channel":"Meta Lead Ads","event_type":"Lead","direction":"Inbound","customer":queue.customer,"customer360":queue.customer,"lead":queue.lead,"visa_application":queue.visa,"phone":queue.data.get("phone"),"email":queue.data.get("email"),"content":safe_json_dumps(queue.data.get("custom_answers")),"summary":f"Meta Lead Ads intake for {queue.data.get('customer_name') or queue.data.get('phone') or queue.data.get('email')}","event_datetime":now(),"channel_id":queue_name,"conversation_id":event_id,"lead_intake_queue":queue_name,"meta_campaign_name":queue.data.get("campaign_name"),"meta_campaign_id":queue.data.get("campaign_id"),"meta_adset_name":queue.data.get("adset_name"),"meta_adset_id":queue.data.get("adset_id"),"meta_ad_name":queue.data.get("ad_name"),"meta_ad_id":queue.data.get("ad_id"),"facebook_page_id":queue.data.get("page_id"),"facebook_form_id":queue.data.get("form_id"),"facebook_lead_id":queue.data.get("source_lead_id"),"original_normalized_payload":queue.queue.get("normalized_payload"),"meta_attribution_json":safe_json_dumps(attribution),"processing_timeline":safe_json_dumps(timeline)}
     existing=frappe.db.get_value("Communication Event",{"event_id":event_id},"name")
     if existing:
         event=existing
+        current=frappe.db.get_value("Communication Event",event,[field for field in values if has_field("Communication Event",field)],as_dict=True) or {}
+        missing={field:value for field,value in values.items() if value is not None and has_field("Communication Event",field) and not current.get(field)}
+        if missing:
+            frappe.db.set_value("Communication Event",event,missing,update_modified=False)
     else:
         doc=frappe.new_doc("Communication Event")
-        values={"event_id":event_id,"source":"Meta Form","event_type":"Lead","direction":"Inbound","customer":queue.customer,"lead":queue.lead,"visa_application":queue.visa,"phone":queue.data.get("phone"),"email":queue.data.get("email"),"content":safe_json_dumps(queue.data.get("custom_answers")),"summary":f"Meta Lead Ads intake for {queue.data.get('customer_name') or queue.data.get('phone') or queue.data.get('email')}","event_datetime":now(),"channel_id":queue_name,"lead_intake_queue":queue_name}
         for field,value in values.items():
             if doc.meta.has_field(field):
                 doc.set(field,value)
@@ -236,15 +243,20 @@ def dispatch_ai_job(queue_name):
         frappe.db.sql("""update `tabLead Intake AI Job` set state='QUEUED',job_id=%s,queued_at=%s,next_retry_at=null,lease_owner=null,lease_token=null,lease_expires_at=null,last_error_class=null,last_error=null,last_traceback=null,modified=%s where name=%s and lease_token=%s and state in ('PENDING','FAILED')""",(rq_id,now_dt,now_dt,job.name,token))
         state="QUEUED" if frappe.db._cursor.rowcount==1 else frappe.db.get_value("Lead Intake AI Job",job.name,"state")
         set_values("Lead Intake Queue",queue_name,{"ai_status":{"RUNNING":"Running","COMPLETED":"Completed","FAILED":"Failed"}.get(state,"Queued"),"ai_error":"","ai_traceback":""})
+        _append_ai_retry_history(job.name,{"at":str(now_dt),"attempt":frappe.db.get_value("Lead Intake AI Job",job.name,"attempt_count"),"result":"QUEUED","job_id":rq_id})
+        record(queue=queue_name,stage="AI_DISPATCH",execution_type="AI Retry",result="SUCCESS",retry_count=frappe.db.get_value("Lead Intake AI Job",job.name,"attempt_count"),details={"ai_job":job.name,"rq_job_id":rq_id})
         frappe.db.commit()
         return frappe.db.get_value("Lead Intake AI Job",job.name,["name","state","job_id"],as_dict=True)
     except Exception as exc:
         traceback=frappe.get_traceback()
         frappe.db.rollback()
-        retry_at=add_to_date(now_datetime(),minutes=min(60,2**min((frappe.db.get_value("Lead Intake AI Job",job.name,"attempt_count") or 1),6)))
+        attempt=frappe.db.get_value("Lead Intake AI Job",job.name,"attempt_count") or 1
+        retry_at=ai_retry_at(attempt,now_datetime())
         frappe.db.set_value("Lead Intake AI Job",job.name,{"state":"FAILED","next_retry_at":retry_at,"lease_owner":None,"lease_token":None,"lease_expires_at":None,"last_error_class":f"{type(exc).__module__}.{type(exc).__qualname__}","last_error":str(exc),"last_traceback":traceback},update_modified=False)
         current=frappe.db.get_value("Lead Intake Queue",queue_name,"ai_retry_count") or 0
         set_values("Lead Intake Queue",queue_name,{"ai_status":"Failed","ai_error":str(exc),"ai_traceback":traceback,"ai_retry_count":current+1})
+        _append_ai_retry_history(job.name,{"at":str(now_datetime()),"attempt":attempt,"result":"FAILED","error":str(exc),"next_retry_at":str(retry_at)})
+        record(queue=queue_name,stage="AI_DISPATCH",execution_type="AI Retry",result="FAILED",retry_count=attempt,failure_reason=str(exc),next_retry=retry_at,traceback=traceback,details={"ai_job":job.name})
         frappe.db.commit()
         frappe.logger("visa_crm.ai").error(safe_json_dumps({"event":"ai_dispatch_failed","queue":queue_name,"ai_job":job.name,"error":str(exc),"traceback":traceback}))
         return frappe.db.get_value("Lead Intake AI Job",job.name,["name","state","next_retry_at","last_error"],as_dict=True)
@@ -263,6 +275,8 @@ def recover_stale_ai_jobs(at=None):
             continue
         frappe.db.set_value("Lead Intake AI Job",row.name,{"state":"FAILED","next_retry_at":at,"lease_owner":None,"lease_token":None,"lease_expires_at":None,"last_error_class":"AIWorkerLeaseExpired","last_error":"AI worker did not complete before the stale timeout"},update_modified=False)
         set_values("Lead Intake Queue",row.queue,{"ai_status":"Failed","ai_error":"AI worker did not complete before the stale timeout"})
+        _append_ai_retry_history(row.name,{"at":str(at),"result":"RECOVERED","error":"AI worker stale timeout","next_retry_at":str(at)})
+        record(queue=row.queue,stage="AI_GEMINI",execution_type="Worker Restart",result="RECOVERED",failure_reason="AI worker did not complete before the stale timeout",next_retry=at,details={"ai_job":row.name})
         recovered+=1
     if recovered:
         frappe.db.commit()
@@ -270,6 +284,20 @@ def recover_stale_ai_jobs(at=None):
 
 def _ai_key(event):
     return f"ai:{event}:1"
+
+def ai_retry_at(attempt,at=None):
+    at=at or now_datetime()
+    delays=(30,120,300,600,1800)
+    return add_to_date(at,seconds=delays[cint(attempt)-1] if 1<=cint(attempt)<=len(delays) else 3600)
+
+def _append_ai_retry_history(job_name,item):
+    if not has_field("Lead Intake AI Job","retry_history_json"):
+        return
+    history=load_json(frappe.db.get_value("Lead Intake AI Job",job_name,"retry_history_json"),[])
+    if not isinstance(history,list):
+        history=[]
+    history.append(item)
+    frappe.db.set_value("Lead Intake AI Job",job_name,"retry_history_json",safe_json_dumps(history[-200:]),update_modified=False)
 
 def _successful_graph_payload(queue):
     for field in ("graph_payload","graph_api_response"):

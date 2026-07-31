@@ -3,6 +3,7 @@ import socket
 import uuid
 import frappe
 from frappe.utils import add_to_date,cint,get_datetime,now_datetime,time_diff_in_seconds
+from visa_crm.api.execution_history import record
 from visa_crm.api.meta_utils import load_json,safe_json_dumps
 from visa_crm.api.stage_definitions import AI_STAGES,BUSINESS_STAGES,PIPELINE_VERSION,STAGES,STAGE_BY_NAME
 
@@ -83,6 +84,7 @@ def claim_stage(queue_name,stage=None,include_ai=False,lease_seconds=None,owner=
         return None
     if candidate.stage not in AI_STAGES:
         _update_queue_running(queue_name,candidate.stage,at)
+    record(queue=queue_name,stage=candidate.stage,execution_type="Automatic Retry" if cint(candidate.attempt_count) else "Stage",result="RUNNING",retry_count=cint(candidate.attempt_count),next_retry=None,details={"lease_token":token,"lease_expires_at":expires})
     frappe.db.commit()
     return frappe._dict({"name":candidate.name,"queue":queue_name,"stage":candidate.stage,"lease_token":token,"lease_owner":owner,"lease_expires_at":expires,"attempt_count":cint(candidate.attempt_count)+1})
 
@@ -141,6 +143,8 @@ def run_stage(queue_name,handler,stage=None,include_ai=False,lease_seconds=None,
         renew_stage_lease(claim,lease_seconds=lease_seconds,commit=False)
         payload=result if isinstance(result,dict) else {"result":result}
         complete_stage(claim,result=payload,result_doctype=payload.get("result_doctype"),result_name=payload.get("result_name"),input_hash=payload.get("input_hash"),output_hash=payload.get("output_hash"),warning=payload.get("warning",False))
+        row=frappe.db.get_value("Lead Intake Stage",claim.name,["duration_ms","warning"],as_dict=True) or {}
+        record(queue=queue_name,stage=claim.stage,execution_type="Completion",result="WARNING" if row.get("warning") else "SUCCESS",duration_ms=row.get("duration_ms"),retry_count=max(cint(claim.attempt_count)-1,0),warning_count=cint(row.get("warning")),details=payload)
         frappe.db.commit()
         return frappe._dict({"ok":True,"claim":claim,"result":payload})
     except Exception as exc:
@@ -153,6 +157,8 @@ def run_stage(queue_name,handler,stage=None,include_ai=False,lease_seconds=None,
                 frappe.db.rollback()
                 _logger().error(safe_json_dumps({"event":"stage_failure_handler_failed","queue":queue_name,"stage":claim.stage,"original_error":str(exc),"traceback":frappe.get_traceback()}))
         fail_stage(claim,exc,traceback=traceback)
+        row=frappe.db.get_value("Lead Intake Stage",claim.name,["duration_ms","next_retry_at","warning"],as_dict=True) or {}
+        record(queue=queue_name,stage=claim.stage,execution_type="Retry",result="FAILED",duration_ms=row.get("duration_ms"),retry_count=cint(claim.attempt_count),warning_count=cint(row.get("warning")),failure_reason=str(exc),next_retry=row.get("next_retry_at"),traceback=traceback)
         frappe.db.commit()
         _logger().error(safe_json_dumps({"event":"stage_failed","queue":queue_name,"stage":claim.stage,"attempt":claim.attempt_count,"exception_class":_exception_class(exc),"error":str(exc),"traceback":traceback}))
         return frappe._dict({"ok":False,"claim":claim,"error":str(exc),"exception_class":_exception_class(exc)})
@@ -165,6 +171,7 @@ def recover_expired_leases(at=None):
         frappe.db.sql("""update `tabLead Intake Stage` set state='FAILED',next_retry_at=%s,lease_owner=null,lease_token=null,lease_expires_at=null,last_error_class='WorkerLeaseExpired',last_error='Worker lease expired before stage completion',warning=%s,modified=%s where name=%s and state='RUNNING' and lease_token=%s""",(at,cint(STAGE_BY_NAME[row.stage]["requirement_class"]=="Optional"),at,row.name,row.lease_token))
         if frappe.db._cursor.rowcount:
             queues.add(row.queue)
+            record(queue=row.queue,stage=row.stage,execution_type="Stale Recovery",result="RECOVERED",retry_count=cint(row.attempt_count),failure_reason="Worker lease expired before stage completion",next_retry=at,details={"expired_lease_token":row.lease_token})
     for queue_name in queues:
         rollup_queue(queue_name,progress=True)
     if rows:
@@ -182,6 +189,7 @@ def retry_stage(queue_name,stage,force=False):
         values["max_attempts"]=cint(row.attempt_count)+1
     frappe.db.set_value("Lead Intake Stage",row.name,values,update_modified=False)
     rollup_queue(queue_name,progress=True)
+    record(queue=queue_name,stage=stage,execution_type="Retry",result="RECOVERED",retry_count=cint(row.attempt_count),next_retry=values["next_retry_at"],details={"forced":bool(force)})
     frappe.db.commit()
     return True
 
@@ -256,7 +264,8 @@ def _default_retry_at(stage,attempt,at):
     if stage=="COUNSELOR_ASSIGNMENT":
         return add_to_date(at,minutes=15)
     if stage in AI_STAGES:
-        return add_to_date(at,minutes=min(360,2**min(max(attempt,1),8)))
+        delays=(30,120,300,600,1800)
+        return add_to_date(at,seconds=delays[attempt-1] if 1<=attempt<=len(delays) else 3600)
     return add_to_date(at,minutes=min(60,2**min(max(attempt,1),6)))
 
 def _current_stage(rows):
