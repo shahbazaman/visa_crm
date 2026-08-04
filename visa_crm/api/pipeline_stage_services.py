@@ -14,6 +14,7 @@ from visa_crm.api.lead_assignment import assign_lead
 from visa_crm.api.visa_application import create_for_lead
 from visa_crm.api.workflow import create_deal_if_supported,mark_lead_stage,qualify_lead
 from visa_crm.api.execution_history import record
+from visa_crm.api.lead_classification import classify_queue,sync_lead_classification
 
 class NoEligibleCounselor(RuntimeError):
     pass
@@ -124,6 +125,9 @@ def customer360(queue_name,claim=None):
     set_values("Lead Intake Queue",queue_name,{"matched_customer":customer,"status":"Customer Matched"})
     return {"customer":customer,"result_doctype":"Customer","result_name":customer,"input_hash":frappe.db.get_value("Lead Intake Queue",queue_name,"normalized_payload_hash"),"output_hash":_hash({"customer":customer})}
 
+def classification(queue_name,claim=None):
+    return classify_queue(queue_name,claim=claim)
+
 def crm_lead(queue_name,claim=None):
     data=load_normalized(queue_name)
     customer=frappe.db.get_value("Lead Intake Queue",queue_name,"matched_customer")
@@ -131,6 +135,8 @@ def crm_lead(queue_name,claim=None):
         raise ValueError("Customer360 stage has no durable Customer")
     context=_context(queue_name,data)
     lead=resolve_lead(data,customer,context)
+    classification_values=frappe.db.get_value("Lead Intake Queue",queue_name,["lead_category","lead_group","responsible_department","classification_source","classification_status","classification_rule","classification_reason","classified_at","classified_by"],as_dict=True) or {}
+    sync_lead_classification(lead,classification_values,overwrite_automatic=False)
     set_values("Lead Intake Queue",queue_name,{"matched_customer":customer,"matched_lead":lead,"status":"Lead Created"})
     _sync_webhook_event(frappe.get_doc("Lead Intake Queue",queue_name),{"queue_status":"Lead Created","crm_lead":lead,"customer":customer})
     return {"lead":lead,"customer":customer,"result_doctype":"CRM Lead","result_name":lead,"input_hash":frappe.db.get_value("Lead Intake Queue",queue_name,"normalized_payload_hash"),"output_hash":_hash({"lead":lead,"customer":customer})}

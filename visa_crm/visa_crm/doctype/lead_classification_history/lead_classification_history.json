@@ -1,0 +1,31 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "autoname": "hash",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["lead", "queue", "old_category", "new_category", "old_group", "new_group", "classification_source", "classification_rule", "reason", "changed_by", "changed_at"],
+ "fields": [
+  {"fieldname": "lead", "fieldtype": "Link", "label": "CRM Lead", "options": "CRM Lead", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "queue", "fieldtype": "Link", "label": "Lead Intake Queue", "options": "Lead Intake Queue"},
+  {"fieldname": "old_category", "fieldtype": "Link", "label": "Old Category", "options": "Lead Category"},
+  {"fieldname": "new_category", "fieldtype": "Link", "label": "New Category", "options": "Lead Category", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "old_group", "fieldtype": "Data", "label": "Old Group"},
+  {"fieldname": "new_group", "fieldtype": "Data", "label": "New Group"},
+  {"fieldname": "classification_source", "fieldtype": "Select", "label": "Classification Source", "options": "Automatic\nManual", "reqd": 1},
+  {"fieldname": "classification_rule", "fieldtype": "Link", "label": "Classification Rule", "options": "Lead Classification Rule"},
+  {"fieldname": "reason", "fieldtype": "Small Text", "label": "Reason"},
+  {"fieldname": "changed_by", "fieldtype": "Link", "label": "Changed By", "options": "User", "reqd": 1},
+  {"fieldname": "changed_at", "fieldtype": "Datetime", "label": "Changed At", "reqd": 1}
+ ],
+ "links": [],
+ "module": "Visa CRM",
+ "name": "Lead Classification History",
+ "permissions": [
+  {"role": "System Manager", "read": 1, "report": 1, "export": 1},
+  {"role": "Sales Manager", "read": 1, "report": 1}
+ ],
+ "sort_field": "changed_at",
+ "sort_order": "DESC",
+ "track_changes": 0
+}

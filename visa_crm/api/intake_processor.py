@@ -5,7 +5,7 @@ from visa_crm.api.pipeline_engine import ensure_stage_ledger,next_eligible_stage
 from visa_crm.api import pipeline_stage_services as services
 from visa_crm.api.execution_history import ExecutionTimer
 
-HANDLERS={"GRAPH_DOWNLOAD":services.graph_download,"NORMALIZE":services.normalize,"CUSTOMER360":services.customer360,"CRM_LEAD":services.crm_lead,"LEAD_WORKFLOW":services.lead_workflow,"VISA_APPLICATION":services.visa_application,"COMMUNICATION_EVENT":services.communication_event,"FOLLOW_UP":services.follow_up,"COUNSELOR_ASSIGNMENT":services.counselor_assignment,"AI_DISPATCH":services.ai_dispatch}
+HANDLERS={"GRAPH_DOWNLOAD":services.graph_download,"NORMALIZE":services.normalize,"CLASSIFICATION":services.classification,"CUSTOMER360":services.customer360,"CRM_LEAD":services.crm_lead,"LEAD_WORKFLOW":services.lead_workflow,"VISA_APPLICATION":services.visa_application,"COMMUNICATION_EVENT":services.communication_event,"FOLLOW_UP":services.follow_up,"COUNSELOR_ASSIGNMENT":services.counselor_assignment,"AI_DISPATCH":services.ai_dispatch}
 FAILURE_HANDLERS={"GRAPH_DOWNLOAD":services.graph_failure,"COUNSELOR_ASSIGNMENT":services.assignment_failure,"AI_DISPATCH":services.ai_dispatch_failure}
 
 def process_pending(limit=100):

@@ -8,7 +8,7 @@
  "fields":[
   {"fieldname":"stage_key","fieldtype":"Data","label":"Stage Key","reqd":1,"unique":1},
   {"fieldname":"queue","fieldtype":"Link","label":"Lead Intake Queue","options":"Lead Intake Queue","reqd":1},
-  {"fieldname":"stage","fieldtype":"Select","label":"Stage","options":"WEBHOOK\nGRAPH_DOWNLOAD\nNORMALIZE\nCUSTOMER360\nCRM_LEAD\nLEAD_WORKFLOW\nVISA_APPLICATION\nCOMMUNICATION_EVENT\nFOLLOW_UP\nCOUNSELOR_ASSIGNMENT\nAI_DISPATCH\nAI_GEMINI\nAI_TRANSLATION\nAI_SUMMARY\nAI_EMBEDDING","reqd":1},
+  {"fieldname":"stage","fieldtype":"Select","label":"Stage","options":"WEBHOOK\nGRAPH_DOWNLOAD\nNORMALIZE\nCLASSIFICATION\nCUSTOMER360\nCRM_LEAD\nLEAD_WORKFLOW\nVISA_APPLICATION\nCOMMUNICATION_EVENT\nFOLLOW_UP\nCOUNSELOR_ASSIGNMENT\nAI_DISPATCH\nAI_GEMINI\nAI_TRANSLATION\nAI_SUMMARY\nAI_EMBEDDING","reqd":1},
   {"fieldname":"sequence","fieldtype":"Int","label":"Sequence","reqd":1},
   {"fieldname":"parent_stage","fieldtype":"Data","label":"Parent Stage"},
   {"fieldname":"requirement_class","fieldtype":"Select","label":"Requirement Class","options":"Core\nRequired Downstream\nOptional","reqd":1},

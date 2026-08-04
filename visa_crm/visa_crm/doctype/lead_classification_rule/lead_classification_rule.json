@@ -1,0 +1,30 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "autoname": "field:rule_name",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["rule_name", "enabled", "priority", "source_channel", "match_field", "match_type", "match_value", "category", "reason"],
+ "fields": [
+  {"fieldname": "rule_name", "fieldtype": "Data", "label": "Rule Name", "reqd": 1, "unique": 1, "in_list_view": 1},
+  {"default": "1", "fieldname": "enabled", "fieldtype": "Check", "label": "Enabled", "in_list_view": 1},
+  {"default": "100", "fieldname": "priority", "fieldtype": "Int", "label": "Priority", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "source_channel", "fieldtype": "Data", "label": "Source Channel"},
+  {"fieldname": "match_field", "fieldtype": "Select", "label": "Match Field", "options": "Source\nCampaign Name", "reqd": 1},
+  {"fieldname": "match_type", "fieldtype": "Select", "label": "Match Type", "options": "Equals\nEnds With\nContains\nRegex", "reqd": 1},
+  {"fieldname": "match_value", "fieldtype": "Data", "label": "Match Value", "reqd": 1},
+  {"fieldname": "category", "fieldtype": "Link", "label": "Category", "options": "Lead Category", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "reason", "fieldtype": "Small Text", "label": "Classification Reason"}
+ ],
+ "links": [],
+ "module": "Visa CRM",
+ "name": "Lead Classification Rule",
+ "naming_rule": "By fieldname",
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1},
+  {"role": "Sales Manager", "read": 1, "write": 1, "create": 1, "report": 1}
+ ],
+ "sort_field": "priority",
+ "sort_order": "ASC",
+ "track_changes": 1
+}

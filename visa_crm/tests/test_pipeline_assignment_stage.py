@@ -20,7 +20,7 @@ class TestPipelineAssignmentStage(FrappeTestCase):
         ensure_stage_ledger(self.queue)
         customer360(self.queue)
         crm_lead(self.queue)
-        for stage in ("GRAPH_DOWNLOAD","NORMALIZE","CUSTOMER360","CRM_LEAD","LEAD_WORKFLOW","VISA_APPLICATION","COMMUNICATION_EVENT","FOLLOW_UP"):
+        for stage in ("GRAPH_DOWNLOAD","NORMALIZE","CLASSIFICATION","CUSTOMER360","CRM_LEAD","LEAD_WORKFLOW","VISA_APPLICATION","COMMUNICATION_EVENT","FOLLOW_UP"):
             frappe.db.set_value("Lead Intake Stage",stage_key(self.queue,stage),"state","COMPLETED",update_modified=False)
         frappe.db.commit()
 

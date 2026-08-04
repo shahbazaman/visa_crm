@@ -130,6 +130,9 @@ def _select_employee(queue_doc=None,strategy=None):
     strategy=strategy or frappe.conf.get("visa_crm_assignment_strategy") or "least_workload"
     employees=_eligible_employees()
     data=load_json(getattr(queue_doc,"normalized_payload",None),{}) if queue_doc else {}
+    responsible_department=getattr(queue_doc,"responsible_department",None) if queue_doc else None
+    if responsible_department and has_field("Employee","department"):
+        employees=[employee for employee in employees if frappe.db.get_value("Employee",employee,"department")==responsible_department]
     language=data.get("language") or (data.get("meta_fields") or {}).get("language")
     country=data.get("country_interested") or data.get("destination")
     languages=frappe.conf.get("visa_crm_employee_languages") or {}
@@ -140,12 +143,13 @@ def _select_employee(queue_doc=None,strategy=None):
         language_match=_matches_config(languages.get(employee),language)
         country_match=_matches_config(countries.get(employee),country)
         workload=frappe.db.count("Lead Assignment",{"assigned_to":employee,"status":["in",["Pending","Accepted","In Progress"]]}) if has_doctype("Lead Assignment") else 0
-        candidates.append({"employee":employee,"working":working,"language_match":language_match,"country_match":country_match,"workload":workload})
+        candidates.append({"employee":employee,"working":working,"language_match":language_match,"country_match":country_match,"workload":workload,"department":frappe.db.get_value("Employee",employee,"department") if has_field("Employee","department") else None})
     available=[row["employee"] for row in candidates if row["working"]]
     preferred=[row["employee"] for row in candidates if row["working"] and (not language or row["language_match"]) and (not country or row["country_match"])]
     pool=preferred or available
     fallback=frappe.conf.get("visa_crm_fallback_counselor")
-    if not pool and fallback and frappe.db.exists("Employee",fallback):
+    fallback_allowed=fallback and frappe.db.exists("Employee",fallback) and (not responsible_department or not has_field("Employee","department") or frappe.db.get_value("Employee",fallback,"department")==responsible_department)
+    if not pool and fallback_allowed:
         selected=fallback
         strategy_used="fallback"
     elif strategy=="round_robin":
@@ -154,7 +158,7 @@ def _select_employee(queue_doc=None,strategy=None):
     else:
         selected=_least_workload_employee(pool) if pool else None
         strategy_used="least_workload"
-    return selected,{"strategy":strategy_used,"requested_strategy":strategy,"selected":selected,"language":language,"country":country,"candidates":candidates,"fallback":fallback}
+    return selected,{"strategy":strategy_used,"requested_strategy":strategy,"selected":selected,"language":language,"country":country,"responsible_department":responsible_department,"candidates":candidates,"fallback":fallback,"fallback_allowed":bool(fallback_allowed)}
 
 def _matches_config(configured,value):
     if not value:

@@ -1,12 +1,13 @@
-PIPELINE_VERSION=1
+PIPELINE_VERSION=2
 STAGE_STATES=("NOT_STARTED","RUNNING","COMPLETED","FAILED","SKIPPED")
 ORCHESTRATION_STATUSES=("PENDING","RUNNING","COMPLETED","COMPLETED_WITH_WARNINGS","PARTIALLY_COMPLETED","FAILED","IGNORED")
 STAGES=(
     {"stage":"WEBHOOK","sequence":10,"requirement_class":"Core","max_attempts":1,"dependencies":()},
     {"stage":"GRAPH_DOWNLOAD","sequence":20,"requirement_class":"Core","max_attempts":5,"dependencies":("WEBHOOK",)},
     {"stage":"NORMALIZE","sequence":30,"requirement_class":"Core","max_attempts":5,"dependencies":("GRAPH_DOWNLOAD",)},
-    {"stage":"CUSTOMER360","sequence":40,"requirement_class":"Core","max_attempts":5,"dependencies":("NORMALIZE",)},
-    {"stage":"CRM_LEAD","sequence":50,"requirement_class":"Core","max_attempts":5,"dependencies":("NORMALIZE","CUSTOMER360")},
+    {"stage":"CLASSIFICATION","sequence":35,"requirement_class":"Core","max_attempts":5,"dependencies":("NORMALIZE",)},
+    {"stage":"CUSTOMER360","sequence":40,"requirement_class":"Core","max_attempts":5,"dependencies":("CLASSIFICATION",)},
+    {"stage":"CRM_LEAD","sequence":50,"requirement_class":"Core","max_attempts":5,"dependencies":("CLASSIFICATION","CUSTOMER360")},
     {"stage":"LEAD_WORKFLOW","sequence":55,"requirement_class":"Required Downstream","max_attempts":5,"dependencies":("CRM_LEAD",)},
     {"stage":"VISA_APPLICATION","sequence":60,"requirement_class":"Required Downstream","max_attempts":5,"dependencies":("CRM_LEAD",)},
     {"stage":"COMMUNICATION_EVENT","sequence":70,"requirement_class":"Required Downstream","max_attempts":5,"dependencies":("CRM_LEAD",)},

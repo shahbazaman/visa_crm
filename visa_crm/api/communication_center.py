@@ -101,7 +101,7 @@ def shared_inbox(filters=None,limit=50):
     fields += [f for f in ("unread","assigned_user","conversation_status","label","provider","provider_message_id","visa_application","ai_next_best_action","ai_customer_priority") if has_field("Communication Event",f)]
     order_by="event_datetime desc, modified desc" if has_field("Communication Event","event_datetime") else "modified desc"
     limit=min(max(int(limit or 50),1),100)
-    rows=frappe.get_all("Communication Event",filters=query,fields=fields or ["name"],order_by=order_by,limit_page_length=limit)
+    rows=frappe.get_list("Communication Event",filters=query,fields=fields or ["name"],order_by=order_by,limit_page_length=limit)
     if filters.get("search"):
         term=str(filters.get("search")).lower()
         rows=[r for r in rows if term in " ".join([str(v or "") for v in r.values()]).lower()]
@@ -119,6 +119,8 @@ def get_shared_inbox(filters=None,limit=50):
 def conversation(name):
     _staff()
     doc=frappe.get_doc("Communication Event",name)
+    if not doc.has_permission("read"):
+        frappe.throw("Not permitted to access this conversation",frappe.PermissionError)
     conditions=[]
     if getattr(doc,"phone",None):
         conditions.append(["phone","=",doc.phone])
@@ -128,12 +130,15 @@ def conversation(name):
         conditions.append(["customer","=",doc.customer])
     fields=[f for f in ("name","source","direction","content","summary","event_datetime","customer","lead","phone","email") if f=="name" or has_field("Communication Event",f)]
     order_by="event_datetime asc" if has_field("Communication Event","event_datetime") else "modified asc"
-    rows=frappe.get_all("Communication Event",or_filters=conditions,fields=fields,order_by=order_by,limit_page_length=100) if conditions else [doc.as_dict()]
+    rows=frappe.get_list("Communication Event",or_filters=conditions,fields=fields,order_by=order_by,limit_page_length=100) if conditions else [doc.as_dict()]
     return {"event":doc.as_dict(),"history":rows}
 
 @frappe.whitelist()
 def update_conversation(name,status=None,assigned_to=None,label=None,internal_note=None,mark_read=0):
     _staff()
+    doc=frappe.get_doc("Communication Event",name)
+    if not doc.has_permission("write"):
+        frappe.throw("Not permitted to update this conversation",frappe.PermissionError)
     values={}
     if status:
         values["conversation_status"]=status
@@ -163,11 +168,15 @@ def templates(channel=None):
 def inbox_counters():
     out={"unread":0,"open":0,"pending":0}
     if has_field("Communication Event","unread"):
-        out["unread"]=frappe.db.count("Communication Event",{"unread":1})
+        out["unread"]=_permitted_count({"unread":1})
     if has_field("Communication Event","conversation_status"):
-        out["open"]=frappe.db.count("Communication Event",{"conversation_status":"Open"})
-        out["pending"]=frappe.db.count("Communication Event",{"conversation_status":"Pending"})
+        out["open"]=_permitted_count({"conversation_status":"Open"})
+        out["pending"]=_permitted_count({"conversation_status":"Pending"})
     return out
+
+def _permitted_count(filters):
+    rows=frappe.get_list("Communication Event",filters=filters,fields=["count(name) as total"])
+    return int(rows[0].total) if rows else 0
 
 def enqueue_ai(event_name,queue_name=None):
     _persist_ai_state(queue_name,"Pending")

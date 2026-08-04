@@ -68,7 +68,7 @@ class TestNormalizedPayloadRecovery(FrappeTestCase):
         customer.customer_name=f"Recovery Customer {self.source}"
         customer.insert(ignore_permissions=True)
         with patch("visa_crm.api.pipeline_stage_services.fetch_lead",side_effect=AssertionError("recovery must not call Graph API")),patch("visa_crm.api.pipeline_stage_services.resolve_customer",return_value=customer.name):
-            intake_processor.process_queue(self.queue,stage_budget=2)
+            intake_processor.process_queue(self.queue,stage_budget=3)
         self.assertEqual(frappe.db.get_value("Lead Intake Stage",stage_key(self.queue,"NORMALIZE"),"state"),"COMPLETED")
         self.assertEqual(frappe.db.get_value("Lead Intake Stage",stage_key(self.queue,"CUSTOMER360"),"state"),"COMPLETED")
         self.assertEqual(frappe.db.get_value("Lead Intake Queue",self.queue,"matched_customer"),customer.name)

@@ -109,7 +109,7 @@ class TestPipelineEngine(FrappeTestCase):
         self.assertEqual(row.last_error,"business stage failed")
 
     def _complete_through(self,last_stage):
-        for stage in ("GRAPH_DOWNLOAD","NORMALIZE","CUSTOMER360","CRM_LEAD"):
+        for stage in ("GRAPH_DOWNLOAD","NORMALIZE","CLASSIFICATION","CUSTOMER360","CRM_LEAD"):
             claim=claim_stage(self.queue,stage)
             self.assertTrue(claim)
             complete_stage(claim,result={"stage":stage})

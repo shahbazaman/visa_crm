@@ -29,7 +29,7 @@ class TestPipelineResume(FrappeTestCase):
     def test_worker_restart_after_each_stage_resumes_without_duplicates(self):
         employee=frappe.get_all("Employee",pluck="name",limit=1)[0]
         with patch("visa_crm.api.pipeline_stage_services.fetch_lead",return_value=self.graph) as fetch,patch("visa_crm.api.pipeline_stage_services.assign_lead",return_value=employee),patch("visa_crm.api.pipeline_stage_services.frappe.enqueue") as enqueue:
-            for _ in range(10):
+            for _ in range(11):
                 intake_processor.process_queue(self.queue,stage_budget=1)
             intake_processor.process_queue(self.queue,stage_budget=1)
         queue=frappe.get_doc("Lead Intake Queue",self.queue)
@@ -45,7 +45,7 @@ class TestPipelineResume(FrappeTestCase):
     def test_visa_failure_resumes_from_visa_without_recreating_lead(self):
         employee=frappe.get_all("Employee",pluck="name",limit=1)[0]
         with patch("visa_crm.api.pipeline_stage_services.fetch_lead",return_value=self.graph) as fetch,patch("visa_crm.api.pipeline_stage_services.assign_lead",return_value=employee),patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"):
-            intake_processor.process_queue(self.queue,stage_budget=5)
+            intake_processor.process_queue(self.queue,stage_budget=6)
             lead=frappe.db.get_value("Lead Intake Queue",self.queue,"matched_lead")
             customer=frappe.db.get_value("Lead Intake Queue",self.queue,"matched_customer")
             with patch("visa_crm.api.pipeline_stage_services.create_for_lead",side_effect=RuntimeError("Visa service offline")):
@@ -78,7 +78,7 @@ class TestPipelineResume(FrappeTestCase):
     def test_communication_failure_preserves_lead_and_visa_then_resumes(self):
         employee=frappe.get_all("Employee",pluck="name",limit=1)[0]
         with patch("visa_crm.api.pipeline_stage_services.fetch_lead",return_value=self.graph),patch("visa_crm.api.pipeline_stage_services.assign_lead",return_value=employee),patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"):
-            intake_processor.process_queue(self.queue,stage_budget=6)
+            intake_processor.process_queue(self.queue,stage_budget=7)
             queue=frappe.get_doc("Lead Intake Queue",self.queue)
             result=run_stage(self.queue,lambda _queue,_claim:(_ for _ in ()).throw(RuntimeError("Communication unavailable")),stage="COMMUNICATION_EVENT")
             self.assertFalse(result.ok)
