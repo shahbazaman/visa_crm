@@ -198,9 +198,11 @@ def counselor_assignment(queue_name,claim=None):
     queue=_business_context(queue_name)
     employee=assign_lead(queue.lead,queue.queue,context=_context(queue_name,queue.data),communication_event=queue.queue.get("communication_event"))
     if not employee:
-        raise NoEligibleCounselor("No eligible counselor is configured for Meta lead assignment")
+            raise NoEligibleCounselor("No eligible counselor is configured for Meta lead assignment")
     set_values("Lead Intake Queue",queue_name,{"assigned_employee":employee})
     _set_assignment_status(queue.lead,"Assigned")
+    if has_field("CRM Lead","assigned_counselor"):
+        frappe.db.set_value("CRM Lead",queue.lead,"assigned_counselor",employee,update_modified=False)
     event=queue.queue.get("communication_event")
     if event and frappe.db.exists("Communication Event",event) and has_field("Communication Event","employee") and not frappe.db.get_value("Communication Event",event,"employee"):
         frappe.db.set_value("Communication Event",event,"employee",employee,update_modified=False)

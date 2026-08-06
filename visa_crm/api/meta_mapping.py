@@ -23,7 +23,7 @@ DEFAULT_FIELD_ALIASES = {
     "budget": ["budget", "*budget*", "നിങ്ങളുടെ*budget*എത്രയാണ്?"],
     "travel_date": ["travel_date", "preferred_travel_date", "*travel*date*"],
     "passport": ["passport", "do_you_have_a_valid_passport?", "*valid*passport*", "*passport*"],
-    "visa_type": ["visa_type", "visa_category", "type_of_visa", "*visa*type*", "*visa*category*"],
+    "visa_type":["visa_type","visa_category","type_of_visa","which_uk_visa_are_you_interested_in","*visa*type*","*visa*category*","*which*visa*are*you*interested*in*"],
     "destination": ["destination", "travel_destination", "*destination*"],
     "travel_month": ["travel_month", "*travel*month*", "*trip*month*", "ബാലി*trip*ഏത്*മാസം*പ്ലാൻ_ചെയ്യുന്നു?"],
     "message": ["message", "customer_message", "enquiry", "inquiry"],
