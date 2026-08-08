@@ -3,32 +3,33 @@ import hmac
 import json
 import frappe
 from frappe.utils import now
+from werkzeug.wrappers import Response
 from visa_crm.api.meta_utils import get_meta_settings, has_doctype, set_if_has, log_info, safe_json_dumps
 
 @frappe.whitelist(allow_guest=True)
 def webhook():
-    if frappe.request.method == "GET":
+    request = getattr(frappe.local, "request", None)
+    method = request.method if request else getattr(frappe, "request", None).method if hasattr(frappe, "request") else "GET"
+    if method == "GET":
         return meta_verify()
-    if frappe.request.method == "POST":
+    if method == "POST":
         return receive()
     frappe.response["http_status_code"] = 405
     return {"ok": False, "error": "method_not_allowed"}
 
 def meta_verify():
-    mode = frappe.request.args.get("hub.mode")
-    token = frappe.request.args.get("hub.verify_token")
-    challenge = frappe.request.args.get("hub.challenge")
+    request = getattr(frappe.local, "request", None)
+    args = getattr(request, "args", {}) if request else getattr(frappe.form_dict, "copy", lambda: {})() or frappe.form_dict
+    mode = args.get("hub.mode")
+    token = args.get("hub.verify_token")
+    challenge = args.get("hub.challenge")
     settings = get_meta_settings()
-    saved = settings.get_password("verify_token") if settings else None
+    saved = _get_password_safe(settings, "verify_token")
     if mode == "subscribe" and token and saved and hmac.compare_digest(token, saved):
-        frappe.response["http_status_code"] = 200
-        frappe.response["type"] = "txt"
         log_info("meta_webhook_verified", mode=mode)
-        return challenge
-    frappe.response["http_status_code"] = 403
-    frappe.response["type"] = "txt"
+        return Response(challenge or "", status=200, content_type="text/plain; charset=utf-8")
     log_info("meta_webhook_verify_failed", mode=mode, has_token=bool(token), has_settings=bool(settings))
-    return "Verification failed"
+    return Response("Verification failed", status=403, content_type="text/plain; charset=utf-8")
 
 def receive():
     raw = frappe.request.get_data() or b""
@@ -88,15 +89,28 @@ def replay_payload(payload):
     return {"ok": True, "stored": stored, "updates": updates, "duplicates": duplicates}
 
 def _valid_signature(raw):
-    signature = frappe.request.headers.get("X-Hub-Signature-256") or ""
+    request = getattr(frappe.local, "request", None)
+    headers = getattr(request, "headers", {}) if request else {}
+    signature = headers.get("X-Hub-Signature-256") or ""
     if not signature.startswith("sha256="):
         return False
     settings = get_meta_settings()
-    secret = settings.get_password("meta_app_secret") if settings else None
+    secret = _get_password_safe(settings, "meta_app_secret")
     if not secret:
         return False
-    digest = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+    digest = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
     return hmac.compare_digest(signature, f"sha256={digest}")
+
+def _get_password_safe(doc, fieldname):
+    if not doc or not hasattr(doc, "get_password"):
+        return None
+    try:
+        val = doc.get_password(fieldname, raise_exception=False)
+        if val:
+            return val
+    except Exception:
+        pass
+    return getattr(doc, fieldname, None)
 
 def _decode_json(raw):
     try:

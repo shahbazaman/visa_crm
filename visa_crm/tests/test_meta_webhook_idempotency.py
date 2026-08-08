@@ -29,3 +29,34 @@ class TestMetaWebhookIdempotency(FrappeTestCase):
             events=frappe.get_all("Meta Webhook Event",filters={"leadgen_id":self.source},fields=["queue"])
             self.assertEqual(len(events),2)
             self.assertTrue(all(row.queue==queue.name for row in events))
+
+    def test_meta_verify_valid_token(self):
+        from visa_crm.api.meta_webhook import meta_verify, _get_password_safe
+        settings = frappe.get_doc("Meta Settings", frappe.get_all("Meta Settings", pluck="name")[0])
+        token = _get_password_safe(settings, "verify_token") or "visa_crm_verify_2026"
+        frappe.local.request = frappe._dict(
+            args=frappe._dict({
+                "hub.mode": "subscribe",
+                "hub.verify_token": token,
+                "hub.challenge": "123456789"
+            })
+        )
+        response = meta_verify()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "text/plain")
+        self.assertEqual(response.get_data(as_text=True), "123456789")
+
+    def test_meta_verify_invalid_token(self):
+        from visa_crm.api.meta_webhook import meta_verify
+        frappe.local.request = frappe._dict(
+            args=frappe._dict({
+                "hub.mode": "subscribe",
+                "hub.verify_token": "wrong_verify_token_123",
+                "hub.challenge": "123456789"
+            })
+        )
+        response = meta_verify()
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.mimetype, "text/plain")
+        self.assertEqual(response.get_data(as_text=True), "Verification failed")
+
