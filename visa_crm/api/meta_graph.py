@@ -15,6 +15,9 @@ class MetaGraphError(Exception):
 def fetch_lead(leadgen_id, settings=None, context=None):
     context = context or {}
     ctx = {k: v for k, v in context.items() if k != "source_lead_id"}
+    if not leadgen_id or str(leadgen_id).strip().lower() in ("none", "null", "0", ""):
+        meta_debug_log("fetch_lead_exception", source_lead_id=leadgen_id, error="GRAPH_DOWNLOAD cannot execute: Meta leadgen ID is missing or invalid", **ctx)
+        raise MetaGraphError("GRAPH_DOWNLOAD cannot execute: Meta leadgen ID is missing or invalid")
     meta_debug_log("fetch_lead_start", source_lead_id=leadgen_id, **ctx)
     settings = settings or get_meta_settings()
     token = _access_token(settings)
@@ -62,13 +65,18 @@ def _response_json(response):
         return {"raw_response": response.text[:5000]}
 
 def _hydrate_names(lead, token):
+    if not isinstance(lead, dict):
+        return
     for key, field in {"campaign_id": "campaign_name", "adset_id": "adset_name", "ad_id": "ad_name"}.items():
-        if lead.get(field) or not lead.get(key):
+        val = lead.get(key)
+        if lead.get(field) or not val or str(val).strip().lower() in ("none", "null", "0", ""):
             continue
         try:
-            lead[field] = _get(lead.get(key), {"fields": "name", "access_token": token}).get("name")
+            name_resp = _get(str(val), {"fields": "name", "access_token": token})
+            if isinstance(name_resp, dict) and name_resp.get("name"):
+                lead[field] = name_resp.get("name")
         except MetaGraphError:
-            log_info("meta_graph_context_name_missing", id=lead.get(key), field=field)
+            log_info("meta_graph_context_name_missing", id=val, field=field)
 
 def _access_token(settings):
     if not settings:

@@ -124,10 +124,11 @@ def _webhook_events(payload):
     for entry in payload.get("entry") or []:
         for change in entry.get("changes") or []:
             value = change.get("value") or {}
-            leadgen_id = value.get("leadgen_id")
-            if not leadgen_id:
+            leadgen_id = value.get("leadgen_id") or value.get("lead_id")
+            if not leadgen_id or str(leadgen_id).strip().lower() in ("none", "null", "0", ""):
                 continue
-            events.append({"event_type": change.get("field"), "entry_id": entry.get("id"), "source_lead_id": str(leadgen_id), "leadgen_id": str(leadgen_id), "page_id": value.get("page_id") or entry.get("id"), "form_id": value.get("form_id"), "received_at": now(), "payload": payload, "entry": entry, "change": change, "value": value})
+            leadgen_id_str = str(leadgen_id)
+            events.append({"event_type": change.get("field"), "entry_id": entry.get("id"), "source_lead_id": leadgen_id_str, "leadgen_id": leadgen_id_str, "page_id": value.get("page_id") or entry.get("id"), "form_id": value.get("form_id"), "received_at": now(), "payload": payload, "entry": entry, "change": change, "value": value})
     return events
 
 def _lead_events(payload):

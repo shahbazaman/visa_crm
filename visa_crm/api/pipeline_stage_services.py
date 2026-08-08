@@ -21,19 +21,40 @@ class NoEligibleCounselor(RuntimeError):
 
 def graph_download(queue_name,claim=None):
     queue=frappe.get_doc("Lead Intake Queue",queue_name)
+    source_lead_id=queue.source_lead_id
+    if not source_lead_id or str(source_lead_id).strip().lower() in ("none", "null", "0", ""):
+        source_lead_id=_recover_source_lead_id(queue)
+        if source_lead_id:
+            set_values("Lead Intake Queue",queue_name,{"source_lead_id":source_lead_id})
+            queue.reload()
+    if not source_lead_id or str(source_lead_id).strip().lower() in ("none", "null", "0", ""):
+        raise ValueError(f"GRAPH_DOWNLOAD cannot execute: Meta leadgen ID is missing for queue {queue_name}")
     existing=_successful_graph_payload(queue)
-    request=_graph_request(queue.source_lead_id)
+    request=_graph_request(source_lead_id)
     if existing:
         digest=_hash(existing)
         _set_if_blank(queue_name,{"graph_payload_hash":digest,"graph_api_request":safe_json_dumps(request)})
-        return {"graph_payload":existing,"input_hash":_hash({"source_lead_id":queue.source_lead_id}),"output_hash":digest,"request":request,"reused":True}
-    context={"queue_name":queue.name,"source_lead_id":queue.source_lead_id,"status":queue.status}
-    payload=fetch_lead(queue.source_lead_id,get_meta_settings(),context)
+        return {"graph_payload":existing,"input_hash":_hash({"source_lead_id":source_lead_id}),"output_hash":digest,"request":request,"reused":True}
+    context={"queue_name":queue.name,"source_lead_id":source_lead_id,"status":queue.status}
+    payload=fetch_lead(source_lead_id,get_meta_settings(),context)
     digest=_hash(payload)
     values={"graph_payload":safe_json_dumps(payload),"graph_api_response":safe_json_dumps(payload),"graph_api_request":safe_json_dumps(request),"graph_payload_hash":digest}
     set_values("Lead Intake Queue",queue.name,values)
     _sync_webhook_event(queue,{"graph_api_request":values["graph_api_request"],"graph_api_response":values["graph_api_response"],"queue_status":"Lead Downloaded"})
-    return {"graph_payload":payload,"input_hash":_hash({"source_lead_id":queue.source_lead_id}),"output_hash":digest,"request":request,"reused":False}
+    return {"graph_payload":payload,"input_hash":_hash({"source_lead_id":source_lead_id}),"output_hash":digest,"request":request,"reused":False}
+
+def _recover_source_lead_id(queue):
+    if has_field("Lead Intake Queue","meta_webhook_event") and queue.get("meta_webhook_event"):
+        evt_id=frappe.db.get_value("Meta Webhook Event",queue.meta_webhook_event,"leadgen_id")
+        if evt_id and str(evt_id).strip().lower() not in ("none", "null", "0", ""):
+            return str(evt_id)
+    payload=load_json(getattr(queue,"raw_payload",None),{})
+    if isinstance(payload,dict):
+        for key in ("source_lead_id","leadgen_id","lead_id"):
+            val=payload.get(key) or (payload.get("value") or {}).get(key)
+            if val and str(val).strip().lower() not in ("none", "null", "0", ""):
+                return str(val)
+    return None
 
 def graph_failure(queue_name,claim,exc,traceback):
     request=getattr(exc,"request",None) or _graph_request(frappe.db.get_value("Lead Intake Queue",queue_name,"source_lead_id"))
