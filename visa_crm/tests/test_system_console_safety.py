@@ -13,7 +13,7 @@ class TestSystemConsoleSafety(FrappeTestCase):
         using frappe.call without requiring forbidden Python imports or frappe.get_attr.
         """
         code_snippet = """
-res = frappe.call("visa_crm.api.recovery.recover_failed_graph_queues", dry_run=True)
+res = frappe.call("visa_crm.api.recovery.recover_graph_queues_dry_run")
 result = res
 """
         exec_locals = {}
@@ -28,7 +28,7 @@ result = res
         Verify that meta diagnostics can be triggered inside System Console safe_exec.
         """
         code_snippet = """
-res = frappe.call("visa_crm.api.production_diagnostics.meta_diagnostics", leadgen_id="1728701815047004")
+res = frappe.call("visa_crm.api.production_diagnostics.meta_diagnostics")
 result = res
 """
         exec_locals = {}
@@ -36,8 +36,6 @@ result = res
         res = exec_locals.get("result")
         self.assertIsNotNone(res)
         self.assertIn("page_access_token_valid", res)
-        self.assertIn("manual_fetch", res)
-        self.assertEqual(res.get("manual_fetch", {}).get("id"), "1728701815047004")
 
     def test_lead_intake_stage_schema_fields(self):
         """

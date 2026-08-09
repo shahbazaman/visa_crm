@@ -190,6 +190,18 @@ def recover_normalized_payload_missing_queues(dry_run=True, max_queues=200):
     return {"recovered": recovered, "total_found": len(queues)}
 
 
+@frappe.whitelist()
+def recover_graph_queues_dry_run():
+    """System Console friendly dry-run wrapper without kwargs."""
+    return recover_failed_graph_queues(dry_run=True)
+
+
+@frappe.whitelist()
+def recover_graph_queues_execute():
+    """System Console friendly live recovery execution wrapper without kwargs."""
+    return recover_failed_graph_queues(dry_run=False)
+
+
 if __name__ == "__main__":
     print("This script must be run via bench console or bench execute.")
     print("Usage:")
