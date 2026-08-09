@@ -6,13 +6,13 @@ Purpose:
   After refreshing the Meta access token, queues that hit max_attempts (5/5)
   on GRAPH_DOWNLOAD need their max_attempts bumped so they can retry again.
 
-Usage (run via bench console on the production site):
-  bench --site <your-site> execute visa_crm.api.recovery.recover_failed_graph_queues
+Usage (run via bench console or bench execute):
+  bench --site <your-site> execute visa_crm.api.recovery.recover_failed_graph_queues --kwargs '{"dry_run": false}'
 
 Or run directly:
   bench --site <your-site> console
   >>> import visa_crm.api.recovery as r
-  >>> r.recover_failed_graph_queues()
+  >>> r.recover_failed_graph_queues(dry_run=False)
 
 WARNING: Only run AFTER the Meta access token has been refreshed in tabMeta Settings.
 """
@@ -22,7 +22,7 @@ from frappe.utils import now_datetime, add_to_date
 
 def recover_failed_graph_queues(dry_run=True, max_queues=500):
     """
-    Reset GRAPH_DOWNLOAD stages that are FAILED with exhausted max_attempts
+    Reset GRAPH_DOWNLOAD stages that are FAILED (e.g. token expiry or permission errors)
     so they can retry with the refreshed token.
 
     Args:
@@ -32,11 +32,10 @@ def recover_failed_graph_queues(dry_run=True, max_queues=500):
     Returns:
         dict with counts of recovered, skipped, total_found
     """
-    token_error_pattern = "Session has expired"
     now = now_datetime()
     retry_at = add_to_date(now, minutes=1)  # retry immediately
 
-    # Find GRAPH_DOWNLOAD stages that failed with token expiry
+    # Find ALL GRAPH_DOWNLOAD stages that failed
     failed_stages = frappe.db.sql(
         """
         SELECT s.name as stage_name, s.queue, s.attempt_count, s.max_attempts,
@@ -45,19 +44,18 @@ def recover_failed_graph_queues(dry_run=True, max_queues=500):
         JOIN `tabLead Intake Queue` q ON q.name = s.queue
         WHERE s.stage = 'GRAPH_DOWNLOAD'
           AND s.state = 'FAILED'
-          AND s.last_error LIKE %s
         ORDER BY q.creation ASC
         LIMIT %s
         """,
-        (f"%{token_error_pattern}%", max_queues),
+        (max_queues,),
         as_dict=True,
     )
 
-    print(f"Found {len(failed_stages)} GRAPH_DOWNLOAD stages with token expiry error")
+    print(f"Found {len(failed_stages)} GRAPH_DOWNLOAD stages in FAILED state")
     if dry_run:
         print("DRY RUN — no changes made")
         for s in failed_stages[:20]:
-            print(f"  Would recover: {s.queue} | attempt {s.attempt_count}/{s.max_attempts} | {s.source_lead_id}")
+            print(f"  Would recover: {s.queue} | attempt {s.attempt_count}/{s.max_attempts} | {s.source_lead_id} | error: {str(s.last_error)[:60]}")
         if len(failed_stages) > 20:
             print(f"  ... and {len(failed_stages)-20} more")
         return {"dry_run": True, "would_recover": len(failed_stages)}
@@ -114,7 +112,7 @@ def recover_normalized_payload_missing_queues(dry_run=True, max_queues=200):
     now = now_datetime()
     retry_at = add_to_date(now, minutes=2)
 
-    # Find queues where NORMALIZE is FAILED but GRAPH_DOWNLOAD is COMPLETED
+    # Find queues where NORMALIZE/downstream is FAILED but GRAPH_DOWNLOAD is COMPLETED
     affected = frappe.db.sql(
         """
         SELECT DISTINCT s.queue
@@ -191,7 +189,6 @@ def recover_normalized_payload_missing_queues(dry_run=True, max_queues=200):
 
 
 if __name__ == "__main__":
-    # Standalone test of SQL logic (requires frappe context)
     print("This script must be run via bench console or bench execute.")
     print("Usage:")
-    print("  bench --site <site> execute visa_crm.api.recovery.recover_failed_graph_queues --kwargs '{\"dry_run\": true}'")
+    print("  bench --site <site> execute visa_crm.api.recovery.recover_failed_graph_queues --kwargs '{\"dry_run\": false}'")
