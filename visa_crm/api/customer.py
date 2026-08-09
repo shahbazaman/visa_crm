@@ -38,6 +38,22 @@ def _resolve_customer_group():
     )
 
 
+def _sanitize_customer_name(raw_name, fallback_id=None):
+    """Sanitize customer name to ensure it contains no illegal Frappe docname characters
+
+    (e.g. angle brackets '<', '>' from Meta test leads like '<test lead: dummy data>').
+    """
+    if not raw_name:
+        return f"Meta Lead {fallback_id or ''}".strip()
+    name = frappe.utils.strip_html(str(raw_name)).strip()
+    for ch in ("<", ">", "/", "\\", "%", "*", "?", '"'):
+        name = name.replace(ch, "")
+    name = name.strip()
+    if not name:
+        name = f"Meta Lead {fallback_id or ''}".strip()
+    return name
+
+
 def find_customer(phone=None, email=None, name=None):
     if phone:
         for field in ("mobile_no", "whatsapp_no"):
@@ -79,9 +95,8 @@ def create_customer_from_lead(lead, data=None):
 
 def create_customer(data):
     data = data or {}
-    name = data.get("customer_name") or (
-        f"Meta Lead {data.get('source_lead_id') or ''}".strip()
-    )
+    raw_name = data.get("customer_name") or f"Meta Lead {data.get('source_lead_id') or ''}".strip()
+    name = _sanitize_customer_name(raw_name, fallback_id=data.get("source_lead_id"))
     phone = data.get("phone")
     email = data.get("email")
     existing = find_customer(phone, email)
