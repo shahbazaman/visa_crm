@@ -12,17 +12,41 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from visa_crm.api import intake_processor
-from visa_crm.api.meta_webhook import _insert_queue, _lead_source
+from visa_crm.api.meta_webhook import _insert_queue, _lead_source, replay_payload
 
 
 class TestNewMetaLeadSimulation(FrappeTestCase):
     """
     Tests a brand-new simulated Meta lead end-to-end without reusing any previous test record.
-    Uses a unique TEST-META-LEAD-<hash> ID that will never collide with real Meta leads.
+    Uses a unique LOCAL-TEST-META-<hash> ID that will never collide with real Meta leads.
     """
 
     def _unique_test_id(self):
-        return f"TEST-META-LEAD-{frappe.generate_hash(length=12)}"
+        return f"LOCAL-TEST-META-{frappe.generate_hash(length=12)}"
+
+    def _build_webhook_payload(self, leadgen_id, page_id="PAGE-SIM-TEST", form_id="FORM-SIM-TEST"):
+        return {
+            "object": "page",
+            "entry": [
+                {
+                    "id": page_id,
+                    "time": 1720000000,
+                    "changes": [
+                        {
+                            "value": {
+                                "ad_id": "TEST-AD-001",
+                                "form_id": form_id,
+                                "leadgen_id": leadgen_id,
+                                "created_time": 1720000000,
+                                "page_id": page_id,
+                                "adset_id": "TEST-SET-001"
+                            },
+                            "field": "leadgen"
+                        }
+                    ]
+                }
+            ]
+        }
 
     def _build_graph_payload(self, leadgen_id, suffix):
         return {
@@ -50,24 +74,19 @@ class TestNewMetaLeadSimulation(FrappeTestCase):
     def test_webhook_creates_lead_intake_queue(self):
         """Simulated Meta webhook must create a Lead Intake Queue record."""
         leadgen_id = self._unique_test_id()
-        item = {
-            "event_type": "leadgen",
-            "source_lead_id": leadgen_id,
-            "leadgen_id": leadgen_id,
-            "page_id": "PAGE-SIM-001",
-            "form_id": "FORM-SIM-001",
-        }
-        queue_name, created = _insert_queue(item, event_log=None)
-        frappe.db.commit()
+        payload = self._build_webhook_payload(leadgen_id)
 
-        self.assertTrue(created, "Webhook must create a new queue record for a new leadgen_id")
-        self.assertTrue(frappe.db.exists("Lead Intake Queue", queue_name))
+        res = replay_payload(payload)
+        self.assertTrue(res["ok"], "Webhook replay must return ok=True")
+        self.assertEqual(res["stored"], 1, "Webhook must store 1 new queue record")
+
+        queue_name = frappe.db.get_value("Lead Intake Queue", {"source_lead_id": leadgen_id})
+        self.assertTrue(queue_name, "Lead Intake Queue record must exist in DB")
 
         # Duplicate: must NOT create a second record
-        queue_name2, created2 = _insert_queue(item, event_log=None)
-        frappe.db.commit()
-        self.assertFalse(created2, "Duplicate webhook must not create a second queue record")
-        self.assertEqual(queue_name, queue_name2)
+        res2 = replay_payload(payload)
+        self.assertEqual(res2["duplicates"], 1, "Duplicate webhook must be recorded as duplicate")
+        self.assertEqual(res2["stored"], 0)
 
         # Verify count in DB
         count = frappe.db.count("Lead Intake Queue", {"source_lead_id": leadgen_id})
@@ -83,24 +102,16 @@ class TestNewMetaLeadSimulation(FrappeTestCase):
         Follow-up ToDo, Counselor Assignment, AI Job queue entry.
         """
         suffix = frappe.generate_hash(length=12)
-        leadgen_id = f"TEST-META-LEAD-{suffix}"
+        leadgen_id = f"LOCAL-TEST-META-{suffix}"
         phone = f"+97155{''.join(str(ord(c) % 10) for c in suffix)[:7]}"
         email = f"sim.{suffix}@test-meta.example.com"
         graph = self._build_graph_payload(leadgen_id, suffix)
 
-        # Create the queue entry directly (as webhook would)
-        queue = frappe.new_doc("Lead Intake Queue")
-        queue.status = "Lead Received"
-        queue.source_lead_id = leadgen_id
-        queue.event_type = "leadgen"
-        queue.page_id = "PAGE-SIM-TEST"
-        queue.form_id = "FORM-SIM-TEST"
-        queue.raw_payload = frappe.as_json({
-            "value": {"leadgen_id": leadgen_id, "page_id": "PAGE-SIM-TEST", "form_id": "FORM-SIM-TEST"},
-            "change": {"field": "leadgen"}
-        })
-        queue.insert(ignore_permissions=True)
-        frappe.db.commit()
+        payload = self._build_webhook_payload(leadgen_id)
+        replay_payload(payload)
+
+        queue_name = frappe.db.get_value("Lead Intake Queue", {"source_lead_id": leadgen_id})
+        queue = frappe.get_doc("Lead Intake Queue", queue_name)
 
         # Run the pipeline with mocks for external dependencies:
         # - fetch_lead: mocked to return our canned graph payload (no real HTTP)
@@ -205,18 +216,13 @@ class TestNewMetaLeadSimulation(FrappeTestCase):
         a second CRM Lead.
         """
         suffix = frappe.generate_hash(length=12)
-        leadgen_id = f"TEST-META-LEAD-{suffix}"
+        leadgen_id = f"LOCAL-TEST-META-{suffix}"
         graph = self._build_graph_payload(leadgen_id, suffix)
 
-        queue = frappe.new_doc("Lead Intake Queue")
-        queue.status = "Lead Received"
-        queue.source_lead_id = leadgen_id
-        queue.event_type = "leadgen"
-        queue.raw_payload = frappe.as_json({
-            "value": {"leadgen_id": leadgen_id}, "change": {"field": "leadgen"}
-        })
-        queue.insert(ignore_permissions=True)
-        frappe.db.commit()
+        payload = self._build_webhook_payload(leadgen_id)
+        replay_payload(payload)
+
+        queue_name = frappe.db.get_value("Lead Intake Queue", {"source_lead_id": leadgen_id})
 
         with (
             patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()),
@@ -224,9 +230,9 @@ class TestNewMetaLeadSimulation(FrappeTestCase):
             patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"),
             patch("visa_crm.api.lead_assignment._is_working", return_value=True),
         ):
-            intake_processor.process_queue(queue.name)
+            intake_processor.process_queue(queue_name)
             # Run again — idempotency check
-            intake_processor.process_queue(queue.name)
+            intake_processor.process_queue(queue_name)
 
         count = frappe.db.count("CRM Lead", {"facebook_lead_id": leadgen_id})
         self.assertEqual(count, 1, "Re-processing must not create a duplicate CRM Lead")
@@ -240,16 +246,10 @@ class TestNewMetaLeadSimulation(FrappeTestCase):
         record must still exist and be in a retryable state.
         """
         leadgen_id = self._unique_test_id()
+        payload = self._build_webhook_payload(leadgen_id)
+        replay_payload(payload)
 
-        queue = frappe.new_doc("Lead Intake Queue")
-        queue.status = "Lead Received"
-        queue.source_lead_id = leadgen_id
-        queue.event_type = "leadgen"
-        queue.raw_payload = frappe.as_json({
-            "value": {"leadgen_id": leadgen_id}, "change": {"field": "leadgen"}
-        })
-        queue.insert(ignore_permissions=True)
-        frappe.db.commit()
+        queue_name = frappe.db.get_value("Lead Intake Queue", {"source_lead_id": leadgen_id})
 
         class FakeGraphError(Exception):
             pass
@@ -259,21 +259,21 @@ class TestNewMetaLeadSimulation(FrappeTestCase):
             patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=FakeGraphError("Network timeout")),
             patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"),
         ):
-            intake_processor.process_queue(queue.name)
+            intake_processor.process_queue(queue_name)
 
         # Queue must still exist
         self.assertTrue(
-            frappe.db.exists("Lead Intake Queue", queue.name),
+            frappe.db.exists("Lead Intake Queue", queue_name),
             "Lead Intake Queue must NOT be deleted on graph failure"
         )
-        queue.reload()
+        queue = frappe.get_doc("Lead Intake Queue", queue_name)
         self.assertNotIn(
             queue.status, ("Processed", "Processed With Warnings"),
             "Queue must not be marked as Processed when graph download failed"
         )
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Test 5: AI failure does not delete mandatory records
+    # Test 5: Counselor failure does not delete mandatory records
     # ─────────────────────────────────────────────────────────────────────────
     def test_counselor_unavailable_does_not_delete_business_records(self):
         """
@@ -281,29 +281,24 @@ class TestNewMetaLeadSimulation(FrappeTestCase):
         Customer, Visa Application, and Communication Event must still exist.
         """
         suffix = frappe.generate_hash(length=12)
-        leadgen_id = f"TEST-META-LEAD-{suffix}"
+        leadgen_id = f"LOCAL-TEST-META-{suffix}"
         graph = self._build_graph_payload(leadgen_id, suffix)
 
-        queue = frappe.new_doc("Lead Intake Queue")
-        queue.status = "Lead Received"
-        queue.source_lead_id = leadgen_id
-        queue.event_type = "leadgen"
-        queue.raw_payload = frappe.as_json({
-            "value": {"leadgen_id": leadgen_id}, "change": {"field": "leadgen"}
-        })
-        queue.insert(ignore_permissions=True)
-        frappe.db.commit()
+        payload = self._build_webhook_payload(leadgen_id)
+        replay_payload(payload)
 
-        # Do NOT mock _is_working — let counselor assignment fail naturally
+        queue_name = frappe.db.get_value("Lead Intake Queue", {"source_lead_id": leadgen_id})
+
+        # Do NOT mock _is_working — force no counselor working
         with (
             patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()),
             patch("visa_crm.api.pipeline_stage_services.fetch_lead", return_value=graph),
             patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"),
-            patch("visa_crm.api.lead_assignment._is_working", return_value=False),  # force no counselor
+            patch("visa_crm.api.lead_assignment._is_working", return_value=False),
         ):
-            intake_processor.process_queue(queue.name)
+            intake_processor.process_queue(queue_name)
 
-        queue.reload()
+        queue = frappe.get_doc("Lead Intake Queue", queue_name)
 
         # All mandatory business records must exist even if counselor assignment failed
         self.assertTrue(queue.matched_lead, "CRM Lead must exist even when counselor is unavailable")
