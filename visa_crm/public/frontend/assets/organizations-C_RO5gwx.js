@@ -1,0 +1,2 @@
+import{aW as i,ad as s,Z as c,B as u}from"./index-Ce9nRulk.js";const f=i("crm-organizations",()=>{let t=u({});const a=s(),n=c({url:"crm.api.session.get_organizations",cache:"organizations",initialData:[],auto:!0,transform(o){for(let r of o)t[r.name]=r;return o},onError(o){o&&o.exc_type==="AuthenticationError"&&a.push("/login")}});function e(o){return t[o]}return{organizations:n,getOrganization:e}});export{f as o};
+//# sourceMappingURL=organizations-C_RO5gwx.js.map
