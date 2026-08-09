@@ -1,2 +1,0 @@
-class n{onRender(){if(this.doc.reference_doctype&&this.doc.reference_docname){let c=this.doc.reference_doctype.replace("CRM ","");this.actions=[{name:"Redirect Action",label:__("Open {0}",[c]),onClick:e=>{if(!this.doc.reference_docname)return;let r=this.doc.reference_doctype=="CRM Deal"?"Deal":"Lead",a={leadId:this.doc.reference_docname};r=="Deal"&&(a={dealId:this.doc.reference_docname}),this.router.push({name:r,params:a}),e==null||e()}}]}}}export{n as CRMTask};
-//# sourceMappingURL=form-pv6FRxr2.js.map

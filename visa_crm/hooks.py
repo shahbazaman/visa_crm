@@ -88,4 +88,10 @@ fixtures = [
     "Workflow Action Master",
     {"dt": "DocType", "filters": [["module", "=", "Visa CRM"]]}
 ]
-page_js = {"manager-dashboard": "public/js/manager_dashboard.js"}
+page_js = {
+    "manager-dashboard": "public/js/manager_dashboard.js",
+    "lead-management": "visa_crm/page/lead_management/lead_management.js"
+}
+website_redirects = [
+    {"source": "/crm/leads/view/list", "target": "/app/lead-management"}
+]

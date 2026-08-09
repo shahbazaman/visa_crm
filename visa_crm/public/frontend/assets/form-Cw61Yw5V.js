@@ -1,2 +1,0 @@
-class d{onRender(){if(this.doc.reference_doctype&&this.doc.reference_docname){let a=this.doc.reference_doctype.replace("CRM ","");this.actions=[{name:"Redirect Action",label:__("Open {0}",[a]),onClick:e=>{if(!this.doc.reference_docname)return;let r=this.doc.reference_doctype=="CRM Deal"?"Deal":"Lead",c={leadId:this.doc.reference_docname};r=="Deal"&&(c={dealId:this.doc.reference_docname}),this.router.push({name:r,params:c}),e==null||e()}}]}}}export{d as FCRMNote};
-//# sourceMappingURL=form-Cw61Yw5V.js.map
