@@ -64,8 +64,10 @@ class TestNormalizedPayloadRecovery(FrappeTestCase):
         self.assertEqual(second,"NOT_STARTED")
 
     def test_scheduler_path_repairs_then_retries_customer360_without_graph_download(self):
+        from visa_crm.api.customer import _resolve_customer_group
         customer=frappe.new_doc("Customer")
         customer.customer_name=f"Recovery Customer {self.source}"
+        customer.customer_group=_resolve_customer_group()
         customer.insert(ignore_permissions=True)
         with patch("visa_crm.api.pipeline_stage_services.fetch_lead",side_effect=AssertionError("recovery must not call Graph API")),patch("visa_crm.api.pipeline_stage_services.resolve_customer",return_value=customer.name):
             intake_processor.process_queue(self.queue,stage_budget=3)

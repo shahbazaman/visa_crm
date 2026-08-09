@@ -40,8 +40,10 @@ class TestPipelineCustomerLeadStages(FrappeTestCase):
         self.assertEqual(frappe.db.count("CRM Lead",{"facebook_lead_id":self.source}),1)
 
     def test_existing_customer_still_creates_lead(self):
+        from visa_crm.api.customer import _resolve_customer_group
         customer=frappe.new_doc("Customer")
         customer.customer_name="Existing Customer"
+        customer.customer_group=_resolve_customer_group()
         if customer.meta.has_field("mobile_no"):
             customer.mobile_no=self.phone
         customer.insert(ignore_permissions=True)
