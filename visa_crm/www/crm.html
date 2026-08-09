@@ -198,7 +198,6 @@
   <link rel="manifest" href="/assets/visa_crm/crm_frontend/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/assets/visa_crm/crm_frontend/registerSW.js"></script></head>
   <body class="sm:overscroll-y-none no-scrollbar">
     <div id="app" class="h-full"></div>
-
     <script>
       {% for key in boot %}
       window["{{ key }}"] = {{ boot[key] | tojson }};

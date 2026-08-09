@@ -1,0 +1,8 @@
+{
+  "name": "visa_crm",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend/crm && yarn install --prefer-offline && yarn build"
+  }
+}
