@@ -20,6 +20,7 @@ import frappe
 from frappe.utils import now_datetime, add_to_date
 
 
+@frappe.whitelist()
 def recover_failed_graph_queues(dry_run=True, max_queues=500):
     """
     Reset GRAPH_DOWNLOAD stages that are FAILED (e.g. token expiry or permission errors)
@@ -98,6 +99,7 @@ def recover_failed_graph_queues(dry_run=True, max_queues=500):
     return {"recovered": recovered, "total_found": len(failed_stages)}
 
 
+@frappe.whitelist()
 def recover_normalized_payload_missing_queues(dry_run=True, max_queues=200):
     """
     For queues where GRAPH_DOWNLOAD succeeded but downstream stages failed
