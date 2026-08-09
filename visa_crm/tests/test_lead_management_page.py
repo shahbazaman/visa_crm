@@ -22,8 +22,8 @@ class TestLeadManagementPage(FrappeTestCase):
             doc.script,
             "New page JS must define VisaLeadManagement class"
         )
-        # Verify hash routing logic is present
-        self.assertIn("_parse_hash", doc.script, "Hash routing must be present")
+        # Verify search parameter routing logic is present
+        self.assertIn("_get_params", doc.script, "URL search parameter routing must be present")
         # Verify lead click opens native CRM route
         self.assertIn("/crm/leads/", doc.script, "Lead click must navigate to CRM SPA")
 

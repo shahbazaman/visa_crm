@@ -2,117 +2,92 @@
  * visa_crm/public/js/crm_spa_redirect.js
  *
  * Intercepts Vue Router (Frappe CRM SPA) navigation to the Leads list route
- * and redirects to the custom Lead Management Desk Page.
+ * and redirects immediately to the custom Lead Management Desk Page (/app/lead-management).
  *
- * Technique: monkey-patch history.pushState / history.replaceState so we can
- * detect client-side URL changes that never touch the server.
- *
- * Safe guards:
- *   - Only acts when the current origin matches the Frappe site
- *   - Does NOT intercept lead detail URLs (/crm/leads/CRM-LEAD-...)
- *   - Does NOT intercept /crm/contacts, /crm/deals, /crm/dashboard, etc.
- *   - Only redirects list patterns: /crm/leads, /crm/leads/view/*
- *   - Redirect is by window.location.href assignment (hard navigation), which is
- *     what we want: leave the CRM SPA and enter the Frappe Desk Lead Management page.
+ * Scoping rules:
+ *   - Matches list routes: /crm/leads, /crm/leads/view/list, /crm/leads/view/kanban, etc.
+ *   - EXEMPTS individual lead detail URLs: /crm/leads/CRM-LEAD-2026-00126#activity
+ *   - EXEMPTS all other CRM sections: /crm/contacts, /crm/deals, /crm/dashboard, /crm/notes, etc.
+ *   - EXEMPTS Desk routes (/app/*)
  */
 (function () {
     'use strict';
 
-    var LEAD_MANAGEMENT_URL = '/app/lead-management';
+    var TARGET_URL = '/app/lead-management';
 
-    /**
-     * Returns true if the given pathname is a CRM Leads LIST route that should
-     * be redirected to Lead Management.
-     *
-     * Patterns that MATCH (redirect):
-     *   /crm/leads
-     *   /crm/leads/view/list
-     *   /crm/leads/view/kanban
-     *   /crm/leads/view/group_by
-     *
-     * Patterns that DO NOT MATCH (leave alone — individual lead detail):
-     *   /crm/leads/CRM-LEAD-2026-00126
-     *   /crm/leads/CRM-LEAD-...
-     *   /crm/contacts
-     *   /crm/deals
-     *   /app/*
-     */
     function isLeadsListRoute(pathname) {
-        // Must be inside /crm/ space
-        if (!pathname || pathname.indexOf('/crm') !== 0) return false;
+        if (!pathname) return false;
 
-        var crm_relative = pathname.slice(4); // strip leading /crm -> leads/view/list etc
-        if (!crm_relative) crm_relative = '/';
+        // Normalize pathname: remove trailing slashes for comparison
+        var path = pathname.replace(/\/+$/, '');
 
-        // Strip leading slash for comparison
-        var rel = crm_relative.replace(/^\//, '');
+        // Must start with /crm
+        if (path !== '/crm' && path.indexOf('/crm/') !== 0) return false;
 
-        // Match: empty (bare /crm), or starts with "leads" but NOT "leads/<doc-name>"
-        // Doc names in Frappe CRM look like: CRM-LEAD-2026-00001 (contains uppercase + digits)
-        // View routes look like: leads, leads/view/list, leads/view/kanban
+        var relative = path.slice(4).replace(/^\//, ''); // strip /crm or /crm/
 
-        if (rel === '' || rel === 'leads') return true;
+        // Bare /crm/leads or /crm/leads/view/*
+        if (relative === 'leads') return true;
 
-        if (rel.indexOf('leads/') === 0) {
-            var afterLeads = rel.slice(6); // strip "leads/"
-            // It's a leads sub-path — check if it's a view route or a doc name
-            // View routes start with "view/"
-            if (afterLeads.indexOf('view/') === 0) return true;
-            // Otherwise it's a lead detail doc name — do NOT redirect
+        if (relative.indexOf('leads/') === 0) {
+            var sub = relative.slice(6); // strip "leads/"
+            if (sub.indexOf('view/') === 0 || sub === 'view') {
+                return true;
+            }
+            // Individual lead detail record names (e.g. CRM-LEAD-2026-00126) -> DO NOT REDIRECT
             return false;
         }
 
         return false;
     }
 
-    function redirectIfNeeded(pathname) {
-        if (!isLeadsListRoute(pathname)) return;
-        if (window.location.href.indexOf(LEAD_MANAGEMENT_URL) !== -1) return;
-        window.location.href = LEAD_MANAGEMENT_URL;
+    function redirectIfMatching(urlOrPath) {
+        try {
+            var parsedPath = urlOrPath;
+            if (urlOrPath && (urlOrPath.indexOf('http://') === 0 || urlOrPath.indexOf('https://') === 0 || urlOrPath.indexOf('/') === 0)) {
+                var a = document.createElement('a');
+                a.href = urlOrPath;
+                parsedPath = a.pathname;
+            }
+
+            if (isLeadsListRoute(parsedPath)) {
+                if (window.location.pathname !== TARGET_URL) {
+                    window.location.href = TARGET_URL;
+                }
+            }
+        } catch (e) {
+            console.error('[visa_crm] Error checking CRM SPA redirect:', e);
+        }
     }
 
-    // Check on initial page load
-    redirectIfNeeded(window.location.pathname);
+    // 1. Initial page load check
+    redirectIfMatching(window.location.pathname);
 
-    // Monkey-patch history.pushState (Vue Router uses this for SPA navigation)
-    var _origPushState = history.pushState.bind(history);
-    history.pushState = function (state, title, url) {
-        var result = _origPushState(state, title, url);
-        try {
-            if (url) {
-                var parsed;
-                try {
-                    parsed = new URL(url, window.location.origin);
-                } catch (e) {
-                    parsed = { pathname: url };
-                }
-                redirectIfNeeded(parsed.pathname);
-            }
-        } catch (e) {}
-        return result;
-    };
+    // 2. Monkey-patch history.pushState (used by Vue Router during client-side navigation)
+    var _pushState = history.pushState;
+    if (_pushState && !_pushState._patched) {
+        history.pushState = function (state, title, url) {
+            var res = _pushState.apply(this, arguments);
+            if (url) redirectIfMatching(url);
+            return res;
+        };
+        history.pushState._patched = true;
+    }
 
-    // Monkey-patch history.replaceState (used during initial SPA load)
-    var _origReplaceState = history.replaceState.bind(history);
-    history.replaceState = function (state, title, url) {
-        var result = _origReplaceState(state, title, url);
-        try {
-            if (url) {
-                var parsed;
-                try {
-                    parsed = new URL(url, window.location.origin);
-                } catch (e) {
-                    parsed = { pathname: url };
-                }
-                redirectIfNeeded(parsed.pathname);
-            }
-        } catch (e) {}
-        return result;
-    };
+    // 3. Monkey-patch history.replaceState (used by Vue Router during route initialization)
+    var _replaceState = history.replaceState;
+    if (_replaceState && !_replaceState._patched) {
+        history.replaceState = function (state, title, url) {
+            var res = _replaceState.apply(this, arguments);
+            if (url) redirectIfMatching(url);
+            return res;
+        };
+        history.replaceState._patched = true;
+    }
 
-    // Also watch popstate (browser back/forward within the SPA)
+    // 4. Listen to popstate (browser back/forward in SPA)
     window.addEventListener('popstate', function () {
-        redirectIfNeeded(window.location.pathname);
+        redirectIfMatching(window.location.pathname);
     });
 
 })();

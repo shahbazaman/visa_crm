@@ -1,0 +1,50 @@
+<!-- Overridden CRM HTML template from visa_crm -->
+<!doctype html>
+<html class="h-full" lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Frappe CRM</title>
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Frappe CRM" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="white" />
+
+    <!-- PWA -->
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="196x196"
+      href="/assets/crm/manifest/apple-icon-180.png"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="/assets/crm/manifest/apple-icon-180.png"
+    />
+
+    <link
+      rel="apple-touch-startup-image"
+      href="/assets/crm/manifest/apple-splash-2048-2732.jpg"
+      media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)"
+    />
+
+    <!-- Visa CRM SPA Redirect Interceptor script (loaded before CRM Vue SPA bundle) -->
+    <script src="/assets/visa_crm/js/crm_spa_redirect.js"></script>
+
+    <script type="module" crossorigin src="/assets/crm/frontend/assets/index-Ce9nRulk.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/crm/frontend/assets/index-CohZHDfy.css">
+    <link rel="manifest" href="/assets/crm/frontend/manifest.webmanifest">
+    <script id="vite-plugin-pwa:register-sw" src="/assets/crm/frontend/registerSW.js"></script>
+  </head>
+  <body class="sm:overscroll-y-none no-scrollbar">
+    <div id="app" class="h-full"></div>
+
+    <script>
+      {% for key in boot %}
+      window["{{ key }}"] = {{ boot[key] | tojson }};
+      {% endfor %}
+    </script>
+  </body>
+</html>

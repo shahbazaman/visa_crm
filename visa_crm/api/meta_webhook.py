@@ -34,18 +34,26 @@ def meta_verify():
 def receive():
     raw = frappe.request.get_data() or b""
     payload = frappe.request.get_json(silent=True) or _decode_json(raw)
+    logged_events = _log_raw_webhook(payload, raw)
+
     if not _valid_signature(raw):
         frappe.response["http_status_code"] = 403
         log_info("meta_webhook_bad_signature", payload_size=len(raw))
+        for evt in (logged_events.values() if isinstance(logged_events, dict) else []):
+            if evt and has_doctype("Meta Webhook Event"):
+                frappe.db.set_value("Meta Webhook Event", evt, "status", "Bad Signature", update_modified=False)
+        frappe.db.commit()
         return {"ok": False}
+
     if not isinstance(payload, dict):
         frappe.response["http_status_code"] = 400
         log_info("meta_webhook_invalid_payload", payload_type=type(payload).__name__)
         frappe.db.commit()
         return {"ok": False}
-    logged_events = _log_raw_webhook(payload, raw)
+
     log_info("meta_webhook_payload_received", payload=payload)
     stored = updates = duplicates = 0
+    new_queues = []
     for item in _webhook_events(payload):
         event_log = logged_events.get(_event_key(item)) or _log_webhook_event(item, payload)
         if item.get("event_type") != "leadgen":
@@ -56,13 +64,28 @@ def receive():
             _link_event(event_log, existing, frappe.db.get_value("Lead Intake Queue", existing, "status"))
             duplicates += 1
             continue
-        queue_name,created=_insert_queue(item,event_log)
-        _link_event(event_log,queue_name,frappe.db.get_value("Lead Intake Queue",queue_name,"status"))
+        queue_name, created = _insert_queue(item, event_log)
+        _link_event(event_log, queue_name, frappe.db.get_value("Lead Intake Queue", queue_name, "status"))
         if created:
             stored += 1
+            new_queues.append(queue_name)
         else:
             duplicates += 1
+
     frappe.db.commit()
+
+    # Asynchronously enqueue processing for immediate real-time execution
+    for qname in new_queues:
+        try:
+            frappe.enqueue(
+                "visa_crm.api.intake_processor.process_queue",
+                queue="default",
+                docname=qname,
+                enqueue_after_commit=False
+            )
+        except Exception as exc:
+            log_info("meta_webhook_enqueue_failed", queue=qname, error=str(exc))
+
     frappe.response["http_status_code"] = 200
     log_info("meta_webhook_received", stored=stored, updates=updates, duplicates=duplicates)
     return {"ok": True}

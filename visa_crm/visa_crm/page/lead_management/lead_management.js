@@ -1,17 +1,15 @@
 /**
- * Lead Management — 3-Level Hierarchical Navigation
+ * Lead Management Desk Page — 3-Page Hierarchical Navigation
  *
- * URL state is encoded in the hash:
- *   (blank)                                       → Page 1: Categories
- *   #category/<encodedCategory>                   → Page 2: Subcategories
- *   #category/<enc>/subcategory/<enc>             → Page 3: Leads
+ * Page State URL Encoding:
+ *   Page 1 (Categories):    /app/lead-management
+ *   Page 2 (Subcategories): /app/lead-management?category=<encodedCategory>
+ *   Page 3 (Leads):        /app/lead-management?category=<encodedCategory>&subcategory=<encodedSubcategory>
+ *   Page 4 (Lead Detail):  /crm/leads/<name>#activity (native CRM SPA)
  *
- * Browser back/forward works via hashchange.
- * Hard refresh restores the correct page by reading the hash.
- * Direct URL navigation with a hash opens the correct page.
+ * Uses URL query parameters so Frappe Desk router resolves the page as 'lead-management'
+ * without triggering 'Page category not found' or broken website routes.
  */
-
-/* ─── Page lifecycle ─────────────────────────────────────────────── */
 
 frappe.pages["lead-management"].on_page_load = function (wrapper) {
     const page = frappe.ui.make_app_page({
@@ -28,8 +26,6 @@ frappe.pages["lead-management"].on_page_show = function (wrapper) {
     if (mgr) mgr.handle_route();
 };
 
-/* ─── Main controller ────────────────────────────────────────────── */
-
 window.VisaLeadManagement = class VisaLeadManagement {
     constructor(page, wrapper) {
         this.page = page;
@@ -37,33 +33,62 @@ window.VisaLeadManagement = class VisaLeadManagement {
         this._inject_styles();
         this.$root = $('<div class="vlm-root"></div>').appendTo(page.body);
 
-        // Cache: avoid re-fetching when navigating back
+        // Cache for API responses to keep back navigation instant
         this._cat_cache = null;
         this._sub_cache = {};   // key: category
         this._lead_cache = {};  // key: "cat::sub"
 
-        // Bind hashchange so browser back/forward works
-        this._onhash = () => this.handle_route();
-        window.addEventListener("hashchange", this._onhash);
+        // Listen for popstate (browser Back / Forward buttons)
+        this._onpopstate = () => this.handle_route();
+        window.addEventListener("popstate", this._onpopstate);
 
         this.handle_route();
     }
 
-    /* ─── Router ─────────────────────────────────────────────────── */
+    /* ─── Helper: Get URL Search Parameters ──────────────────────── */
+    _get_params() {
+        const search = window.location.search || "";
+        const urlParams = new URLSearchParams(search);
 
+        // Also fallback to frappe.route_options if available
+        let category = urlParams.get("category") || (frappe.route_options && frappe.route_options.category) || null;
+        let subcategory = urlParams.get("subcategory") || (frappe.route_options && frappe.route_options.subcategory) || null;
+
+        return { category, subcategory };
+    }
+
+    /* ─── Helper: Navigate to URL State ─────────────────────────── */
+    _navigate(category, subcategory) {
+        let path = "/app/lead-management";
+        const params = new URLSearchParams();
+        if (category) params.set("category", category);
+        if (subcategory) params.set("subcategory", subcategory);
+
+        const queryString = params.toString();
+        const fullUrl = path + (queryString ? "?" + queryString : "");
+
+        window.history.pushState({ category, subcategory }, "", fullUrl);
+        if (frappe.route_options) {
+            frappe.route_options.category = category;
+            frappe.route_options.subcategory = subcategory;
+        }
+        this.handle_route();
+    }
+
+    /* ─── Router Dispatcher ─────────────────────────────────────── */
     handle_route() {
-        const { level, category, subcategory } = _parse_hash(window.location.hash);
-        if (level === "leads") {
+        const { category, subcategory } = this._get_params();
+
+        if (category && subcategory) {
             this._show_leads(category, subcategory);
-        } else if (level === "subcategories") {
+        } else if (category) {
             this._show_subcategories(category);
         } else {
             this._show_categories();
         }
     }
 
-    /* ─── Page 1: Categories ──────────────────────────────────────── */
-
+    /* ─── PAGE 1: Categories ────────────────────────────────────── */
     async _show_categories() {
         this.page.set_title(__("Lead Management"));
         this.page.clear_primary_action();
@@ -91,8 +116,10 @@ window.VisaLeadManagement = class VisaLeadManagement {
 
     _render_categories(cats) {
         if (!cats || cats.length === 0) {
-            this.$root.html(_tpl_empty(__("No lead categories found."),
-                __("Leads arriving from Meta will appear here once they are categorized.")));
+            this.$root.html(_tpl_empty(
+                __("No lead categories found."),
+                __("Leads arriving from Meta will appear here once ingested.")
+            ));
             return;
         }
 
@@ -100,23 +127,26 @@ window.VisaLeadManagement = class VisaLeadManagement {
             <div class="vlm-page">
                 <div class="vlm-page-header">
                     <h2 class="vlm-page-title">${__("Categories")}</h2>
-                    <p class="vlm-page-subtitle">${__("Select a category to view subcategories and leads.")}</p>
+                    <p class="vlm-page-subtitle">${__("Select a category to view subcategories.")}</p>
                 </div>
                 <div class="vlm-grid">`;
 
         for (const cat of cats) {
-            const encodedCat = encodeURIComponent(cat.value);
+            const catValue = cat.value;
+            const catLabel = frappe.utils.escape_html(cat.label);
+            const count = cat.count || 0;
+
             html += `
-                <div class="vlm-card" data-href="#category/${encodedCat}" tabindex="0" role="button"
-                     aria-label="${frappe.utils.escape_html(cat.label)}: ${cat.count} leads">
+                <div class="vlm-card" data-cat="${frappe.utils.escape_html(catValue)}" tabindex="0" role="button"
+                     aria-label="${catLabel}: ${count} leads">
                     <div class="vlm-card-icon">
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
                         </svg>
                     </div>
                     <div class="vlm-card-body">
-                        <div class="vlm-card-title">${frappe.utils.escape_html(cat.label)}</div>
-                        <div class="vlm-card-count">${cat.count} ${__(cat.count === 1 ? "lead" : "leads")}</div>
+                        <div class="vlm-card-title">${catLabel}</div>
+                        <div class="vlm-card-count">${count} ${__(count === 1 ? "lead" : "leads")}</div>
                     </div>
                     <div class="vlm-card-arrow">›</div>
                 </div>`;
@@ -124,22 +154,23 @@ window.VisaLeadManagement = class VisaLeadManagement {
 
         html += `</div></div>`;
         this.$root.html(html);
+
+        const self = this;
         this.$root.find(".vlm-card").on("click keydown", function (e) {
             if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") return;
-            const href = $(this).data("href");
-            if (href) window.location.hash = href;
+            const cat = $(this).attr("data-cat");
+            if (cat) self._navigate(cat, null);
         });
     }
 
-    /* ─── Page 2: Subcategories ───────────────────────────────────── */
-
+    /* ─── PAGE 2: Subcategories ─────────────────────────────────── */
     async _show_subcategories(category) {
         const title = frappe.utils.escape_html(category);
         this.page.set_title(__("Lead Management") + " — " + title);
         this.page.clear_primary_action();
         this.page.clear_secondary_action();
         this.page.set_secondary_action(__("← Back"), () => {
-            window.location.hash = "";
+            this._navigate(null, null);
         }, "left");
 
         this.$root.html(_tpl_loading(__("Loading subcategories...")));
@@ -162,13 +193,12 @@ window.VisaLeadManagement = class VisaLeadManagement {
     }
 
     _render_subcategories(category, subs) {
-        const encodedCat = encodeURIComponent(category);
         const escapedCat = frappe.utils.escape_html(category);
 
         let html = `
             <div class="vlm-page">
                 <div class="vlm-breadcrumb">
-                    <a href="#" class="vlm-breadcrumb-link vlm-back">${__("Lead Management")}</a>
+                    <a href="javascript:void(0)" class="vlm-breadcrumb-link vlm-back-root">${__("Lead Management")}</a>
                     <span class="vlm-breadcrumb-sep">›</span>
                     <span class="vlm-breadcrumb-current">${escapedCat}</span>
                 </div>
@@ -182,19 +212,21 @@ window.VisaLeadManagement = class VisaLeadManagement {
         } else {
             html += '<div class="vlm-grid">';
             for (const sub of subs) {
-                const encodedSub = encodeURIComponent(sub.value);
-                const hash = `#category/${encodedCat}/subcategory/${encodedSub}`;
+                const subValue = sub.value;
+                const subLabel = frappe.utils.escape_html(sub.label);
+                const count = sub.count || 0;
+
                 html += `
-                    <div class="vlm-card vlm-card-sub" data-href="${hash}" tabindex="0" role="button"
-                         aria-label="${frappe.utils.escape_html(sub.label)}: ${sub.count} leads">
+                    <div class="vlm-card vlm-card-sub" data-cat="${frappe.utils.escape_html(category)}" data-sub="${frappe.utils.escape_html(subValue)}" tabindex="0" role="button"
+                         aria-label="${subLabel}: ${count} leads">
                         <div class="vlm-card-icon vlm-icon-sub">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M4 6h16M4 10h16M4 14h8M4 18h8"/>
                             </svg>
                         </div>
                         <div class="vlm-card-body">
-                            <div class="vlm-card-title">${frappe.utils.escape_html(sub.label)}</div>
-                            <div class="vlm-card-count">${sub.count} ${__(sub.count === 1 ? "lead" : "leads")}</div>
+                            <div class="vlm-card-title">${subLabel}</div>
+                            <div class="vlm-card-count">${count} ${__(count === 1 ? "lead" : "leads")}</div>
                         </div>
                         <div class="vlm-card-arrow">›</div>
                     </div>`;
@@ -205,19 +237,20 @@ window.VisaLeadManagement = class VisaLeadManagement {
         html += `</div>`;
         this.$root.html(html);
 
-        this.$root.find(".vlm-back").on("click", (e) => {
+        const self = this;
+        this.$root.find(".vlm-back-root").on("click", (e) => {
             e.preventDefault();
-            window.location.hash = "";
+            self._navigate(null, null);
         });
         this.$root.find(".vlm-card").on("click keydown", function (e) {
             if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") return;
-            const href = $(this).data("href");
-            if (href) window.location.hash = href;
+            const cat = $(this).attr("data-cat");
+            const sub = $(this).attr("data-sub");
+            if (cat && sub) self._navigate(cat, sub);
         });
     }
 
-    /* ─── Page 3: Leads ───────────────────────────────────────────── */
-
+    /* ─── PAGE 3: Leads ─────────────────────────────────────────── */
     _get_lead_state(category, subcategory) {
         const key = category + "::" + subcategory;
         if (!this._lead_cache[key]) {
@@ -236,7 +269,6 @@ window.VisaLeadManagement = class VisaLeadManagement {
     }
 
     _show_leads(category, subcategory) {
-        const encodedCat = encodeURIComponent(category);
         const escapedCat = frappe.utils.escape_html(category);
         const escapedSub = frappe.utils.escape_html(subcategory);
 
@@ -244,7 +276,7 @@ window.VisaLeadManagement = class VisaLeadManagement {
         this.page.clear_primary_action();
         this.page.clear_secondary_action();
         this.page.set_secondary_action(__("← Back"), () => {
-            window.location.hash = `#category/${encodedCat}`;
+            this._navigate(category, null);
         }, "left");
 
         const state = this._get_lead_state(category, subcategory);
@@ -256,16 +288,15 @@ window.VisaLeadManagement = class VisaLeadManagement {
     }
 
     _render_lead_page(category, subcategory, state) {
-        const encodedCat = encodeURIComponent(category);
         const escapedCat = frappe.utils.escape_html(category);
         const escapedSub = frappe.utils.escape_html(subcategory);
 
         const html = `
             <div class="vlm-page vlm-leads-page">
                 <div class="vlm-breadcrumb">
-                    <a href="#" class="vlm-breadcrumb-link vlm-back-root">${__("Lead Management")}</a>
+                    <a href="javascript:void(0)" class="vlm-breadcrumb-link vlm-back-root">${__("Lead Management")}</a>
                     <span class="vlm-breadcrumb-sep">›</span>
-                    <a href="#category/${encodedCat}" class="vlm-breadcrumb-link vlm-back-cat">${escapedCat}</a>
+                    <a href="javascript:void(0)" class="vlm-breadcrumb-link vlm-back-cat">${escapedCat}</a>
                     <span class="vlm-breadcrumb-sep">›</span>
                     <span class="vlm-breadcrumb-current">${escapedSub}</span>
                 </div>
@@ -296,14 +327,15 @@ window.VisaLeadManagement = class VisaLeadManagement {
 
         this.$root.html(html);
 
+        const self = this;
         // Bind breadcrumb links
         this.$root.find(".vlm-back-root").on("click", (e) => {
             e.preventDefault();
-            window.location.hash = "";
+            self._navigate(null, null);
         });
         this.$root.find(".vlm-back-cat").on("click", (e) => {
             e.preventDefault();
-            window.location.hash = `#category/${encodedCat}`;
+            self._navigate(category, null);
         });
 
         // Search with debounce
@@ -311,36 +343,36 @@ window.VisaLeadManagement = class VisaLeadManagement {
         this.$root.find(".vlm-search").on("input", (e) => {
             clearTimeout(_searchTimer);
             _searchTimer = setTimeout(() => {
-                const s = this._get_lead_state(category, subcategory);
+                const s = self._get_lead_state(category, subcategory);
                 s.search = $(e.target).val().trim();
                 s.data = [];
                 s.page = 1;
                 s.loaded = false;
-                this._fetch_leads(category, subcategory, 1);
+                self._fetch_leads(category, subcategory, 1);
             }, 300);
         });
 
         // Status filter
         this.$root.find(".vlm-status-filter").on("change", (e) => {
-            const s = this._get_lead_state(category, subcategory);
+            const s = self._get_lead_state(category, subcategory);
             s.status = $(e.target).val();
             s.data = [];
             s.page = 1;
             s.loaded = false;
-            this._fetch_leads(category, subcategory, 1);
+            self._fetch_leads(category, subcategory, 1);
         });
 
         // Clear filters
         this.$root.find(".vlm-btn-clear").on("click", () => {
-            const s = this._get_lead_state(category, subcategory);
+            const s = self._get_lead_state(category, subcategory);
             s.search = "";
             s.status = "";
             s.data = [];
             s.page = 1;
             s.loaded = false;
-            this.$root.find(".vlm-search").val("");
-            this.$root.find(".vlm-status-filter").val("");
-            this._fetch_leads(category, subcategory, 1);
+            self.$root.find(".vlm-search").val("");
+            self.$root.find(".vlm-status-filter").val("");
+            self._fetch_leads(category, subcategory, 1);
         });
 
         this._render_lead_list(category, subcategory, state);
@@ -435,7 +467,7 @@ window.VisaLeadManagement = class VisaLeadManagement {
 
             html += `
                 <div class="vlm-lead-row" data-lead="${id}" tabindex="0" role="button"
-                     title="${__("Open in CRM")}">
+                     title="${__("Open in Native CRM SPA")}">
                     <div class="vlm-td vlm-td-name">
                         <div class="vlm-lead-name">${name}</div>
                         <div class="vlm-lead-id">${id}</div>
@@ -469,7 +501,7 @@ window.VisaLeadManagement = class VisaLeadManagement {
 
         $content.html(html);
 
-        // Click lead row → open native CRM Lead detail
+        // Click lead row → Navigate to native CRM Lead detail UI: /crm/leads/<name>#activity
         $content.find(".vlm-lead-row").on("click keydown", function (e) {
             if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") return;
             const leadId = $(this).data("lead");
@@ -479,15 +511,15 @@ window.VisaLeadManagement = class VisaLeadManagement {
         });
 
         // Load more
+        const self = this;
         $content.find(".vlm-btn-load-more").on("click", () => {
             if (!state.loading && state.has_more) {
-                this._fetch_leads(category, subcategory, state.page + 1);
+                self._fetch_leads(category, subcategory, state.page + 1);
             }
         });
     }
 
-    /* ─── Error / loading states ─────────────────────────────────── */
-
+    /* ─── Error rendering ───────────────────────────────────────── */
     _render_error(title, detail, retryFn) {
         this.$root.html(`
             <div class="vlm-page">
@@ -503,30 +535,21 @@ window.VisaLeadManagement = class VisaLeadManagement {
         this.$root.find(".vlm-btn-retry").on("click", retryFn);
     }
 
-    /* ─── Styles ─────────────────────────────────────────────────── */
-
+    /* ─── Inject Component CSS ──────────────────────────────────── */
     _inject_styles() {
         if (document.getElementById("vlm-styles")) return;
         const s = document.createElement("style");
         s.id = "vlm-styles";
         s.textContent = `
-/* ─ Root ─ */
 .vlm-root { padding: 20px; max-width: 1100px; margin: 0 auto; font-family: var(--font-stack, system-ui, sans-serif); }
-.vlm-page { }
-
-/* ─ Breadcrumb ─ */
 .vlm-breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted, #8d99a6); margin-bottom: 12px; }
 .vlm-breadcrumb-link { color: var(--text-muted, #8d99a6); text-decoration: none; cursor: pointer; }
 .vlm-breadcrumb-link:hover { color: var(--text-color, #2d3748); text-decoration: underline; }
 .vlm-breadcrumb-sep { opacity: 0.5; }
 .vlm-breadcrumb-current { color: var(--text-color, #1a202c); font-weight: 500; }
-
-/* ─ Page header ─ */
 .vlm-page-header { margin-bottom: 20px; }
 .vlm-page-title { font-size: 22px; font-weight: 700; margin: 0 0 4px; color: var(--heading-color, #1a202c); }
 .vlm-page-subtitle { font-size: 13px; color: var(--text-muted, #8d99a6); margin: 0; }
-
-/* ─ Card grid ─ */
 .vlm-grid { display: flex; flex-direction: column; gap: 8px; }
 .vlm-card {
     display: flex; align-items: center; gap: 14px;
@@ -544,15 +567,11 @@ window.VisaLeadManagement = class VisaLeadManagement {
 .vlm-card-title { font-size: 15px; font-weight: 600; color: var(--text-color, #1a202c); }
 .vlm-card-count { font-size: 12px; color: var(--text-muted, #718096); margin-top: 2px; }
 .vlm-card-arrow { font-size: 20px; color: var(--text-muted, #a0aec0); }
-
-/* ─ Lead list page ─ */
 .vlm-lead-header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .vlm-lead-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .vlm-search { width: 220px; }
 .vlm-status-filter { width: 150px; }
 .vlm-lead-subtitle { font-size: 12px; color: var(--text-muted, #718096); }
-
-/* ─ Lead table ─ */
 .vlm-lead-table-wrap { border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px; overflow: hidden; }
 .vlm-lead-table-header {
     display: flex; padding: 10px 16px;
@@ -580,8 +599,6 @@ window.VisaLeadManagement = class VisaLeadManagement {
 .vlm-contact-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; }
 .vlm-email { color: var(--text-muted, #718096); font-size: 11px; }
 .vlm-owner-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-/* ─ Status badges ─ */
 .vlm-status-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .vlm-badge-qualified { background: #c6f6d5; color: #276749; }
 .vlm-badge-new, .vlm-badge-open { background: #bee3f8; color: #2a69ac; }
@@ -589,11 +606,7 @@ window.VisaLeadManagement = class VisaLeadManagement {
 .vlm-badge-closed { background: #e9d8fd; color: #553c9a; }
 .vlm-badge-lost { background: #fed7d7; color: #9b2c2c; }
 .vlm-badge-default { background: #edf2f7; color: #4a5568; }
-
-/* ─ Load more ─ */
 .vlm-load-more-wrap { padding: 14px; text-align: center; }
-
-/* ─ State panels ─ */
 .vlm-state { text-align: center; padding: 60px 20px; }
 .vlm-state-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.5; }
 .vlm-state-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
@@ -608,36 +621,7 @@ window.VisaLeadManagement = class VisaLeadManagement {
     }
 };
 
-/* ─── Hash routing helpers ───────────────────────────────────────── */
-
-function _parse_hash(hash) {
-    const h = (hash || "").replace(/^#/, "");
-    if (!h || h === "categories") {
-        return { level: "categories", category: null, subcategory: null };
-    }
-    // #category/<cat>/subcategory/<sub>
-    const leadMatch = h.match(/^category\/([^\/]+)\/subcategory\/(.+)$/);
-    if (leadMatch) {
-        return {
-            level: "leads",
-            category: decodeURIComponent(leadMatch[1]),
-            subcategory: decodeURIComponent(leadMatch[2])
-        };
-    }
-    // #category/<cat>
-    const subMatch = h.match(/^category\/([^\/]+)$/);
-    if (subMatch) {
-        return {
-            level: "subcategories",
-            category: decodeURIComponent(subMatch[1]),
-            subcategory: null
-        };
-    }
-    return { level: "categories", category: null, subcategory: null };
-}
-
-/* ─── Render helper templates ────────────────────────────────────── */
-
+/* ─── Render Helper Templates ───────────────────────────────────── */
 function _tpl_loading(msg) {
     return `<div class="vlm-state">
         <div class="vlm-spinner"></div>
