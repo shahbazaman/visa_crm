@@ -2,6 +2,9 @@ import frappe
 import json
 from frappe import _
 
+UNSET_CATEGORY_VALUES = ["", "Uncategorized"]
+UNSET_SUBCATEGORY_VALUES = ["", "Unspecified", "No Subcategory"]
+
 @frappe.whitelist()
 def get_lead_tree_nodes(parent_level=None, category=None, subcategory=None, filters=None):
     """
@@ -13,11 +16,6 @@ def get_lead_tree_nodes(parent_level=None, category=None, subcategory=None, filt
     if not filters:
         filters = {}
 
-    # 1. Build the base ORM filters securely from the allowed filter contract
-    # Text search
-    search_term = filters.get("search")
-    
-    # We need to construct the query based on parent_level
     if parent_level == "Categories" or not parent_level:
         return _get_categories(filters)
     elif parent_level == "Subcategories":
@@ -40,12 +38,12 @@ def _build_orm_filters(filters, category=None, subcategory=None):
         orm_filters.append(["CRM Lead", "lead_group", "in", filters.get("lead_group")])
 
     if category == "Uncategorized":
-        orm_filters.append(["CRM Lead", "lead_category", "in", ["", None]])
+        orm_filters.append(["CRM Lead", "ifnull(lead_category, '')", "in", UNSET_CATEGORY_VALUES])
     elif category:
         orm_filters.append(["CRM Lead", "lead_category", "=", category])
 
     if subcategory == "No Subcategory":
-        orm_filters.append(["CRM Lead", "lead_group", "in", ["", None]])
+        orm_filters.append(["CRM Lead", "ifnull(lead_group, '')", "in", UNSET_SUBCATEGORY_VALUES])
     elif subcategory:
         orm_filters.append(["CRM Lead", "lead_group", "=", subcategory])
 
@@ -64,7 +62,6 @@ def _build_orm_filters(filters, category=None, subcategory=None):
 def _get_categories(filters):
     or_filters, orm_filters = _build_orm_filters(filters)
     
-    # Use frappe.get_list to automatically enforce user permissions
     leads = frappe.get_list(
         "CRM Lead",
         filters=orm_filters,
@@ -74,25 +71,21 @@ def _get_categories(filters):
         order_by="lead_category asc"
     )
 
-    nodes = []
-    for row in leads:
-        cat_name = row.get("lead_category") or "Uncategorized"
-        nodes.append({
-            "value": cat_name,
-            "label": cat_name,
-            "expandable": True,
-            "level": "Category",
-            "count": row.get("count", 0)
-        })
-    
-    # Handle the case where "Uncategorized" appears multiple times (None vs "")
     merged_nodes = {}
-    for node in nodes:
-        val = node["value"]
-        if val in merged_nodes:
-            merged_nodes[val]["count"] += node["count"]
+    for row in leads:
+        raw_cat = row.get("lead_category")
+        cat_name = "Uncategorized" if not raw_cat or raw_cat in UNSET_CATEGORY_VALUES else raw_cat
+        count = row.get("count", 0)
+        if cat_name in merged_nodes:
+            merged_nodes[cat_name]["count"] += count
         else:
-            merged_nodes[val] = node
+            merged_nodes[cat_name] = {
+                "value": cat_name,
+                "label": cat_name,
+                "expandable": True,
+                "level": "Category",
+                "count": count
+            }
             
     return list(merged_nodes.values())
 
@@ -108,24 +101,21 @@ def _get_subcategories(category, filters):
         order_by="lead_group asc"
     )
 
-    nodes = []
-    for row in leads:
-        sub_name = row.get("lead_group") or "No Subcategory"
-        nodes.append({
-            "value": sub_name,
-            "label": sub_name,
-            "expandable": True,
-            "level": "Subcategory",
-            "count": row.get("count", 0)
-        })
-    
     merged_nodes = {}
-    for node in nodes:
-        val = node["value"]
-        if val in merged_nodes:
-            merged_nodes[val]["count"] += node["count"]
+    for row in leads:
+        raw_sub = row.get("lead_group")
+        sub_name = "No Subcategory" if not raw_sub or raw_sub in UNSET_SUBCATEGORY_VALUES else raw_sub
+        count = row.get("count", 0)
+        if sub_name in merged_nodes:
+            merged_nodes[sub_name]["count"] += count
         else:
-            merged_nodes[val] = node
+            merged_nodes[sub_name] = {
+                "value": sub_name,
+                "label": sub_name,
+                "expandable": True,
+                "level": "Subcategory",
+                "count": count
+            }
             
     return list(merged_nodes.values())
 
@@ -162,12 +152,12 @@ def _get_leads(category, subcategory, filters):
         fields=fields,
         order_by=order_by,
         limit_start=start,
-        limit_page_length=page_length + 1 # +1 to check if there is a next page
+        limit_page_length=page_length + 1
     )
 
     has_more = len(leads) > page_length
     if has_more:
-        leads.pop() # Remove the extra record
+        leads.pop()
 
     return {
         "data": leads,
