@@ -1,9 +1,10 @@
 frappe.pages["lead-management"].on_page_load = function (wrapper) {
     const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Lead Management"), single_column: true });
-    new VisaLeadTreePage(page);
+    const treePageClass = window.VisaLeadTreePage || VisaLeadTreePage;
+    new treePageClass(page);
 };
 
-class VisaLeadTreePage {
+window.VisaLeadTreePage = class VisaLeadTreePage {
     constructor(page) {
         this.page = page;
         this.filters = { search: "", status: "" };
@@ -196,7 +197,7 @@ class VisaLeadTreePage {
             this.$container.html(`
                 <div class="vc-empty-state">
                     <div class="vc-spinner"></div>
-                    <div>${__("Loading categories...")}</div>
+                    <div>${__("Loading Lead Management...")}</div>
                 </div>
             `);
             return;
@@ -205,8 +206,9 @@ class VisaLeadTreePage {
         if (this.errors.categories) {
             this.$container.html(`
                 <div class="vc-error-state">
+                    <div style="font-weight: 600; margin-bottom: 8px;">${__("Lead Management could not be loaded.")}</div>
                     <div class="vc-error-text">${frappe.utils.escape_html(this.errors.categories)}</div>
-                    <button class="btn btn-default btn-xs vc-btn-retry-categories">${__("Retry")}</button>
+                    <button class="btn btn-default btn-xs vc-btn-retry-categories" style="margin-top: 12px;">${__("Retry")}</button>
                 </div>
             `);
             this.$container.find(".vc-btn-retry-categories").on("click", () => this.load_categories());
@@ -217,7 +219,7 @@ class VisaLeadTreePage {
             this.$container.html(`
                 <div class="vc-empty-state">
                     <i class="octicon octicon-inbox" style="font-size:32px; opacity:0.5; margin-bottom:8px;"></i>
-                    <div>${__("No CRM leads found matching criteria")}</div>
+                    <div>${__("No lead categories found.")}</div>
                 </div>
             `);
             return;

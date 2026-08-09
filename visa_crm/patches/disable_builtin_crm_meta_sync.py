@@ -19,6 +19,11 @@ def execute():
 
 def enforce_builtin_crm_meta_sync_disabled():
     result = disable_builtin_meta_sync()
+    try:
+        frappe.cache.delete_key("website_redirects")
+        frappe.cache.delete_key("website_route_rules")
+    except Exception:
+        pass
     frappe.logger("visa_crm.meta").info({"event": "crm_builtin_meta_sync_disabled", "result": result})
     return result
 
