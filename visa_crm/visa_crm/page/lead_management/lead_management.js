@@ -1,471 +1,677 @@
+/**
+ * Lead Management — 3-Level Hierarchical Navigation
+ *
+ * URL state is encoded in the hash:
+ *   (blank)                                       → Page 1: Categories
+ *   #category/<encodedCategory>                   → Page 2: Subcategories
+ *   #category/<enc>/subcategory/<enc>             → Page 3: Leads
+ *
+ * Browser back/forward works via hashchange.
+ * Hard refresh restores the correct page by reading the hash.
+ * Direct URL navigation with a hash opens the correct page.
+ */
+
+/* ─── Page lifecycle ─────────────────────────────────────────────── */
+
 frappe.pages["lead-management"].on_page_load = function (wrapper) {
-    const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Lead Management"), single_column: true });
-    const treePageClass = window.VisaLeadTreePage || VisaLeadTreePage;
-    new treePageClass(page);
+    const page = frappe.ui.make_app_page({
+        parent: wrapper,
+        title: __("Lead Management"),
+        single_column: true
+    });
+    const mgr = new VisaLeadManagement(page, wrapper);
+    wrapper._visa_lead_mgr = mgr;
 };
 
-window.VisaLeadTreePage = class VisaLeadTreePage {
-    constructor(page) {
-        this.page = page;
-        this.filters = { search: "", status: "" };
-        this.categories = [];
-        this.subcategories = {}; // key: category_name -> Array of subcategory nodes
-        this.leads = {}; // key: "category_name::subcategory_name" -> { data: [], page: 1, has_more: false }
-        this.expandedCategories = new Set();
-        this.expandedSubcategories = new Set();
-        this.loading = { categories: false, subcategories: {}, leads: {} };
-        this.errors = { categories: null, subcategories: {}, leads: {} };
+frappe.pages["lead-management"].on_page_show = function (wrapper) {
+    const mgr = wrapper._visa_lead_mgr;
+    if (mgr) mgr.handle_route();
+};
 
-        this.setup_ui();
-        this.load_categories();
+/* ─── Main controller ────────────────────────────────────────────── */
+
+window.VisaLeadManagement = class VisaLeadManagement {
+    constructor(page, wrapper) {
+        this.page = page;
+        this.wrapper = wrapper;
+        this._inject_styles();
+        this.$root = $('<div class="vlm-root"></div>').appendTo(page.body);
+
+        // Cache: avoid re-fetching when navigating back
+        this._cat_cache = null;
+        this._sub_cache = {};   // key: category
+        this._lead_cache = {};  // key: "cat::sub"
+
+        // Bind hashchange so browser back/forward works
+        this._onhash = () => this.handle_route();
+        window.addEventListener("hashchange", this._onhash);
+
+        this.handle_route();
     }
 
-    setup_ui() {
+    /* ─── Router ─────────────────────────────────────────────────── */
+
+    handle_route() {
+        const { level, category, subcategory } = _parse_hash(window.location.hash);
+        if (level === "leads") {
+            this._show_leads(category, subcategory);
+        } else if (level === "subcategories") {
+            this._show_subcategories(category);
+        } else {
+            this._show_categories();
+        }
+    }
+
+    /* ─── Page 1: Categories ──────────────────────────────────────── */
+
+    async _show_categories() {
+        this.page.set_title(__("Lead Management"));
+        this.page.clear_primary_action();
+        this.page.clear_secondary_action();
         this.page.set_primary_action(__("New Lead"), () => frappe.new_doc("CRM Lead"), "add");
-        this.page.set_secondary_action(__("Refresh"), () => this.load_categories(), "refresh");
 
-        this.$root = $('<div class="vc-lead-tree-page"></div>').appendTo(this.page.body);
-        this.inject_styles();
+        this.$root.html(_tpl_loading(__("Loading categories...")));
 
-        const toolbarHtml = `
-            <div class="vc-tree-toolbar">
-                <div class="vc-search-box">
-                    <input type="text" class="form-control input-sm vc-input-search" placeholder="${__("Search leads by name, email, phone...")}" />
+        try {
+            if (!this._cat_cache) {
+                const res = await frappe.call({
+                    method: "visa_crm.api.lead_tree.get_lead_tree_nodes",
+                    args: { parent_level: "Categories" }
+                });
+                this._cat_cache = (res.message || []);
+            }
+            this._render_categories(this._cat_cache);
+        } catch (e) {
+            this._render_error(__("Failed to load categories"), e.message, () => {
+                this._cat_cache = null;
+                this._show_categories();
+            });
+        }
+    }
+
+    _render_categories(cats) {
+        if (!cats || cats.length === 0) {
+            this.$root.html(_tpl_empty(__("No lead categories found."),
+                __("Leads arriving from Meta will appear here once they are categorized.")));
+            return;
+        }
+
+        let html = `
+            <div class="vlm-page">
+                <div class="vlm-page-header">
+                    <h2 class="vlm-page-title">${__("Categories")}</h2>
+                    <p class="vlm-page-subtitle">${__("Select a category to view subcategories and leads.")}</p>
                 </div>
-                <div class="vc-filter-box">
-                    <select class="form-control input-sm vc-select-status">
-                        <option value="">${__("All Statuses")}</option>
-                        <option value="Lead Qualified">${__("Lead Qualified")}</option>
-                        <option value="New">${__("New")}</option>
-                        <option value="Open">${__("Open")}</option>
-                        <option value="Contacted">${__("Contacted")}</option>
-                        <option value="Interested">${__("Interested")}</option>
-                        <option value="Closed">${__("Closed")}</option>
-                        <option value="Lost">${__("Lost")}</option>
-                    </select>
+                <div class="vlm-grid">`;
+
+        for (const cat of cats) {
+            const encodedCat = encodeURIComponent(cat.value);
+            html += `
+                <div class="vlm-card" data-href="#category/${encodedCat}" tabindex="0" role="button"
+                     aria-label="${frappe.utils.escape_html(cat.label)}: ${cat.count} leads">
+                    <div class="vlm-card-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+                        </svg>
+                    </div>
+                    <div class="vlm-card-body">
+                        <div class="vlm-card-title">${frappe.utils.escape_html(cat.label)}</div>
+                        <div class="vlm-card-count">${cat.count} ${__(cat.count === 1 ? "lead" : "leads")}</div>
+                    </div>
+                    <div class="vlm-card-arrow">›</div>
+                </div>`;
+        }
+
+        html += `</div></div>`;
+        this.$root.html(html);
+        this.$root.find(".vlm-card").on("click keydown", function (e) {
+            if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") return;
+            const href = $(this).data("href");
+            if (href) window.location.hash = href;
+        });
+    }
+
+    /* ─── Page 2: Subcategories ───────────────────────────────────── */
+
+    async _show_subcategories(category) {
+        const title = frappe.utils.escape_html(category);
+        this.page.set_title(__("Lead Management") + " — " + title);
+        this.page.clear_primary_action();
+        this.page.clear_secondary_action();
+        this.page.set_secondary_action(__("← Back"), () => {
+            window.location.hash = "";
+        }, "left");
+
+        this.$root.html(_tpl_loading(__("Loading subcategories...")));
+
+        try {
+            if (!this._sub_cache[category]) {
+                const res = await frappe.call({
+                    method: "visa_crm.api.lead_tree.get_lead_tree_nodes",
+                    args: { parent_level: "Subcategories", category }
+                });
+                this._sub_cache[category] = (res.message || []);
+            }
+            this._render_subcategories(category, this._sub_cache[category]);
+        } catch (e) {
+            this._render_error(__("Failed to load subcategories"), e.message, () => {
+                delete this._sub_cache[category];
+                this._show_subcategories(category);
+            });
+        }
+    }
+
+    _render_subcategories(category, subs) {
+        const encodedCat = encodeURIComponent(category);
+        const escapedCat = frappe.utils.escape_html(category);
+
+        let html = `
+            <div class="vlm-page">
+                <div class="vlm-breadcrumb">
+                    <a href="#" class="vlm-breadcrumb-link vlm-back">${__("Lead Management")}</a>
+                    <span class="vlm-breadcrumb-sep">›</span>
+                    <span class="vlm-breadcrumb-current">${escapedCat}</span>
                 </div>
-                <button class="btn btn-default btn-sm vc-btn-clear">${__("Clear Filters")}</button>
-            </div>
-            <div class="vc-tree-container"></div>
-        `;
-        this.$root.html(toolbarHtml);
+                <div class="vlm-page-header">
+                    <h2 class="vlm-page-title">${escapedCat}</h2>
+                    <p class="vlm-page-subtitle">${__("Select a subcategory to view leads.")}</p>
+                </div>`;
 
-        this.$container = this.$root.find(".vc-tree-container");
+        if (!subs || subs.length === 0) {
+            html += _tpl_empty(__("No subcategories found."), __("No leads in this category yet."));
+        } else {
+            html += '<div class="vlm-grid">';
+            for (const sub of subs) {
+                const encodedSub = encodeURIComponent(sub.value);
+                const hash = `#category/${encodedCat}/subcategory/${encodedSub}`;
+                html += `
+                    <div class="vlm-card vlm-card-sub" data-href="${hash}" tabindex="0" role="button"
+                         aria-label="${frappe.utils.escape_html(sub.label)}: ${sub.count} leads">
+                        <div class="vlm-card-icon vlm-icon-sub">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 6h16M4 10h16M4 14h8M4 18h8"/>
+                            </svg>
+                        </div>
+                        <div class="vlm-card-body">
+                            <div class="vlm-card-title">${frappe.utils.escape_html(sub.label)}</div>
+                            <div class="vlm-card-count">${sub.count} ${__(sub.count === 1 ? "lead" : "leads")}</div>
+                        </div>
+                        <div class="vlm-card-arrow">›</div>
+                    </div>`;
+            }
+            html += '</div>';
+        }
 
-        // Event listeners
-        let timer = null;
-        this.$root.find(".vc-input-search").on("input", (e) => {
-            clearTimeout(timer);
-            timer = setTimeout(() => {
-                this.filters.search = $(e.target).val().trim();
-                this.load_categories();
+        html += `</div>`;
+        this.$root.html(html);
+
+        this.$root.find(".vlm-back").on("click", (e) => {
+            e.preventDefault();
+            window.location.hash = "";
+        });
+        this.$root.find(".vlm-card").on("click keydown", function (e) {
+            if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") return;
+            const href = $(this).data("href");
+            if (href) window.location.hash = href;
+        });
+    }
+
+    /* ─── Page 3: Leads ───────────────────────────────────────────── */
+
+    _get_lead_state(category, subcategory) {
+        const key = category + "::" + subcategory;
+        if (!this._lead_cache[key]) {
+            this._lead_cache[key] = {
+                data: [],
+                has_more: false,
+                page: 1,
+                search: "",
+                status: "",
+                loading: false,
+                loaded: false,
+                error: null
+            };
+        }
+        return this._lead_cache[key];
+    }
+
+    _show_leads(category, subcategory) {
+        const encodedCat = encodeURIComponent(category);
+        const escapedCat = frappe.utils.escape_html(category);
+        const escapedSub = frappe.utils.escape_html(subcategory);
+
+        this.page.set_title(escapedCat + " / " + escapedSub);
+        this.page.clear_primary_action();
+        this.page.clear_secondary_action();
+        this.page.set_secondary_action(__("← Back"), () => {
+            window.location.hash = `#category/${encodedCat}`;
+        }, "left");
+
+        const state = this._get_lead_state(category, subcategory);
+        this._render_lead_page(category, subcategory, state);
+
+        if (!state.loaded && !state.loading) {
+            this._fetch_leads(category, subcategory, 1);
+        }
+    }
+
+    _render_lead_page(category, subcategory, state) {
+        const encodedCat = encodeURIComponent(category);
+        const escapedCat = frappe.utils.escape_html(category);
+        const escapedSub = frappe.utils.escape_html(subcategory);
+
+        const html = `
+            <div class="vlm-page vlm-leads-page">
+                <div class="vlm-breadcrumb">
+                    <a href="#" class="vlm-breadcrumb-link vlm-back-root">${__("Lead Management")}</a>
+                    <span class="vlm-breadcrumb-sep">›</span>
+                    <a href="#category/${encodedCat}" class="vlm-breadcrumb-link vlm-back-cat">${escapedCat}</a>
+                    <span class="vlm-breadcrumb-sep">›</span>
+                    <span class="vlm-breadcrumb-current">${escapedSub}</span>
+                </div>
+                <div class="vlm-page-header vlm-lead-header">
+                    <div>
+                        <h2 class="vlm-page-title">${escapedSub}</h2>
+                        <p class="vlm-page-subtitle vlm-lead-subtitle">${escapedCat}</p>
+                    </div>
+                    <div class="vlm-lead-toolbar">
+                        <input type="text" class="form-control input-sm vlm-search"
+                               placeholder="${__("Search name, phone, email...")}"
+                               value="${frappe.utils.escape_html(state.search)}" />
+                        <select class="form-control input-sm vlm-status-filter">
+                            <option value="">${__("All Statuses")}</option>
+                            <option value="New"${state.status === "New" ? " selected" : ""}>${__("New")}</option>
+                            <option value="Open"${state.status === "Open" ? " selected" : ""}>${__("Open")}</option>
+                            <option value="Lead Qualified"${state.status === "Lead Qualified" ? " selected" : ""}>${__("Lead Qualified")}</option>
+                            <option value="Contacted"${state.status === "Contacted" ? " selected" : ""}>${__("Contacted")}</option>
+                            <option value="Interested"${state.status === "Interested" ? " selected" : ""}>${__("Interested")}</option>
+                            <option value="Closed"${state.status === "Closed" ? " selected" : ""}>${__("Closed")}</option>
+                            <option value="Lost"${state.status === "Lost" ? " selected" : ""}>${__("Lost")}</option>
+                        </select>
+                        <button class="btn btn-default btn-sm vlm-btn-clear">${__("Clear")}</button>
+                    </div>
+                </div>
+                <div class="vlm-lead-content" id="vlm-lead-content"></div>
+            </div>`;
+
+        this.$root.html(html);
+
+        // Bind breadcrumb links
+        this.$root.find(".vlm-back-root").on("click", (e) => {
+            e.preventDefault();
+            window.location.hash = "";
+        });
+        this.$root.find(".vlm-back-cat").on("click", (e) => {
+            e.preventDefault();
+            window.location.hash = `#category/${encodedCat}`;
+        });
+
+        // Search with debounce
+        let _searchTimer = null;
+        this.$root.find(".vlm-search").on("input", (e) => {
+            clearTimeout(_searchTimer);
+            _searchTimer = setTimeout(() => {
+                const s = this._get_lead_state(category, subcategory);
+                s.search = $(e.target).val().trim();
+                s.data = [];
+                s.page = 1;
+                s.loaded = false;
+                this._fetch_leads(category, subcategory, 1);
             }, 300);
         });
 
-        this.$root.find(".vc-select-status").on("change", (e) => {
-            this.filters.status = $(e.target).val();
-            this.load_categories();
+        // Status filter
+        this.$root.find(".vlm-status-filter").on("change", (e) => {
+            const s = this._get_lead_state(category, subcategory);
+            s.status = $(e.target).val();
+            s.data = [];
+            s.page = 1;
+            s.loaded = false;
+            this._fetch_leads(category, subcategory, 1);
         });
 
-        this.$root.find(".vc-btn-clear").on("click", () => {
-            this.filters = { search: "", status: "" };
-            this.$root.find(".vc-input-search").val("");
-            this.$root.find(".vc-select-status").val("");
-            this.load_categories();
+        // Clear filters
+        this.$root.find(".vlm-btn-clear").on("click", () => {
+            const s = this._get_lead_state(category, subcategory);
+            s.search = "";
+            s.status = "";
+            s.data = [];
+            s.page = 1;
+            s.loaded = false;
+            this.$root.find(".vlm-search").val("");
+            this.$root.find(".vlm-status-filter").val("");
+            this._fetch_leads(category, subcategory, 1);
         });
+
+        this._render_lead_list(category, subcategory, state);
     }
 
-    get_api_filters() {
-        const f = {};
-        if (this.filters.search) f.search = this.filters.search;
-        if (this.filters.status) f.status = [this.filters.status];
-        return JSON.stringify(f);
-    }
-
-    async load_categories() {
-        this.loading.categories = true;
-        this.errors.categories = null;
-        this.render();
+    async _fetch_leads(category, subcategory, page) {
+        const state = this._get_lead_state(category, subcategory);
+        state.loading = true;
+        state.error = null;
+        this._render_lead_list(category, subcategory, state);
 
         try {
-            const res = await frappe.call({
-                method: "visa_crm.api.lead_tree.get_lead_tree_nodes",
-                args: {
-                    parent_level: "Categories",
-                    filters: this.get_api_filters()
-                }
-            });
-            this.categories = res.message || [];
-        } catch (e) {
-            this.errors.categories = e.message || __("Failed to load categories");
-        } finally {
-            this.loading.categories = false;
-            this.render();
-        }
-    }
-
-    async load_subcategories(categoryName) {
-        this.loading.subcategories[categoryName] = true;
-        this.errors.subcategories[categoryName] = null;
-        this.render();
-
-        try {
-            const res = await frappe.call({
-                method: "visa_crm.api.lead_tree.get_lead_tree_nodes",
-                args: {
-                    parent_level: "Subcategories",
-                    category: categoryName,
-                    filters: this.get_api_filters()
-                }
-            });
-            this.subcategories[categoryName] = res.message || [];
-        } catch (e) {
-            this.errors.subcategories[categoryName] = e.message || __("Failed to load subcategories");
-        } finally {
-            this.loading.subcategories[categoryName] = false;
-            this.render();
-        }
-    }
-
-    async load_leads(categoryName, subcategoryName, page = 1) {
-        const key = `${categoryName}::${subcategoryName}`;
-        this.loading.leads[key] = true;
-        this.errors.leads[key] = null;
-        this.render();
-
-        try {
-            const currentFilters = JSON.parse(this.get_api_filters());
-            currentFilters.page = page;
-            currentFilters.page_length = 20;
+            const filtersObj = {};
+            if (state.search) filtersObj.search = state.search;
+            if (state.status) filtersObj.status = [state.status];
+            filtersObj.page = page;
+            filtersObj.page_length = 20;
 
             const res = await frappe.call({
                 method: "visa_crm.api.lead_tree.get_lead_tree_nodes",
                 args: {
                     parent_level: "Leads",
-                    category: categoryName,
-                    subcategory: subcategoryName,
-                    filters: JSON.stringify(currentFilters)
+                    category,
+                    subcategory,
+                    filters: JSON.stringify(filtersObj)
                 }
             });
             const result = res.message || { data: [], has_more: false, page: 1 };
-
             if (page === 1) {
-                this.leads[key] = result;
+                state.data = result.data || [];
             } else {
-                const existing = this.leads[key] ? this.leads[key].data : [];
-                this.leads[key] = {
-                    data: existing.concat(result.data || []),
-                    has_more: result.has_more,
-                    page: page
-                };
+                state.data = state.data.concat(result.data || []);
             }
+            state.has_more = !!result.has_more;
+            state.page = page;
+            state.loaded = true;
         } catch (e) {
-            this.errors.leads[key] = e.message || __("Failed to load leads");
+            state.error = e.message || __("Failed to load leads");
         } finally {
-            this.loading.leads[key] = false;
-            this.render();
+            state.loading = false;
+            this._render_lead_list(category, subcategory, state);
         }
     }
 
-    toggle_category(categoryName) {
-        if (this.expandedCategories.has(categoryName)) {
-            this.expandedCategories.delete(categoryName);
-        } else {
-            this.expandedCategories.add(categoryName);
-            if (!this.subcategories[categoryName]) {
-                this.load_subcategories(categoryName);
-            }
-        }
-        this.render();
-    }
+    _render_lead_list(category, subcategory, state) {
+        const $content = this.$root.find("#vlm-lead-content");
+        if (!$content.length) return;
 
-    toggle_subcategory(categoryName, subcategoryName) {
-        const key = `${categoryName}::${subcategoryName}`;
-        if (this.expandedSubcategories.has(key)) {
-            this.expandedSubcategories.delete(key);
-        } else {
-            this.expandedSubcategories.add(key);
-            if (!this.leads[key]) {
-                this.load_leads(categoryName, subcategoryName, 1);
-            }
+        if (state.loading && state.data.length === 0) {
+            $content.html(_tpl_loading(__("Loading leads...")));
+            return;
         }
-        this.render();
-    }
-
-    render() {
-        if (this.loading.categories) {
-            this.$container.html(`
-                <div class="vc-empty-state">
-                    <div class="vc-spinner"></div>
-                    <div>${__("Loading Lead Management...")}</div>
-                </div>
-            `);
+        if (state.error) {
+            $content.html(_tpl_error_inline(state.error, () => {
+                state.data = [];
+                state.loaded = false;
+                this._fetch_leads(category, subcategory, 1);
+            }));
+            return;
+        }
+        if (!state.loading && state.data.length === 0) {
+            $content.html(_tpl_empty(
+                __("No leads found."),
+                state.search || state.status
+                    ? __("No leads match the current filters.")
+                    : __("This subcategory has no leads yet.")
+            ));
             return;
         }
 
-        if (this.errors.categories) {
-            this.$container.html(`
-                <div class="vc-error-state">
-                    <div style="font-weight: 600; margin-bottom: 8px;">${__("Lead Management could not be loaded.")}</div>
-                    <div class="vc-error-text">${frappe.utils.escape_html(this.errors.categories)}</div>
-                    <button class="btn btn-default btn-xs vc-btn-retry-categories" style="margin-top: 12px;">${__("Retry")}</button>
-                </div>
-            `);
-            this.$container.find(".vc-btn-retry-categories").on("click", () => this.load_categories());
-            return;
-        }
+        let html = `
+            <div class="vlm-lead-table-wrap">
+                <div class="vlm-lead-table-header">
+                    <div class="vlm-th vlm-th-name">${__("Lead")}</div>
+                    <div class="vlm-th vlm-th-status">${__("Status")}</div>
+                    <div class="vlm-th vlm-th-contact">${__("Contact")}</div>
+                    <div class="vlm-th vlm-th-owner">${__("Owner")}</div>
+                    <div class="vlm-th vlm-th-date">${__("Modified")}</div>
+                </div>`;
 
-        if (!this.categories || this.categories.length === 0) {
-            this.$container.html(`
-                <div class="vc-empty-state">
-                    <i class="octicon octicon-inbox" style="font-size:32px; opacity:0.5; margin-bottom:8px;"></i>
-                    <div>${__("No lead categories found.")}</div>
-                </div>
-            `);
-            return;
-        }
-
-        let html = '<div class="vc-tree-list">';
-        for (const cat of this.categories) {
-            const isCatExpanded = this.expandedCategories.has(cat.value);
-            const catIcon = isCatExpanded ? "octicon-chevron-down" : "octicon-chevron-right";
+        for (const lead of state.data) {
+            const name = frappe.utils.escape_html(lead.lead_name || lead.first_name || lead.name);
+            const id = frappe.utils.escape_html(lead.name);
+            const status = frappe.utils.escape_html(lead.status || "Open");
+            const owner = frappe.utils.escape_html(lead.lead_owner || __("Unassigned"));
+            const phone = frappe.utils.escape_html(lead.mobile_no || "");
+            const email = frappe.utils.escape_html(lead.email || "");
+            const modified = lead.modified
+                ? frappe.datetime.prettyDate(lead.modified)
+                : "";
+            const statusClass = _status_class(status);
 
             html += `
-                <div class="vc-tree-node vc-level-category" data-category="${frappe.utils.escape_html(cat.value)}">
-                    <div class="vc-node-header vc-cat-header">
-                        <i class="vc-chevron octicon ${catIcon}"></i>
-                        <i class="vc-folder-icon octicon octicon-file-directory"></i>
-                        <span class="vc-node-title">${frappe.utils.escape_html(cat.label)}</span>
-                        <span class="badge vc-badge-count">${cat.count || 0}</span>
+                <div class="vlm-lead-row" data-lead="${id}" tabindex="0" role="button"
+                     title="${__("Open in CRM")}">
+                    <div class="vlm-td vlm-td-name">
+                        <div class="vlm-lead-name">${name}</div>
+                        <div class="vlm-lead-id">${id}</div>
                     </div>
-            `;
-
-            if (isCatExpanded) {
-                html += '<div class="vc-node-children vc-cat-children">';
-                if (this.loading.subcategories[cat.value]) {
-                    html += `
-                        <div class="vc-loading-inline">
-                            <span class="vc-spinner-sm"></span> ${__("Loading subcategories...")}
-                        </div>
-                    `;
-                } else if (this.errors.subcategories[cat.value]) {
-                    html += `
-                        <div class="vc-error-inline">
-                            ${frappe.utils.escape_html(this.errors.subcategories[cat.value])}
-                            <button class="btn btn-xs btn-default vc-btn-retry-sub" data-category="${frappe.utils.escape_html(cat.value)}">${__("Retry")}</button>
-                        </div>
-                    `;
-                } else {
-                    const subs = this.subcategories[cat.value] || [];
-                    if (subs.length === 0) {
-                        html += `<div class="vc-empty-inline">${__("No subcategories")}</div>`;
-                    } else {
-                        for (const sub of subs) {
-                            const subKey = `${cat.value}::${sub.value}`;
-                            const isSubExpanded = this.expandedSubcategories.has(subKey);
-                            const subIcon = isSubExpanded ? "octicon-chevron-down" : "octicon-chevron-right";
-
-                            html += `
-                                <div class="vc-tree-node vc-level-subcategory" data-category="${frappe.utils.escape_html(cat.value)}" data-subcategory="${frappe.utils.escape_html(sub.value)}">
-                                    <div class="vc-node-header vc-sub-header">
-                                        <i class="vc-chevron octicon ${subIcon}"></i>
-                                        <i class="vc-layer-icon octicon octicon-versions"></i>
-                                        <span class="vc-node-title">${frappe.utils.escape_html(sub.label)}</span>
-                                        <span class="badge vc-badge-count">${sub.count || 0}</span>
-                                    </div>
-                            `;
-
-                            if (isSubExpanded) {
-                                html += '<div class="vc-node-children vc-sub-children">';
-                                if (this.loading.leads[subKey] && (!this.leads[subKey] || this.leads[subKey].page === 1)) {
-                                    html += `
-                                        <div class="vc-loading-inline">
-                                            <span class="vc-spinner-sm"></span> ${__("Loading leads...")}
-                                        </div>
-                                    `;
-                                } else if (this.errors.leads[subKey]) {
-                                    html += `
-                                        <div class="vc-error-inline">
-                                            ${frappe.utils.escape_html(this.errors.leads[subKey])}
-                                            <button class="btn btn-xs btn-default vc-btn-retry-leads" data-category="${frappe.utils.escape_html(cat.value)}" data-subcategory="${frappe.utils.escape_html(sub.value)}">${__("Retry")}</button>
-                                        </div>
-                                    `;
-                                } else {
-                                    const leadData = this.leads[subKey] || { data: [], has_more: false };
-                                    const leadRows = leadData.data || [];
-                                    if (leadRows.length === 0) {
-                                        html += `<div class="vc-empty-inline">${__("No leads in this subcategory")}</div>`;
-                                    } else {
-                                        html += '<div class="vc-lead-table">';
-                                        for (const lead of leadRows) {
-                                            html += this.render_lead_row(lead);
-                                        }
-                                        html += '</div>';
-
-                                        if (leadData.has_more) {
-                                            html += `
-                                                <div class="vc-load-more-wrap">
-                                                    <button class="btn btn-xs btn-default vc-btn-load-more" data-category="${frappe.utils.escape_html(cat.value)}" data-subcategory="${frappe.utils.escape_html(sub.value)}" data-page="${leadData.page}">
-                                                        ${this.loading.leads[subKey] ? __("Loading...") : __("Load More Leads")}
-                                                    </button>
-                                                </div>
-                                            `;
-                                        }
-                                    }
-                                }
-                                html += '</div>'; // close vc-sub-children
-                            }
-                            html += '</div>'; // close vc-level-subcategory
-                        }
-                    }
-                }
-                html += '</div>'; // close vc-cat-children
-            }
-            html += '</div>'; // close vc-level-category
+                    <div class="vlm-td vlm-td-status">
+                        <span class="vlm-status-badge ${statusClass}">${status}</span>
+                    </div>
+                    <div class="vlm-td vlm-td-contact">
+                        ${phone ? `<div class="vlm-contact-line">📞 ${phone}</div>` : ""}
+                        ${email ? `<div class="vlm-contact-line vlm-email">✉ ${email}</div>` : ""}
+                        ${!phone && !email ? `<span class="text-muted">—</span>` : ""}
+                    </div>
+                    <div class="vlm-td vlm-td-owner">
+                        <span class="vlm-owner-name">${owner}</span>
+                    </div>
+                    <div class="vlm-td vlm-td-date text-muted">${modified}</div>
+                </div>`;
         }
-        html += '</div>'; // close vc-tree-list
 
-        this.$container.html(html);
-        this.bind_tree_events();
-    }
+        html += `</div>`;
 
-    render_lead_row(lead) {
-        const name = frappe.utils.escape_html(lead.lead_name || lead.name);
-        const leadId = frappe.utils.escape_html(lead.name);
-        const status = frappe.utils.escape_html(lead.status || "Open");
-        const owner = frappe.utils.escape_html(lead.lead_owner || __("Unassigned"));
-        const modified = lead.modified ? frappe.datetime.global_date_format(lead.modified) : "";
-        const phone = frappe.utils.escape_html(lead.mobile_no || lead.phone || "");
-        const email = frappe.utils.escape_html(lead.email || "");
+        if (state.has_more) {
+            html += `
+                <div class="vlm-load-more-wrap">
+                    <button class="btn btn-default btn-sm vlm-btn-load-more"
+                            ${state.loading ? "disabled" : ""}>
+                        ${state.loading ? __("Loading...") : __("Load More Leads")}
+                    </button>
+                </div>`;
+        }
 
-        let statusClass = "label-default";
-        if (status === "Lead Qualified") statusClass = "label-success";
-        else if (status === "New" || status === "Open") statusClass = "label-info";
-        else if (status === "Contacted" || status === "Interested") statusClass = "label-warning";
+        $content.html(html);
 
-        return `
-            <div class="vc-lead-row" data-lead-id="${leadId}">
-                <div class="vc-lead-cell vc-cell-main">
-                    <span class="vc-lead-name">${name}</span>
-                    <span class="vc-lead-id">${leadId}</span>
-                </div>
-                <div class="vc-lead-cell vc-cell-contact">
-                    ${phone ? `<span><i class="octicon octicon-device-mobile"></i> ${phone}</span>` : ''}
-                    ${email ? `<span class="text-muted"><i class="octicon octicon-mail"></i> ${email}</span>` : ''}
-                </div>
-                <div class="vc-lead-cell vc-cell-status">
-                    <span class="label ${statusClass}">${status}</span>
-                </div>
-                <div class="vc-lead-cell vc-cell-owner">
-                    <span class="text-muted"><i class="octicon octicon-person"></i> ${owner}</span>
-                </div>
-                <div class="vc-lead-cell vc-cell-date text-muted">
-                    ${modified}
-                </div>
-            </div>
-        `;
-    }
-
-    bind_tree_events() {
-        // Toggle Category
-        this.$container.find(".vc-cat-header").off("click").on("click", (e) => {
-            e.stopPropagation();
-            const cat = $(e.currentTarget).closest(".vc-level-category").data("category");
-            if (cat) this.toggle_category(cat);
-        });
-
-        // Toggle Subcategory
-        this.$container.find(".vc-sub-header").off("click").on("click", (e) => {
-            e.stopPropagation();
-            const cat = $(e.currentTarget).closest(".vc-level-subcategory").data("category");
-            const sub = $(e.currentTarget).closest(".vc-level-subcategory").data("subcategory");
-            if (cat && sub) this.toggle_subcategory(cat, sub);
-        });
-
-        // Click Lead Row
-        this.$container.find(".vc-lead-row").off("click").on("click", (e) => {
-            const leadId = $(e.currentTarget).data("lead-id");
+        // Click lead row → open native CRM Lead detail
+        $content.find(".vlm-lead-row").on("click keydown", function (e) {
+            if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") return;
+            const leadId = $(this).data("lead");
             if (leadId) {
-                frappe.set_route("Form", "CRM Lead", leadId);
+                window.location.href = "/crm/leads/" + encodeURIComponent(leadId) + "#activity";
             }
         });
 
-        // Retry Category Subcategories
-        this.$container.find(".vc-btn-retry-sub").off("click").on("click", (e) => {
-            e.stopPropagation();
-            const cat = $(e.currentTarget).data("category");
-            if (cat) this.load_subcategories(cat);
-        });
-
-        // Retry Subcategory Leads
-        this.$container.find(".vc-btn-retry-leads").off("click").on("click", (e) => {
-            e.stopPropagation();
-            const cat = $(e.currentTarget).data("category");
-            const sub = $(e.currentTarget).data("subcategory");
-            if (cat && sub) this.load_leads(cat, sub, 1);
-        });
-
-        // Load More Leads
-        this.$container.find(".vc-btn-load-more").off("click").on("click", (e) => {
-            e.stopPropagation();
-            const cat = $(e.currentTarget).data("category");
-            const sub = $(e.currentTarget).data("subcategory");
-            const page = parseInt($(e.currentTarget).data("page") || 1) + 1;
-            if (cat && sub) this.load_leads(cat, sub, page);
+        // Load more
+        $content.find(".vlm-btn-load-more").on("click", () => {
+            if (!state.loading && state.has_more) {
+                this._fetch_leads(category, subcategory, state.page + 1);
+            }
         });
     }
 
-    inject_styles() {
-        if ($("#vc-lead-tree-styles").length) return;
-        $("<style id='vc-lead-tree-styles'>").text(`
-            .vc-lead-tree-page { padding: 15px; max-width: 1200px; margin: 0 auto; }
-            .vc-tree-toolbar { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; flex-wrap: wrap; }
-            .vc-search-box { flex: 1; min-width: 200px; }
-            .vc-filter-box { width: 160px; }
-            .vc-tree-container { background: var(--card-bg, #fff); border: 1px solid var(--border-color, #d1d8dd); border-radius: 6px; overflow: hidden; min-height: 200px; }
+    /* ─── Error / loading states ─────────────────────────────────── */
 
-            .vc-tree-list { display: flex; flex-direction: column; }
-            .vc-tree-node { border-bottom: 1px solid var(--border-color, #eef2f5); }
-            .vc-tree-node:last-child { border-bottom: none; }
-
-            .vc-node-header { display: flex; align-items: center; padding: 10px 14px; cursor: pointer; user-select: none; transition: background 0.15s ease; }
-            .vc-node-header:hover { background: var(--hover-bg, #f7fafc); }
-            .vc-cat-header { font-weight: 600; font-size: 14px; background: var(--control-bg, #f4f5f7); }
-            .vc-sub-header { font-weight: 500; font-size: 13px; padding-left: 32px; background: var(--card-bg, #fff); }
-
-            .vc-chevron { width: 16px; text-align: center; margin-right: 8px; color: var(--text-muted, #8d99a6); }
-            .vc-folder-icon { margin-right: 8px; color: #3182ce; }
-            .vc-layer-icon { margin-right: 8px; color: #805ad5; }
-            .vc-node-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-            .vc-badge-count { background: var(--badge-bg, #edf2f7); color: var(--text-color, #2d3748); font-weight: 600; padding: 4px 8px; border-radius: 12px; margin-left: 8px; }
-
-            .vc-cat-children { border-top: 1px solid var(--border-color, #eef2f5); }
-            .vc-sub-children { border-top: 1px dashed var(--border-color, #eef2f5); padding-left: 20px; background: var(--sub-bg, #fafbfc); }
-
-            .vc-lead-table { display: flex; flex-direction: column; }
-            .vc-lead-row { display: flex; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--border-color, #edf2f7); cursor: pointer; transition: background 0.15s ease; font-size: 12px; }
-            .vc-lead-row:last-child { border-bottom: none; }
-            .vc-lead-row:hover { background: var(--hover-bg, #edf2f7); }
-
-            .vc-lead-cell { padding: 0 6px; }
-            .vc-cell-main { flex: 2; min-width: 150px; display: flex; flex-direction: column; }
-            .vc-lead-name { font-weight: 600; color: var(--text-color, #1a202c); }
-            .vc-lead-id { font-size: 10px; color: var(--text-muted, #718096); }
-            .vc-cell-contact { flex: 2; min-width: 150px; display: flex; flex-direction: column; }
-            .vc-cell-status { width: 110px; text-align: center; }
-            .vc-cell-owner { width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-            .vc-cell-date { width: 90px; text-align: right; font-size: 11px; }
-
-            .vc-loading-inline, .vc-error-inline, .vc-empty-inline { padding: 10px 14px 10px 48px; font-size: 12px; color: var(--text-muted, #718096); }
-            .vc-error-inline { color: var(--danger-text, #e53e3e); }
-            .vc-empty-state, .vc-error-state { padding: 40px 20px; text-align: center; color: var(--text-muted, #718096); }
-            .vc-error-state { color: var(--danger-text, #e53e3e); }
-
-            .vc-spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid rgba(0,0,0,0.1); border-top-color: #3182ce; border-radius: 50%; animation: vc-spin 0.8s linear infinite; margin-bottom: 8px; }
-            .vc-spinner-sm { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(0,0,0,0.1); border-top-color: #3182ce; border-radius: 50%; animation: vc-spin 0.8s linear infinite; vertical-align: middle; margin-right: 4px; }
-            @keyframes vc-spin { to { transform: rotate(360deg); } }
-
-            .vc-load-more-wrap { padding: 8px 14px 8px 48px; }
-        `).appendTo(document.head);
+    _render_error(title, detail, retryFn) {
+        this.$root.html(`
+            <div class="vlm-page">
+                <div class="vlm-state vlm-state-error">
+                    <div class="vlm-state-icon">⚠</div>
+                    <div class="vlm-state-title">${frappe.utils.escape_html(title)}</div>
+                    <div class="vlm-state-detail">${frappe.utils.escape_html(detail || "")}</div>
+                    <button class="btn btn-default btn-sm vlm-btn-retry" style="margin-top:12px;">
+                        ${__("Retry")}
+                    </button>
+                </div>
+            </div>`);
+        this.$root.find(".vlm-btn-retry").on("click", retryFn);
     }
+
+    /* ─── Styles ─────────────────────────────────────────────────── */
+
+    _inject_styles() {
+        if (document.getElementById("vlm-styles")) return;
+        const s = document.createElement("style");
+        s.id = "vlm-styles";
+        s.textContent = `
+/* ─ Root ─ */
+.vlm-root { padding: 20px; max-width: 1100px; margin: 0 auto; font-family: var(--font-stack, system-ui, sans-serif); }
+.vlm-page { }
+
+/* ─ Breadcrumb ─ */
+.vlm-breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted, #8d99a6); margin-bottom: 12px; }
+.vlm-breadcrumb-link { color: var(--text-muted, #8d99a6); text-decoration: none; cursor: pointer; }
+.vlm-breadcrumb-link:hover { color: var(--text-color, #2d3748); text-decoration: underline; }
+.vlm-breadcrumb-sep { opacity: 0.5; }
+.vlm-breadcrumb-current { color: var(--text-color, #1a202c); font-weight: 500; }
+
+/* ─ Page header ─ */
+.vlm-page-header { margin-bottom: 20px; }
+.vlm-page-title { font-size: 22px; font-weight: 700; margin: 0 0 4px; color: var(--heading-color, #1a202c); }
+.vlm-page-subtitle { font-size: 13px; color: var(--text-muted, #8d99a6); margin: 0; }
+
+/* ─ Card grid ─ */
+.vlm-grid { display: flex; flex-direction: column; gap: 8px; }
+.vlm-card {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 18px; border-radius: 8px;
+    border: 1px solid var(--border-color, #e2e8f0);
+    background: var(--card-bg, #fff);
+    cursor: pointer; user-select: none;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.vlm-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-color: var(--primary, #3182ce); }
+.vlm-card:focus { outline: 2px solid var(--primary, #3182ce); outline-offset: 1px; }
+.vlm-card-icon { color: var(--primary, #3182ce); flex-shrink: 0; }
+.vlm-card-sub .vlm-card-icon { color: #805ad5; }
+.vlm-card-body { flex: 1; }
+.vlm-card-title { font-size: 15px; font-weight: 600; color: var(--text-color, #1a202c); }
+.vlm-card-count { font-size: 12px; color: var(--text-muted, #718096); margin-top: 2px; }
+.vlm-card-arrow { font-size: 20px; color: var(--text-muted, #a0aec0); }
+
+/* ─ Lead list page ─ */
+.vlm-lead-header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.vlm-lead-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.vlm-search { width: 220px; }
+.vlm-status-filter { width: 150px; }
+.vlm-lead-subtitle { font-size: 12px; color: var(--text-muted, #718096); }
+
+/* ─ Lead table ─ */
+.vlm-lead-table-wrap { border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px; overflow: hidden; }
+.vlm-lead-table-header {
+    display: flex; padding: 10px 16px;
+    background: var(--control-bg, #f4f5f7);
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.04em; color: var(--text-muted, #718096);
+}
+.vlm-lead-row {
+    display: flex; align-items: center; padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color, #edf2f7);
+    cursor: pointer; transition: background 0.12s ease; font-size: 13px;
+}
+.vlm-lead-row:last-child { border-bottom: none; }
+.vlm-lead-row:hover { background: var(--hover-bg, #f7fafc); }
+.vlm-lead-row:focus { outline: 2px solid var(--primary, #3182ce); outline-offset: -2px; }
+.vlm-th, .vlm-td { padding: 0 6px; overflow: hidden; text-overflow: ellipsis; }
+.vlm-th-name, .vlm-td-name   { flex: 2.5; min-width: 140px; }
+.vlm-th-status, .vlm-td-status { width: 130px; }
+.vlm-th-contact, .vlm-td-contact { flex: 2; min-width: 130px; }
+.vlm-th-owner, .vlm-td-owner  { flex: 1.5; min-width: 100px; }
+.vlm-th-date, .vlm-td-date    { width: 100px; text-align: right; font-size: 11px; flex-shrink: 0; }
+.vlm-lead-name { font-weight: 600; color: var(--text-color, #1a202c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vlm-lead-id   { font-size: 10px; color: var(--text-muted, #a0aec0); white-space: nowrap; }
+.vlm-contact-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; }
+.vlm-email { color: var(--text-muted, #718096); font-size: 11px; }
+.vlm-owner-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ─ Status badges ─ */
+.vlm-status-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.vlm-badge-qualified { background: #c6f6d5; color: #276749; }
+.vlm-badge-new, .vlm-badge-open { background: #bee3f8; color: #2a69ac; }
+.vlm-badge-contacted, .vlm-badge-interested { background: #fefcbf; color: #975a16; }
+.vlm-badge-closed { background: #e9d8fd; color: #553c9a; }
+.vlm-badge-lost { background: #fed7d7; color: #9b2c2c; }
+.vlm-badge-default { background: #edf2f7; color: #4a5568; }
+
+/* ─ Load more ─ */
+.vlm-load-more-wrap { padding: 14px; text-align: center; }
+
+/* ─ State panels ─ */
+.vlm-state { text-align: center; padding: 60px 20px; }
+.vlm-state-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.5; }
+.vlm-state-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.vlm-state-detail { font-size: 13px; color: var(--text-muted, #718096); }
+.vlm-state-error .vlm-state-icon { color: var(--danger, #e53e3e); opacity: 1; }
+.vlm-state-error .vlm-state-title { color: var(--danger, #e53e3e); }
+.vlm-error-inline { padding: 16px; background: #fff5f5; border-radius: 6px; border: 1px solid #fed7d7; color: #9b2c2c; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.vlm-spinner { display: inline-block; width: 28px; height: 28px; border: 3px solid rgba(0,0,0,0.1); border-top-color: var(--primary, #3182ce); border-radius: 50%; animation: vlm-spin 0.8s linear infinite; margin-bottom: 10px; }
+@keyframes vlm-spin { to { transform: rotate(360deg); } }
+`;
+        document.head.appendChild(s);
+    }
+};
+
+/* ─── Hash routing helpers ───────────────────────────────────────── */
+
+function _parse_hash(hash) {
+    const h = (hash || "").replace(/^#/, "");
+    if (!h || h === "categories") {
+        return { level: "categories", category: null, subcategory: null };
+    }
+    // #category/<cat>/subcategory/<sub>
+    const leadMatch = h.match(/^category\/([^\/]+)\/subcategory\/(.+)$/);
+    if (leadMatch) {
+        return {
+            level: "leads",
+            category: decodeURIComponent(leadMatch[1]),
+            subcategory: decodeURIComponent(leadMatch[2])
+        };
+    }
+    // #category/<cat>
+    const subMatch = h.match(/^category\/([^\/]+)$/);
+    if (subMatch) {
+        return {
+            level: "subcategories",
+            category: decodeURIComponent(subMatch[1]),
+            subcategory: null
+        };
+    }
+    return { level: "categories", category: null, subcategory: null };
+}
+
+/* ─── Render helper templates ────────────────────────────────────── */
+
+function _tpl_loading(msg) {
+    return `<div class="vlm-state">
+        <div class="vlm-spinner"></div>
+        <div class="vlm-state-title">${frappe.utils.escape_html(msg)}</div>
+    </div>`;
+}
+
+function _tpl_empty(title, detail) {
+    return `<div class="vlm-state">
+        <div class="vlm-state-icon">📭</div>
+        <div class="vlm-state-title">${frappe.utils.escape_html(title)}</div>
+        <div class="vlm-state-detail">${frappe.utils.escape_html(detail || "")}</div>
+    </div>`;
+}
+
+function _tpl_error_inline(msg, retryFn) {
+    const el = $(`<div class="vlm-error-inline">
+        <span>⚠ ${frappe.utils.escape_html(msg || __("An error occurred"))}</span>
+        <button class="btn btn-default btn-xs">${__("Retry")}</button>
+    </div>`);
+    el.find("button").on("click", retryFn);
+    return el;
+}
+
+function _status_class(status) {
+    const s = (status || "").toLowerCase().replace(/\s+/g, "-");
+    const map = {
+        "lead-qualified": "vlm-badge-qualified",
+        "new": "vlm-badge-new",
+        "open": "vlm-badge-open",
+        "contacted": "vlm-badge-contacted",
+        "interested": "vlm-badge-interested",
+        "closed": "vlm-badge-closed",
+        "lost": "vlm-badge-lost"
+    };
+    return map[s] || "vlm-badge-default";
 }

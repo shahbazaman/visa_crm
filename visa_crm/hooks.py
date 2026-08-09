@@ -6,6 +6,7 @@ app_email = "shahbazaman2003@gmail.com"
 app_license = "mit"
 after_install = "visa_crm.install.after_install"
 app_include_css = ["/assets/visa_crm/css/visa_crm.css","/assets/visa_crm/css/visa_portal.css"]
+app_include_js = ["/assets/visa_crm/js/crm_spa_redirect.js"]
 after_migrate = "visa_crm.patches.disable_builtin_crm_meta_sync.enforce_builtin_crm_meta_sync_disabled"
 override_doctype_class = {"Lead Sync Source": "visa_crm.overrides.lead_sync_source.VisaCRMLeadSyncSource"}
 override_whitelisted_methods = {"crm.api.settings.create_email_account": "visa_crm.api.email_account.create_email_account"}

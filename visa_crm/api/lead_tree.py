@@ -141,8 +141,9 @@ def _get_leads(category, subcategory, filters):
     fields = [
         "name", "lead_name", "status", "lead_owner", "creation", "modified",
         "image", "first_name", "organization", "website", "sla_status",
-        "response_by", "first_responded_on", "mobile_no", "first_response_time", "_assign",
-        "_liked_by", "_email_count", "_note_count", "_task_count", "_comment_count"
+        "response_by", "first_responded_on", "mobile_no", "email",
+        "first_response_time", "_assign", "_liked_by",
+        "_email_count", "_note_count", "_task_count", "_comment_count"
     ]
 
     leads = frappe.get_list(
