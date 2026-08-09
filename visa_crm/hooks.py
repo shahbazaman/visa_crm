@@ -92,6 +92,3 @@ fixtures = [
 page_js = {
     "manager-dashboard": "public/js/manager_dashboard.js"
 }
-website_redirects = [
-    {"source": "/crm/leads/view/list", "target": "/app/lead-management"}
-]

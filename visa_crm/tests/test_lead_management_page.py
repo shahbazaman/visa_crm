@@ -27,22 +27,17 @@ class TestLeadManagementPage(FrappeTestCase):
         # Verify lead click opens native CRM route
         self.assertIn("/crm/leads/", doc.script, "Lead click must navigate to CRM SPA")
 
-    def test_redirect_hook_registered(self):
-        """website_redirects must include the CRM leads list redirect."""
-        redirects = frappe.get_hooks("website_redirects")
-        target = next((r for r in redirects if r.get("source") == "/crm/leads/view/list"), None)
-        self.assertIsNotNone(target, "Redirect for /crm/leads/view/list must be registered")
-        self.assertEqual(target.get("target"), "/app/lead-management")
-
-    def test_server_side_redirect_resolution(self):
-        """Server-side: /crm/leads/view/list must resolve to /app/lead-management."""
+    def test_native_crm_routes_no_redirect(self):
+        """Native CRM routes (/crm, /crm/leads, /crm/leads/view/list) must NOT redirect to /app/lead-management."""
         frappe.cache.delete_key("website_redirects")
-        endpoint, _ = PathResolver("crm/leads/view/list").resolve()
-        self.assertEqual(endpoint, "/app/lead-management")
-        self.assertEqual(
-            getattr(frappe.flags, "redirect_location", None),
-            "/app/lead-management"
-        )
+        for route in ("crm", "crm/leads", "crm/leads/view/list", "crm/contacts", "crm/deals"):
+            frappe.flags.redirect_location = None
+            PathResolver(route).resolve()
+            self.assertNotEqual(
+                getattr(frappe.flags, "redirect_location", None),
+                "/app/lead-management",
+                f"Route /{route} must NOT redirect to /app/lead-management"
+            )
 
     def test_unrelated_crm_routes_not_redirected(self):
         """Server-side: /crm/contacts, /crm/deals, /crm/dashboard must NOT redirect."""
@@ -55,14 +50,6 @@ class TestLeadManagementPage(FrappeTestCase):
                 "/app/lead-management",
                 f"Route /{route} must NOT redirect to lead-management"
             )
-
-    def test_app_include_js_has_redirect_script(self):
-        """app_include_js hook must include the CRM SPA redirect interceptor."""
-        includes = frappe.get_hooks("app_include_js")
-        self.assertTrue(
-            any("crm_spa_redirect" in s for s in includes),
-            "app_include_js must include crm_spa_redirect.js"
-        )
 
     def test_api_categories_returns_list(self):
         """get_lead_tree_nodes Categories must return a non-empty list."""
