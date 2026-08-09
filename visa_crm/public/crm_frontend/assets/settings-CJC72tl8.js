@@ -1,0 +1,2 @@
+import{cL as r,C as c,B as u}from"./index-C7nhnkJI.js";const e=c({}),t=u({}),i=r({doctype:"FCRM Settings",name:"FCRM Settings",onSuccess:n=>(e.value=n,g().setupBrand(),n)});function g(){function n(){var s,a,o;t.name=(s=e.value)==null?void 0:s.brand_name,t.logo=(a=e.value)==null?void 0:a.brand_logo,t.favicon=(o=e.value)==null?void 0:o.favicon}return{_settings:i,settings:e,brand:t,setupBrand:n}}export{g};
+//# sourceMappingURL=settings-CJC72tl8.js.map
