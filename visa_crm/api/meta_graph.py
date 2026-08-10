@@ -109,11 +109,23 @@ def check_page_subscription(settings=None):
     token = _access_token(settings)
     app_id = getattr(settings, "meta_app_id", None) if settings else None
     app_secret = _secret(settings)
-    app_token = f"{app_id}|{app_secret}" if app_id and app_secret else token
-    if not page_id or not app_token:
+    if not page_id or not token:
         return {"ok": False, "error": "Missing page_id or access_token in Meta Settings"}
     try:
-        data = _get(f"{page_id}/subscribed_apps", {"access_token": app_token})
+        data = None
+        last_exc = None
+        for tok in filter(None, [token, f"{app_id}|{app_secret}" if app_id and app_secret else None]):
+            try:
+                res = _get(f"{page_id}/subscribed_apps", {"access_token": tok})
+                if isinstance(res, dict) and "data" in res:
+                    data = res
+                    break
+            except Exception as exc:
+                last_exc = exc
+        if not data:
+            if last_exc:
+                raise last_exc
+            data = _get(f"{page_id}/subscribed_apps", {"access_token": token})
         apps = data.get("data", []) if isinstance(data, dict) else []
         subscribed = any(
             (app_id and str(app.get("id")) == str(app_id)) or "leadgen" in (app.get("subscribed_fields") or [])
