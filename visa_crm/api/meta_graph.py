@@ -123,6 +123,15 @@ def check_page_subscription(settings=None):
             except Exception as exc:
                 last_exc = exc
         if not data:
+            if last_exc and ("pages_read_engagement" in str(last_exc) or "#100" in str(last_exc) or "(#100)" in str(last_exc)):
+                sub_res = subscribe_page_leadgen(settings)
+                if sub_res.get("ok") or (sub_res.get("response") or {}).get("success") is True:
+                    return {
+                        "ok": True,
+                        "page_id": page_id,
+                        "apps": [{"id": app_id, "subscribed_fields": ["leadgen"]}],
+                        "is_subscribed": True
+                    }
             if last_exc:
                 raise last_exc
             data = _get(f"{page_id}/subscribed_apps", {"access_token": token})
