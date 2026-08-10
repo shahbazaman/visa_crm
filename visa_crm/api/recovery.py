@@ -202,6 +202,48 @@ def recover_graph_queues_execute():
     return recover_failed_graph_queues(dry_run=False)
 
 
+@frappe.whitelist()
+def retry_queue(queue_name):
+    """
+    Safely reset the failed stage of a single Lead Intake Queue record
+    and process it synchronously through the pipeline engine.
+
+    Permission: Requires System Manager role.
+    """
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw("System Manager role required", frappe.PermissionError)
+
+    if not frappe.db.exists("Lead Intake Queue", queue_name):
+        frappe.throw(f"Lead Intake Queue {queue_name} not found")
+
+    from visa_crm.api.pipeline_engine import stages_for, retry_stage, ensure_stage_ledger
+    from visa_crm.api.intake_processor import process_queue
+
+    ensure_stage_ledger(queue_name)
+    stages = stages_for(queue_name)
+    failed_stage = next((s.stage for s in stages if s.state == "FAILED"), None)
+
+    if failed_stage:
+        retry_stage(queue_name, failed_stage, force=True)
+
+    result = process_queue(queue_name)
+    frappe.db.commit()
+
+    updated = frappe.get_doc("Lead Intake Queue", queue_name)
+    return {
+        "ok": result.get("ok", False),
+        "queue": queue_name,
+        "status": updated.status,
+        "current_stage": updated.current_stage,
+        "orchestration_status": updated.orchestration_status,
+        "matched_customer": getattr(updated, "matched_customer", None),
+        "matched_lead": getattr(updated, "matched_lead", None),
+        "visa_application": getattr(updated, "visa_application", None),
+        "communication_event": getattr(updated, "communication_event", None),
+        "last_error": getattr(updated, "last_error", None),
+        "result": result
+    }
+
 if __name__ == "__main__":
     print("This script must be run via bench console or bench execute.")
     print("Usage:")
