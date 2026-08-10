@@ -102,12 +102,13 @@ class TestCustomer360Resilience(FrappeTestCase):
         self.assertIsNotNone(res.get("matched_customer"))
 
     def test_conflicting_phone_and_email_identities(self):
-        phone_cust = "+17776665544"
-        email_cust = "conflict.user@example.com"
+        h = frappe.generate_hash(length=6)
+        phone_cust = f"+1777{h[:4]}"
+        email_cust = f"conflict_{h}@example.com"
 
         cust_p = frappe.get_doc({
             "doctype": "Customer",
-            "customer_name": "Customer Phone Only",
+            "customer_name": f"Customer Phone {h}",
             "customer_type": "Individual",
             "customer_group": "Individual",
             "mobile_no": phone_cust
@@ -116,7 +117,7 @@ class TestCustomer360Resilience(FrappeTestCase):
 
         cust_e = frappe.get_doc({
             "doctype": "Customer",
-            "customer_name": "Customer Email Only",
+            "customer_name": f"Customer Email {h}",
             "customer_type": "Individual",
             "customer_group": "Individual",
             "email_id": email_cust
@@ -128,7 +129,7 @@ class TestCustomer360Resilience(FrappeTestCase):
         _claim_identities(cust_e.name, {"email": email_cust})
 
         # When resolving data containing BOTH phone_cust and email_cust:
-        data = {"phone": phone_cust, "email": email_cust, "source_lead_id": "CONFLICT-LEAD-001"}
+        data = {"phone": phone_cust, "email": email_cust, "source_lead_id": f"CONFLICT-LEAD-{h}"}
         resolved = resolve_customer(data)
-        # Primary identity match should resolve to one of the customers without throwing ValidationError
+        # Primary identity match should resolve to one of the created customers without throwing ValidationError
         self.assertIn(resolved, (cust_p.name, cust_e.name))

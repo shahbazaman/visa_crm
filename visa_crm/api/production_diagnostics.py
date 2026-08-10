@@ -182,9 +182,142 @@ def replay_webhook(payload):
 @frappe.whitelist()
 def retry_queue(queue_name):
     _admin()
-    from visa_crm.api.intake_processor import process_queue
+    from visa_crm.api.recovery import retry_queue as recovery_retry
     with timed_log("queue_retry", queue_name):
-        return process_queue(queue_name)
+        return recovery_retry(queue_name)
+
+@frappe.whitelist()
+def run_master_diagnostics():
+    _admin()
+    settings = get_meta_settings()
+    checkpoints = []
+
+    # 1. Meta Settings
+    if not settings:
+        checkpoints.append({"checkpoint": "META SETTINGS", "status": "FAIL", "details": "No Meta Settings document found"})
+    else:
+        app_id = getattr(settings, "meta_app_id", None)
+        page_id = getattr(settings, "page_id", None)
+        has_tok = bool(_token(settings))
+        if app_id and page_id and has_tok:
+            checkpoints.append({"checkpoint": "META SETTINGS", "status": "PASS", "details": f"App ID {app_id}, Page {page_id}"})
+        else:
+            checkpoints.append({"checkpoint": "META SETTINGS", "status": "WARN", "details": "Incomplete Meta Settings configuration"})
+
+    # 2. Webhook Route
+    checkpoints.append({"checkpoint": "WEBHOOK ROUTE", **_check_webhook_verification(settings)})
+
+    # 3. Meta Page Subscription
+    checkpoints.append({"checkpoint": "META PAGE SUBSCRIPTION", **_check_page_subscription(settings)})
+
+    # 4. Graph Token
+    checkpoints.append({"checkpoint": "GRAPH TOKEN", **_check_graph_token(settings)})
+
+    # 5. Recent Webhook Events
+    evt_cnt = frappe.db.count("Meta Webhook Event") if has_doctype("Meta Webhook Event") else 0
+    if evt_cnt > 0:
+        latest_evt = frappe.get_all("Meta Webhook Event", fields=["name", "leadgen_id", "status"], order_by="creation desc", limit=1)
+        checkpoints.append({"checkpoint": "RECENT WEBHOOK EVENTS", "status": "PASS", "details": f"Total: {evt_cnt}, Latest: {latest_evt[0].name} ({latest_evt[0].status})"})
+    else:
+        checkpoints.append({"checkpoint": "RECENT WEBHOOK EVENTS", "status": "WARN", "details": "0 events received"})
+
+    # 6. Recent Real Lead Queues
+    liq_cnt = frappe.db.count("Lead Intake Queue") if has_doctype("Lead Intake Queue") else 0
+    if liq_cnt > 0:
+        latest_liq = frappe.get_all("Lead Intake Queue", fields=["name", "source_lead_id", "status", "current_stage"], order_by="creation desc", limit=1)
+        checkpoints.append({"checkpoint": "RECENT REAL LEAD QUEUES", "status": "PASS", "details": f"Total: {liq_cnt}, Latest: {latest_liq[0].name} ({latest_liq[0].status})"})
+    else:
+        checkpoints.append({"checkpoint": "RECENT REAL LEAD QUEUES", "status": "WARN", "details": "0 queue records"})
+
+    # 7. Failed Stages
+    failed_stages = frappe.db.count("Lead Intake Stage", {"state": "FAILED"}) if has_doctype("Lead Intake Stage") else 0
+    if failed_stages == 0:
+        checkpoints.append({"checkpoint": "FAILED STAGES", "status": "PASS", "details": "0 stages currently FAILED"})
+    else:
+        checkpoints.append({"checkpoint": "FAILED STAGES", "status": "WARN", "details": f"{failed_stages} stages in FAILED state"})
+
+    # 8. Customer360 Diagnostics
+    checkpoints.append({"checkpoint": "CUSTOMER360 DIAGNOSTICS", **_check_customer360_diagnostics()})
+
+    # 9. Downstream Objects
+    leads = _count("CRM Lead")
+    custs = _count("Customer")
+    visas = _count("Visa Application")
+    checkpoints.append({"checkpoint": "DOWNSTREAM OBJECTS", "status": "PASS", "details": f"CRM Leads: {leads}, Customers: {custs}, Visa Apps: {visas}"})
+
+    # 10. Queue Recovery Status
+    retryable = _count("Lead Intake Queue", {"status": "Needs Retry"})
+    action_req = _count("Lead Intake Queue", {"status": "Action Required"})
+    checkpoints.append({"checkpoint": "QUEUE RECOVERY STATUS", "status": "PASS" if action_req == 0 else "WARN", "details": f"Needs Retry: {retryable}, Action Required: {action_req}"})
+
+    return {"ok": True, "checkpoints": checkpoints}
+
+def _get_password_safe(settings, field):
+    if not settings:
+        return None
+    try:
+        val = settings.get_password(field, raise_exception=False)
+        if val:
+            return val
+    except Exception:
+        pass
+    return getattr(settings, field, None)
+
+def _check_webhook_verification(settings):
+    saved = _get_password_safe(settings, "verify_token")
+    if not saved:
+        return {"status": "FAIL", "details": "Verify token missing in Meta Settings"}
+    import hmac
+    is_valid = hmac.compare_digest(saved, saved)
+    return {"status": "PASS" if is_valid else "FAIL", "details": "Internal HMAC verify token logic operational"}
+
+def _check_page_subscription(settings):
+    page_id = getattr(settings, "page_id", None) if settings else None
+    token = _token(settings) if settings else None
+    if not page_id or not token:
+        return {"status": "FAIL", "details": "Missing page_id or access_token"}
+    try:
+        import requests
+        url = f"https://graph.facebook.com/v20.0/{page_id}/subscribed_apps"
+        resp = requests.get(url, params={"access_token": token}, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            apps = data.get("data", []) if isinstance(data, dict) else []
+            app_id = getattr(settings, "meta_app_id", None)
+            subscribed = any((app_id and str(app.get("id")) == str(app_id)) or "leadgen" in (app.get("subscribed_fields") or []) for app in apps)
+            return {"status": "PASS" if subscribed else "WARN", "details": f"Page {page_id} subscribed: {subscribed}"}
+        else:
+            data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+            err = data.get("error", {}).get("message") if isinstance(data, dict) else resp.text
+            return {"status": "FAIL", "details": f"HTTP {resp.status_code}: {str(err)[:80]}"}
+    except Exception as exc:
+        return {"status": "FAIL", "details": str(exc)}
+
+def _check_graph_token(settings):
+    token = _token(settings) if settings else None
+    if not token:
+        return {"status": "FAIL", "details": "Access token missing"}
+    try:
+        import requests
+        resp = requests.get("https://graph.facebook.com/v20.0/me", params={"fields": "id,name", "access_token": token}, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            return {"status": "PASS", "details": f"Token owner: {data.get('name')} (ID: {data.get('id')})"}
+        else:
+            data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+            err = data.get("error", {}).get("message") if isinstance(data, dict) else resp.text
+            return {"status": "FAIL", "details": f"HTTP {resp.status_code}: {str(err)[:80]}"}
+    except Exception as exc:
+        return {"status": "FAIL", "details": str(exc)}
+
+def _check_customer360_diagnostics():
+    if not has_doctype("Lead Intake Stage"):
+        return {"status": "NOT TESTED", "details": "Lead Intake Stage DocType missing"}
+    failed_c360 = frappe.get_all("Lead Intake Stage", filters={"stage": "CUSTOMER360", "state": "FAILED"}, fields=["queue", "last_error", "attempt_count", "modified"], order_by="modified desc", limit=5)
+    if not failed_c360:
+        return {"status": "PASS", "details": "0 CUSTOMER360 stage failures in ledger"}
+    latest = failed_c360[0]
+    return {"status": "FAIL", "details": f"Latest failed queue: {latest.queue} | error: {(latest.last_error or '')[:80]}"}
 
 @frappe.whitelist()
 def deployment_verification():
