@@ -137,7 +137,8 @@ def check_page_subscription(settings=None):
                 "apps": [{"id": app_id, "subscribed_fields": ["leadgen"]}],
                 "is_subscribed": True
             }
-        return {"ok": False, "error": sub_res.get("error") or "Unable to verify page subscription"}
+        err_msg = sub_res.get("error") or safe_json_dumps(sub_res.get("response"))
+        return {"ok": False, "error": f"Page subscription POST failed: {err_msg}"}
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 
