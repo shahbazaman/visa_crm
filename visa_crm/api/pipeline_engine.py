@@ -122,6 +122,13 @@ def fail_stage(claim,exc,traceback=None,retry_at=None,warning=None):
     frappe.db.sql("""update `tabLead Intake Stage` set state='FAILED',duration_ms=%s,next_retry_at=%s,lease_owner=null,lease_token=null,lease_expires_at=null,last_error_class=%s,last_error=%s,last_traceback=%s,warning=%s,modified=%s where name=%s and state='RUNNING' and lease_token=%s""",(duration,retry_at,_exception_class(exc),str(exc)[:4000],traceback,cint(warning),now,claim.name,claim.lease_token))
     if frappe.db._cursor.rowcount!=1:
         raise StageClaimError(f"Stage lease is no longer valid: {claim.name}")
+    if frappe.db.exists("DocType","Lead Intake Queue"):
+        queue_values={"last_error":str(exc)[:4000]}
+        if frappe.get_meta("Lead Intake Queue").has_field("last_error_class"):
+            queue_values["last_error_class"]=_exception_class(exc)
+        if frappe.get_meta("Lead Intake Queue").has_field("last_traceback") and traceback:
+            queue_values["last_traceback"]=traceback[:8000]
+        frappe.db.set_value("Lead Intake Queue",claim.queue,queue_values,update_modified=False)
     rollup_queue(claim.queue,progress=True)
 
 def skip_stage(queue_name,stage,reason):

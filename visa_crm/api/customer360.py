@@ -129,19 +129,31 @@ def _identity_customer(data):
             return customer
     return None
 
-def _claim_identities(customer,data):
+def _claim_identities(customer, data):
     if not has_doctype("Customer Identity"):
         return
-    for identity_type,value in _identities(data):
-        digest=_identity_hash(identity_type,value)
-        existing=frappe.db.get_value("Customer Identity",digest,"customer")
+    for identity_type, value in _identities(data):
+        digest = _identity_hash(identity_type, value)
+        existing = frappe.db.get_value("Customer Identity", digest, "customer")
         if existing:
-            if existing!=customer:
-                raise frappe.ValidationError(f"{identity_type} identity is already linked to Customer {existing}")
+            if existing != customer:
+                meta_debug_log("customer_identity_conflict", customer=customer, existing_customer=existing, identity_type=identity_type)
             continue
-        doc=frappe.new_doc("Customer Identity")
-        doc.update({"identity_hash":digest,"identity_type":identity_type,"masked_value":_mask(value),"customer":customer,"verified":0,"source":"Meta Lead Ads"})
-        doc.insert(ignore_permissions=True)
+        doc = frappe.new_doc("Customer Identity")
+        doc.update({
+            "identity_hash": digest,
+            "identity_type": identity_type,
+            "masked_value": _mask(value),
+            "customer": customer,
+            "verified": 0,
+            "source": "Meta Lead Ads"
+        })
+        try:
+            doc.insert(ignore_permissions=True)
+        except frappe.DuplicateEntryError:
+            pass
+        except Exception as exc:
+            meta_debug_log("customer_identity_insert_error", error=str(exc), identity_type=identity_type)
 
 def _identities(data):
     values=[("External ID",str(data.get("source_lead_id") or "").strip()),("Phone",normalize_phone(data.get("phone"))),("WhatsApp",normalize_phone(data.get("whatsapp"))),("Email",(data.get("email") or "").strip().lower())]
