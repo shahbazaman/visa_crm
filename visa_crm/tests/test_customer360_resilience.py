@@ -103,7 +103,8 @@ class TestCustomer360Resilience(FrappeTestCase):
 
     def test_conflicting_phone_and_email_identities(self):
         h = frappe.generate_hash(length=6)
-        phone_cust = f"+1777{h[:4]}"
+        digits = str(abs(hash(h)))[:4].zfill(4)
+        phone_cust = f"+177700{digits}"
         email_cust = f"conflict_{h}@example.com"
 
         cust_p = frappe.get_doc({
