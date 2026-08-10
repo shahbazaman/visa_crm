@@ -113,39 +113,31 @@ def check_page_subscription(settings=None):
         return {"ok": False, "error": "Missing page_id or access_token in Meta Settings"}
     try:
         data = None
-        last_exc = None
         for tok in filter(None, [token, f"{app_id}|{app_secret}" if app_id and app_secret else None]):
             try:
                 res = _get(f"{page_id}/subscribed_apps", {"access_token": tok})
                 if isinstance(res, dict) and "data" in res:
                     data = res
                     break
-            except Exception as exc:
-                last_exc = exc
-        if not data:
-            if last_exc and ("pages_read_engagement" in str(last_exc) or "#100" in str(last_exc) or "(#100)" in str(last_exc)):
-                sub_res = subscribe_page_leadgen(settings)
-                if sub_res.get("ok") or (sub_res.get("response") or {}).get("success") is True:
-                    return {
-                        "ok": True,
-                        "page_id": page_id,
-                        "apps": [{"id": app_id, "subscribed_fields": ["leadgen"]}],
-                        "is_subscribed": True
-                    }
-            if last_exc:
-                raise last_exc
-            data = _get(f"{page_id}/subscribed_apps", {"access_token": token})
-        apps = data.get("data", []) if isinstance(data, dict) else []
-        subscribed = any(
-            (app_id and str(app.get("id")) == str(app_id)) or "leadgen" in (app.get("subscribed_fields") or [])
-            for app in apps
-        )
-        return {
-            "ok": True,
-            "page_id": page_id,
-            "apps": apps,
-            "is_subscribed": subscribed
-        }
+            except Exception:
+                pass
+        if data:
+            apps = data.get("data", []) if isinstance(data, dict) else []
+            subscribed = any(
+                (app_id and str(app.get("id")) == str(app_id)) or "leadgen" in (app.get("subscribed_fields") or [])
+                for app in apps
+            )
+            return {"ok": True, "page_id": page_id, "apps": apps, "is_subscribed": subscribed}
+
+        sub_res = subscribe_page_leadgen(settings)
+        if sub_res.get("ok") or (sub_res.get("response") or {}).get("success") is True:
+            return {
+                "ok": True,
+                "page_id": page_id,
+                "apps": [{"id": app_id, "subscribed_fields": ["leadgen"]}],
+                "is_subscribed": True
+            }
+        return {"ok": False, "error": sub_res.get("error") or "Unable to verify page subscription"}
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 
