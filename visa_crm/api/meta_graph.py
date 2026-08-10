@@ -99,3 +99,43 @@ def _password_or_value(settings, fieldname):
     except Exception:
         pass
     return getattr(settings, fieldname, None)
+
+def check_page_subscription(settings=None):
+    settings = settings or get_meta_settings()
+    page_id = getattr(settings, "page_id", None) if settings else None
+    token = _access_token(settings)
+    if not page_id or not token:
+        return {"ok": False, "error": "Missing page_id or access_token in Meta Settings"}
+    try:
+        data = _get(f"{page_id}/subscribed_apps", {"access_token": token})
+        apps = data.get("data", []) if isinstance(data, dict) else []
+        app_id = getattr(settings, "meta_app_id", None)
+        subscribed = any(
+            (app_id and str(app.get("id")) == str(app_id)) or "leadgen" in (app.get("subscribed_fields") or [])
+            for app in apps
+        )
+        return {
+            "ok": True,
+            "page_id": page_id,
+            "apps": apps,
+            "is_subscribed": subscribed
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+def subscribe_page_leadgen(settings=None):
+    settings = settings or get_meta_settings()
+    page_id = getattr(settings, "page_id", None) if settings else None
+    token = _access_token(settings)
+    if not page_id or not token:
+        return {"ok": False, "error": "Missing page_id or access_token in Meta Settings"}
+    try:
+        url = f"https://graph.facebook.com/{GRAPH_VERSION}/{page_id}/subscribed_apps"
+        resp = requests.post(url, data={"subscribed_fields": "leadgen", "access_token": token}, timeout=20)
+        data = _response_json(resp)
+        is_ok = bool(resp.status_code == 200 and data and data.get("success") is True)
+        log_info("subscribe_page_leadgen", page_id=page_id, ok=is_ok, response=data)
+        return {"ok": is_ok, "response": data, "status_code": resp.status_code}
+    except Exception as exc:
+        log_info("subscribe_page_leadgen_failed", page_id=page_id, error=str(exc))
+        return {"ok": False, "error": str(exc)}

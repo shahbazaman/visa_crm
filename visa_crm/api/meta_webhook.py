@@ -34,7 +34,13 @@ def meta_verify():
 def receive():
     raw = frappe.request.get_data() or b""
     payload = frappe.request.get_json(silent=True) or _decode_json(raw)
-    logged_events = _log_raw_webhook(payload, raw)
+    logged_events = {}
+    try:
+        logged_events = _log_raw_webhook(payload, raw)
+        frappe.db.commit()
+    except Exception as exc:
+        log_info("meta_webhook_raw_log_error", error=str(exc))
+        frappe.db.commit()
 
     if not _valid_signature(raw):
         frappe.response["http_status_code"] = 403
@@ -114,7 +120,7 @@ def replay_payload(payload):
 def _valid_signature(raw):
     request = getattr(frappe.local, "request", None)
     headers = getattr(request, "headers", {}) if request else {}
-    signature = headers.get("X-Hub-Signature-256") or ""
+    signature = headers.get("X-Hub-Signature-256") or headers.get("x-hub-signature-256") or ""
     if not signature.startswith("sha256="):
         return False
     settings = get_meta_settings()

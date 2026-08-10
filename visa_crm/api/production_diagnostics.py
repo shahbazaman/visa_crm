@@ -106,6 +106,7 @@ def queue_diagnostics(limit=100):
 @frappe.whitelist()
 def meta_diagnostics(leadgen_id=None):
     _admin()
+    from visa_crm.api.meta_graph import check_page_subscription
     settings = get_meta_settings()
     latest = _latest("Lead Intake Queue", fields=_fields("Lead Intake Queue", ("name", "source_lead_id", "graph_payload", "last_error", "modified"))) if has_doctype("Lead Intake Queue") else None
     data = {
@@ -114,6 +115,7 @@ def meta_diagnostics(leadgen_id=None):
         "page_id": getattr(settings, "page_id", None) if settings else None,
         "form_ids": getattr(settings, "form_ids", None) if settings else None,
         "permission_list": getattr(settings, "permissions", None) if settings else None,
+        "page_subscription": check_page_subscription(settings),
         "latest_graph_api_call": latest.source_lead_id if latest else None,
         "latest_response": _clip(latest.get("graph_payload")) if latest else None,
         "latest_error": latest.get("last_error") if latest else None
@@ -122,6 +124,18 @@ def meta_diagnostics(leadgen_id=None):
         data["manual_fetch"] = download_lead_by_id(leadgen_id)
     log_event("meta_diagnostics", "success", "Meta Settings", has_token=data["page_access_token_valid"])
     return data
+
+@frappe.whitelist()
+def check_meta_page_subscription():
+    _admin()
+    from visa_crm.api.meta_graph import check_page_subscription
+    return check_page_subscription()
+
+@frappe.whitelist()
+def subscribe_meta_page():
+    _admin()
+    from visa_crm.api.meta_graph import subscribe_page_leadgen
+    return subscribe_page_leadgen()
 
 @frappe.whitelist()
 def scheduler_diagnostics():
