@@ -1,6 +1,6 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from visa_crm.api.pipeline_engine import ensure_stage_ledger, run_stage, stages_for, rollup_queue
+from visa_crm.api.pipeline_engine import ensure_stage_ledger, run_stage, stages_for, rollup_queue, retry_stage
 from visa_crm.api.intake_processor import process_queue
 from visa_crm.api.recovery import retry_queue
 
@@ -32,13 +32,11 @@ class TestPipelineFailureIsolation(FrappeTestCase):
         frappe.db.commit()
 
         ensure_stage_ledger(self.queue.name)
-        # Mark early stages as COMPLETED
         for dep in ("WEBHOOK", "GRAPH_DOWNLOAD", "NORMALIZE", "CLASSIFICATION"):
             frappe.db.set_value("Lead Intake Stage", f"{self.queue.name}:{dep}", {"state": "COMPLETED"}, update_modified=False)
         frappe.db.commit()
 
     def test_stage_failure_does_not_rollback_completed_stages(self):
-        # Force a failure at CUSTOMER360
         def forced_c360_fail(qname, claim):
             raise ValueError("Simulated Customer360 Exception")
 
@@ -59,29 +57,38 @@ class TestPipelineFailureIsolation(FrappeTestCase):
         q_err = frappe.db.get_value("Lead Intake Queue", self.queue.name, "last_error")
         self.assertIn("Simulated Customer360 Exception", q_err)
 
-        # 4. Verify downstream stages are still NOT_STARTED (not corrupted)
-        crm_state = frappe.db.get_value("Lead Intake Stage", f"{self.queue.name}:CRM_LEAD", "state")
-        self.assertEqual(crm_state, "NOT_STARTED")
-
-    def test_recovery_resumes_from_failed_stage(self):
-        # Fail CUSTOMER360 once
+    def test_blocked_stage_status_and_unblocking_on_retry(self):
         def forced_c360_fail(qname, claim):
-            raise ValueError("Simulated Temporary Failure")
+            raise ValueError("Simulated Customer360 Exception")
 
         run_stage(self.queue.name, forced_c360_fail, stage="CUSTOMER360")
+        rollup_queue(self.queue.name)
 
-        # Now run retry_queue (which resets failed stage and invokes process_queue)
+        # Verify CRM_LEAD is BLOCKED due to CUSTOMER360 failure
+        crm_stage = frappe.get_doc("Lead Intake Stage", f"{self.queue.name}:CRM_LEAD")
+        self.assertEqual(crm_stage.state, "BLOCKED")
+        self.assertIn("CUSTOMER360", crm_stage.skip_reason or "")
+
+        # Now retry CUSTOMER360 cleanly
         frappe.set_user("Administrator")
         res = retry_queue(self.queue.name)
         self.assertTrue(res.get("ok"))
 
-        # Verify CUSTOMER360 and downstream stages succeeded
+        # Verify CUSTOMER360 and CRM_LEAD are now COMPLETED
         c360_state = frappe.db.get_value("Lead Intake Stage", f"{self.queue.name}:CUSTOMER360", "state")
         crm_state = frappe.db.get_value("Lead Intake Stage", f"{self.queue.name}:CRM_LEAD", "state")
         self.assertEqual(c360_state, "COMPLETED")
         self.assertEqual(crm_state, "COMPLETED")
 
-        # Verify Customer and CRM Lead references are linked
-        q_doc = frappe.get_doc("Lead Intake Queue", self.queue.name)
-        self.assertIsNotNone(q_doc.matched_customer)
-        self.assertIsNotNone(q_doc.matched_lead)
+    def test_idempotent_stage_retry_does_not_duplicate_documents(self):
+        frappe.set_user("Administrator")
+        res1 = retry_queue(self.queue.name)
+        cust1 = res1.get("customer")
+        lead1 = res1.get("lead")
+        visa1 = res1.get("visa_application")
+
+        # Second retry
+        res2 = retry_queue(self.queue.name)
+        self.assertEqual(res2.get("customer"), cust1)
+        self.assertEqual(res2.get("lead"), lead1)
+        self.assertEqual(res2.get("visa_application"), visa1)

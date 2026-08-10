@@ -312,3 +312,65 @@ class TestNewMetaLeadSimulation(FrappeTestCase):
             ["Processed With Warnings", "Processed"],
             f"Queue status must be Processed or Processed With Warnings when counselor unavailable. Got: {queue.status}"
         )
+
+    def test_ai_failure_does_not_rollback_business_records(self):
+        """If AI enqueue/dispatch fails, CRM Lead, Customer, Visa App, and Comm Event remain intact."""
+        suffix = frappe.generate_hash(length=12)
+        leadgen_id = f"LOCAL-TEST-META-{suffix}"
+        graph = self._build_graph_payload(leadgen_id, suffix)
+
+        payload = self._build_webhook_payload(leadgen_id)
+        replay_payload(payload)
+
+        queue_name = frappe.db.get_value("Lead Intake Queue", {"source_lead_id": leadgen_id})
+
+        with (
+            patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()),
+            patch("visa_crm.api.pipeline_stage_services.fetch_lead", return_value=graph),
+            patch("visa_crm.api.pipeline_stage_services.frappe.enqueue", side_effect=RuntimeError("Redis connection refused")),
+            patch("visa_crm.api.lead_assignment._is_working", return_value=True),
+        ):
+            intake_processor.process_queue(queue_name)
+
+        queue = frappe.get_doc("Lead Intake Queue", queue_name)
+        self.assertTrue(queue.matched_lead, "CRM Lead must exist even when AI fails")
+        self.assertTrue(queue.matched_customer, "Customer must exist even when AI fails")
+        self.assertTrue(queue.visa_application, "Visa App must exist even when AI fails")
+        self.assertTrue(queue.communication_event, "Comm Event must exist even when AI fails")
+
+    def test_existing_customer_missing_crm_lead(self):
+        """If Customer exists but CRM Lead is missing, resolve_customer reuses Customer and creates CRM Lead."""
+        suffix = frappe.generate_hash(length=12)
+        leadgen_id = f"LOCAL-TEST-META-{suffix}"
+        phone = f"+97155{''.join(str(ord(c) % 10) for c in suffix)[:7]}"
+        email = f"sim.{suffix}@test-meta.example.com"
+
+        # Pre-create Customer
+        cust = frappe.get_doc({
+            "doctype": "Customer",
+            "customer_name": f"Existing Customer {suffix}",
+            "customer_type": "Individual",
+            "customer_group": "Individual",
+            "mobile_no": phone,
+            "email_id": email
+        })
+        cust.insert(ignore_permissions=True)
+        frappe.db.commit()
+
+        graph = self._build_graph_payload(leadgen_id, suffix)
+        payload = self._build_webhook_payload(leadgen_id)
+        replay_payload(payload)
+
+        queue_name = frappe.db.get_value("Lead Intake Queue", {"source_lead_id": leadgen_id})
+
+        with (
+            patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()),
+            patch("visa_crm.api.pipeline_stage_services.fetch_lead", return_value=graph),
+            patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"),
+            patch("visa_crm.api.lead_assignment._is_working", return_value=True),
+        ):
+            intake_processor.process_queue(queue_name)
+
+        queue = frappe.get_doc("Lead Intake Queue", queue_name)
+        self.assertEqual(queue.matched_customer, cust.name, "Must reuse existing Customer")
+        self.assertTrue(queue.matched_lead, "Must create new CRM Lead linked to existing Customer")

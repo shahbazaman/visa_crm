@@ -205,6 +205,18 @@ def rollup_queue(queue_name,progress=False):
     if not rows:
         return None
     states={row.stage:row.state for row in rows}
+    for row in rows:
+        if row.state in ("NOT_STARTED", "BLOCKED"):
+            failed_deps = [dep for dep in STAGE_BY_NAME[row.stage].get("dependencies", ()) if states.get(dep) == "FAILED"]
+            if failed_deps:
+                if row.state != "BLOCKED":
+                    frappe.db.set_value("Lead Intake Stage", row.name, {"state": "BLOCKED", "skip_reason": f"Blocked by failed dependency: {', '.join(failed_deps)}"}, update_modified=False)
+                    row.state = "BLOCKED"
+                    states[row.stage] = "BLOCKED"
+            elif row.state == "BLOCKED":
+                frappe.db.set_value("Lead Intake Stage", row.name, {"state": "NOT_STARTED", "skip_reason": None}, update_modified=False)
+                row.state = "NOT_STARTED"
+                states[row.stage] = "NOT_STARTED"
     business=[row for row in rows if row.stage in BUSINESS_STAGES]
     required=[row for row in business if row.requirement_class!="Optional"]
     optional=[row for row in business if row.requirement_class=="Optional"]
