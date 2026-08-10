@@ -162,6 +162,71 @@ def download_lead_by_id(leadgen_id):
         return fetch_lead(leadgen_id, get_meta_settings(), {"source_lead_id": leadgen_id, "status": "manual"})
 
 @frappe.whitelist()
+def inspect_queue_pipeline(queue_name):
+    _admin()
+    if not frappe.db.exists("Lead Intake Queue", queue_name):
+        return {"ok": False, "error": f"Lead Intake Queue {queue_name} not found"}
+
+    queue = frappe.get_doc("Lead Intake Queue", queue_name)
+    stages = frappe.get_all(
+        "Lead Intake Stage",
+        filters={"queue": queue_name},
+        fields=[
+            "name", "stage", "sequence", "requirement_class", "state",
+            "attempt_count", "max_attempts", "next_retry_at", "lease_owner",
+            "heartbeat_at", "started_at", "completed_at", "duration_ms",
+            "last_error_class", "last_error", "last_traceback",
+            "result_doctype", "result_name", "warning", "skip_reason"
+        ],
+        order_by="sequence asc"
+    )
+
+    from visa_crm.api.stage_definitions import STAGE_BY_NAME
+    stage_details = []
+    for s in stages:
+        deps = STAGE_BY_NAME.get(s.stage, {}).get("dependencies", ())
+        s_dict = dict(s)
+        s_dict["dependencies"] = deps
+        stage_details.append(s_dict)
+
+    docs = {}
+    if queue.get("matched_customer") and frappe.db.exists("Customer", queue.matched_customer):
+        c_fields = [f for f in ("name", "customer_name", "mobile_no", "email_id", "crm_lead") if has_field("Customer", f)]
+        docs["customer"] = frappe.db.get_value("Customer", queue.matched_customer, c_fields, as_dict=True)
+    if queue.get("matched_lead") and frappe.db.exists("CRM Lead", queue.matched_lead):
+        l_fields = [f for f in ("name", "lead_name", "mobile_no", "email", "facebook_lead_id", "meta_campaign_name", "campaign_name", "customer360", "customer_360") if has_field("CRM Lead", f)]
+        docs["crm_lead"] = frappe.db.get_value("CRM Lead", queue.matched_lead, l_fields, as_dict=True)
+    if queue.get("visa_application") and frappe.db.exists("Visa Application", queue.visa_application):
+        v_fields = [f for f in ("name", "applicant_name", "visa_type", "country", "status") if has_field("Visa Application", f)]
+        docs["visa_application"] = frappe.db.get_value("Visa Application", queue.visa_application, v_fields, as_dict=True)
+    if queue.get("communication_event") and frappe.db.exists("Communication Event", queue.communication_event):
+        m_fields = [f for f in ("name", "event_id", "source_channel", "customer", "lead") if has_field("Communication Event", f)]
+        docs["communication_event"] = frappe.db.get_value("Communication Event", queue.communication_event, m_fields, as_dict=True)
+
+    return {
+        "ok": True,
+        "queue": {
+            "name": queue.name,
+            "source_lead_id": queue.source_lead_id,
+            "status": queue.status,
+            "orchestration_status": queue.orchestration_status,
+            "current_stage": queue.current_stage,
+            "creation": str(queue.creation),
+            "modified": str(queue.modified),
+            "last_error": queue.get("last_error"),
+            "matched_customer": queue.get("matched_customer"),
+            "matched_lead": queue.get("matched_lead"),
+            "visa_application": queue.get("visa_application"),
+            "communication_event": queue.get("communication_event"),
+            "followup_reference": queue.get("followup_reference"),
+            "assigned_employee": queue.get("assigned_employee"),
+            "ai_status": queue.get("ai_status")
+        },
+        "stages": stage_details,
+        "downstream_documents": docs
+    }
+
+@frappe.whitelist()
 def replay_webhook(payload):
     _admin()
     data = load_json(payload, {}) if isinstance(payload, str) else payload
