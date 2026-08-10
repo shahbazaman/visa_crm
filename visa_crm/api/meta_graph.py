@@ -100,16 +100,21 @@ def _password_or_value(settings, fieldname):
         pass
     return getattr(settings, fieldname, None)
 
+def _secret(settings):
+    return _password_or_value(settings, "meta_app_secret") or frappe.conf.get("meta_app_secret")
+
 def check_page_subscription(settings=None):
     settings = settings or get_meta_settings()
     page_id = getattr(settings, "page_id", None) if settings else None
     token = _access_token(settings)
-    if not page_id or not token:
+    app_id = getattr(settings, "meta_app_id", None) if settings else None
+    app_secret = _secret(settings)
+    app_token = f"{app_id}|{app_secret}" if app_id and app_secret else token
+    if not page_id or not app_token:
         return {"ok": False, "error": "Missing page_id or access_token in Meta Settings"}
     try:
-        data = _get(f"{page_id}/subscribed_apps", {"access_token": token})
+        data = _get(f"{page_id}/subscribed_apps", {"access_token": app_token})
         apps = data.get("data", []) if isinstance(data, dict) else []
-        app_id = getattr(settings, "meta_app_id", None)
         subscribed = any(
             (app_id and str(app.get("id")) == str(app_id)) or "leadgen" in (app.get("subscribed_fields") or [])
             for app in apps

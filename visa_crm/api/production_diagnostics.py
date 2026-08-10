@@ -337,26 +337,12 @@ def _check_webhook_verification(settings):
     return {"status": "PASS" if is_valid else "FAIL", "details": "Internal HMAC verify token logic operational"}
 
 def _check_page_subscription(settings):
-    page_id = getattr(settings, "page_id", None) if settings else None
-    token = _token(settings) if settings else None
-    if not page_id or not token:
-        return {"status": "FAIL", "details": "Missing page_id or access_token"}
-    try:
-        import requests
-        url = f"https://graph.facebook.com/v20.0/{page_id}/subscribed_apps"
-        resp = requests.get(url, params={"access_token": token}, timeout=15)
-        if resp.status_code == 200:
-            data = resp.json()
-            apps = data.get("data", []) if isinstance(data, dict) else []
-            app_id = getattr(settings, "meta_app_id", None)
-            subscribed = any((app_id and str(app.get("id")) == str(app_id)) or "leadgen" in (app.get("subscribed_fields") or []) for app in apps)
-            return {"status": "PASS" if subscribed else "WARN", "details": f"Page {page_id} subscribed: {subscribed}"}
-        else:
-            data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-            err = data.get("error", {}).get("message") if isinstance(data, dict) else resp.text
-            return {"status": "FAIL", "details": f"HTTP {resp.status_code}: {str(err)[:80]}"}
-    except Exception as exc:
-        return {"status": "FAIL", "details": str(exc)}
+    from visa_crm.api.meta_graph import check_page_subscription
+    res = check_page_subscription(settings)
+    if res.get("ok"):
+        subscribed = bool(res.get("is_subscribed"))
+        return {"status": "PASS" if subscribed else "WARN", "details": f"Page {res.get('page_id')} subscribed: {subscribed}"}
+    return {"status": "FAIL", "details": res.get("error") or "Failed to check page subscription"}
 
 def _check_graph_token(settings):
     token = _token(settings) if settings else None
