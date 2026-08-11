@@ -118,11 +118,11 @@ def _ignore_queue(queue_name,reason):
     frappe.db.commit()
 
 def _ignored_test_event(queue_name):
-    leadgen_id=str(frappe.db.get_value("Lead Intake Queue",queue_name,"source_lead_id") or "")
+    leadgen_id=str(frappe.db.get_value("Lead Intake Queue",queue_name,"source_lead_id") or "").strip()
     subcode=str(frappe.db.get_value("Lead Intake Queue",queue_name,"graph_error_subcode") or "") if has_field("Lead Intake Queue","graph_error_subcode") else ""
     message=str(frappe.db.get_value("Lead Intake Queue",queue_name,"graph_error_message") or "").lower() if has_field("Lead Intake Queue","graph_error_message") else ""
-    dummy=leadgen_id in ("444444444444","987654321") or leadgen_id.isdigit() and len(leadgen_id)<=12
-    return dummy and (subcode=="33" or "unsupported get request" in message)
+    dummy=leadgen_id in ("444444444444","987654321") or leadgen_id.startswith("manual-") or (leadgen_id.isdigit() and len(leadgen_id)<=12) or (not leadgen_id.isdigit() and not leadgen_id.startswith("127"))
+    return dummy and (subcode=="33" or "unsupported get request" in message or leadgen_id.startswith("manual-"))
 
 def _finalize(queue_name):
     rollup=rollup_queue(queue_name)
