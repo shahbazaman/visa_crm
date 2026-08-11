@@ -467,23 +467,71 @@ def _worker_status():
 def run_dashboard_diagnostics():
     _admin()
     import visa_crm.hooks as hooks
-    page_js = getattr(hooks, "page_js", {})
-    pages = frappe.get_all("Page", filters={"name": ["in", ["employee-dashboard", "employee-performance-dashboard"]]}, fields=["name", "title", "module", "standard"])
-    roles = frappe.get_all("Has Role", filters={"parent": ["in", ["employee-dashboard", "employee-performance-dashboard"]]}, fields=["parent", "role"])
-    workspaces = frappe.get_all("Workspace", filters={"name": ["like", "%employee%"]}, fields=["name", "title", "public"])
+    checkpoints = []
 
+    # 1. Page DocType Check
+    pages = frappe.get_all("Page", filters={"name": ["in", ["employee-dashboard", "employee-performance-dashboard"]]}, fields=["name", "title", "module", "standard"])
+    p_names = {p.name for p in pages}
+    if "employee-dashboard" in p_names:
+        checkpoints.append({"checkpoint": "PAGE RECORD", "status": "PASS", "details": f"Page employee-dashboard registered ({len(pages)} pages total)"})
+    else:
+        checkpoints.append({"checkpoint": "PAGE RECORD", "status": "FAIL", "details": "Page employee-dashboard missing in database"})
+
+    # 2. Workspace Collisions Check
+    workspaces = frappe.get_all("Workspace", filters={"name": ["like", "%employee%"]}, fields=["name", "title", "public"])
+    ws_labels = frappe.get_all("Workspace", filters={"label": ["like", "%employee%"]}, fields=["name", "title", "label"])
+    all_ws = set(w.name for w in workspaces) | set(w.name for w in ws_labels)
+    if not all_ws:
+        checkpoints.append({"checkpoint": "WORKSPACE COLLISIONS", "status": "PASS", "details": "0 conflicting employee Workspace records in DB"})
+    else:
+        checkpoints.append({"checkpoint": "WORKSPACE COLLISIONS", "status": "FAIL", "details": f"Conflicting Workspaces exist: {list(all_ws)}"})
+
+    # 3. Page JS Hooks Check
+    page_js = getattr(hooks, "page_js", {})
+    emp_hook = page_js.get("employee-dashboard")
+    if emp_hook == "public/js/employee_dashboard.js":
+        checkpoints.append({"checkpoint": "PAGE_JS HOOK", "status": "PASS", "details": f"page_js mapped to public asset: {emp_hook}"})
+    else:
+        checkpoints.append({"checkpoint": "PAGE_JS HOOK", "status": "FAIL", "details": f"Invalid page_js hook: {emp_hook}"})
+
+    # 4. Public Asset Files Check
     js_files = {}
     for p in ("public/js/employee_dashboard.js", "public/js/employee_performance_dashboard.js"):
         full = frappe.get_app_path("visa_crm", p)
         js_files[p] = os.path.exists(full)
+    if all(js_files.values()):
+        checkpoints.append({"checkpoint": "PUBLIC ASSETS ON DISK", "status": "PASS", "details": "All public JS files present in visa_crm/public/js/"})
+    else:
+        checkpoints.append({"checkpoint": "PUBLIC ASSETS ON DISK", "status": "FAIL", "details": f"Missing JS files: {js_files}"})
+
+    # 5. Role Permissions Check
+    roles = frappe.get_all("Has Role", filters={"parent": "employee-dashboard"}, fields=["role"])
+    role_names = {r.role for r in roles}
+    expected_roles = {"System Manager", "Sales Manager", "General Manager", "Managing Director", "MD", "CRM Manager"}
+    missing = expected_roles - role_names
+    if not missing:
+        checkpoints.append({"checkpoint": "PAGE ROLE PERMISSIONS", "status": "PASS", "details": f"All 6 management roles attached ({', '.join(sorted(role_names))})"})
+    else:
+        checkpoints.append({"checkpoint": "PAGE ROLE PERMISSIONS", "status": "WARN", "details": f"Missing roles: {missing}"})
+
+    # 6. RPC Methods Availability
+    rpc_ok = True
+    for method_name in ("visa_crm.api.dashboard.employee_list_for_dashboard", "visa_crm.api.dashboard.employee_performance_dashboard", "visa_crm.api.dashboard.employee_interactions", "visa_crm.api.dashboard.employee_interaction_detail"):
+        try:
+            fn = frappe.get_attr(method_name)
+            if not callable(fn):
+                rpc_ok = False
+        except Exception:
+            rpc_ok = False
+    if rpc_ok:
+        checkpoints.append({"checkpoint": "RPC API METHODS", "status": "PASS", "details": "All 4 dashboard RPC methods callable"})
+    else:
+        checkpoints.append({"checkpoint": "RPC API METHODS", "status": "FAIL", "details": "One or more RPC methods unavailable"})
 
     return {
-        "ok": True,
-        "page_js_hooks": page_js,
-        "pages_in_db": pages,
-        "page_roles_in_db": roles,
-        "workspaces_in_db": workspaces,
-        "js_files_on_disk": js_files
+        "ok": all(c["status"] != "FAIL" for c in checkpoints),
+        "checkpoints": checkpoints,
+        "raw_hooks": page_js
     }
 
 def _retry_jobs():
