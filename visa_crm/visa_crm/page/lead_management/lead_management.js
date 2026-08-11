@@ -319,6 +319,14 @@ window.VisaLeadManagement = class VisaLeadManagement {
                             <option value="Closed"${state.status === "Closed" ? " selected" : ""}>${__("Closed")}</option>
                             <option value="Lost"${state.status === "Lost" ? " selected" : ""}>${__("Lost")}</option>
                         </select>
+                        <select class="form-control input-sm vlm-classification-filter">
+                            <option value="All"${state.classification_filter === "All" || !state.classification_filter ? " selected" : ""}>${__("All Classifications")}</option>
+                            <option value="Categorized"${state.classification_filter === "Categorized" ? " selected" : ""}>${__("Categorized")}</option>
+                            <option value="Uncategorized"${state.classification_filter === "Uncategorized" ? " selected" : ""}>${__("Uncategorized")}</option>
+                            <option value="Manual"${state.classification_filter === "Manual" ? " selected" : ""}>${__("Manually Classified")}</option>
+                            <option value="Automatic"${state.classification_filter === "Automatic" ? " selected" : ""}>${__("Automatically Classified")}</option>
+                        </select>
+                        <button class="btn btn-primary btn-sm vlm-btn-bulk-assign" style="display:none;">${__("Assign Category")}</button>
                         <button class="btn btn-default btn-sm vlm-btn-clear">${__("Clear")}</button>
                     </div>
                 </div>
@@ -362,16 +370,39 @@ window.VisaLeadManagement = class VisaLeadManagement {
             self._fetch_leads(category, subcategory, 1);
         });
 
+        // Classification filter
+        this.$root.find(".vlm-classification-filter").on("change", (e) => {
+            const s = self._get_lead_state(category, subcategory);
+            s.classification_filter = $(e.target).val();
+            s.data = [];
+            s.page = 1;
+            s.loaded = false;
+            self._fetch_leads(category, subcategory, 1);
+        });
+
+        // Bulk assign button
+        this.$root.find(".vlm-btn-bulk-assign").on("click", () => {
+            const selected = [];
+            self.$root.find(".vlm-row-check:checked").each(function () {
+                selected.push($(this).val());
+            });
+            if (selected.length) {
+                self._open_assign_category_dialog(selected);
+            }
+        });
+
         // Clear filters
         this.$root.find(".vlm-btn-clear").on("click", () => {
             const s = self._get_lead_state(category, subcategory);
             s.search = "";
             s.status = "";
+            s.classification_filter = "All";
             s.data = [];
             s.page = 1;
             s.loaded = false;
             self.$root.find(".vlm-search").val("");
             self.$root.find(".vlm-status-filter").val("");
+            self.$root.find(".vlm-classification-filter").val("All");
             self._fetch_leads(category, subcategory, 1);
         });
 
@@ -388,6 +419,7 @@ window.VisaLeadManagement = class VisaLeadManagement {
             const filtersObj = {};
             if (state.search) filtersObj.search = state.search;
             if (state.status) filtersObj.status = [state.status];
+            if (state.classification_filter) filtersObj.classification_filter = state.classification_filter;
             filtersObj.page = page;
             filtersObj.page_length = 20;
 
@@ -436,7 +468,7 @@ window.VisaLeadManagement = class VisaLeadManagement {
         if (!state.loading && state.data.length === 0) {
             $content.html(_tpl_empty(
                 __("No leads found."),
-                state.search || state.status
+                state.search || state.status || state.classification_filter
                     ? __("No leads match the current filters.")
                     : __("This subcategory has no leads yet.")
             ));
@@ -446,11 +478,13 @@ window.VisaLeadManagement = class VisaLeadManagement {
         let html = `
             <div class="vlm-lead-table-wrap">
                 <div class="vlm-lead-table-header">
+                    <div style="width:32px;"><input type="checkbox" class="vlm-select-all" /></div>
                     <div class="vlm-th vlm-th-name">${__("Lead")}</div>
                     <div class="vlm-th vlm-th-status">${__("Status")}</div>
                     <div class="vlm-th vlm-th-contact">${__("Contact")}</div>
                     <div class="vlm-th vlm-th-owner">${__("Owner")}</div>
                     <div class="vlm-th vlm-th-date">${__("Modified")}</div>
+                    <div style="width:110px;text-align:right;">${__("Actions")}</div>
                 </div>`;
 
         for (const lead of state.data) {
@@ -466,8 +500,10 @@ window.VisaLeadManagement = class VisaLeadManagement {
             const statusClass = _status_class(status);
 
             html += `
-                <div class="vlm-lead-row" data-lead="${id}" tabindex="0" role="button"
-                     title="${__("Open in Native CRM SPA")}">
+                <div class="vlm-lead-row" data-lead="${id}" tabindex="0" role="button">
+                    <div style="width:32px;" onclick="event.stopPropagation();">
+                        <input type="checkbox" class="vlm-row-check" value="${id}" />
+                    </div>
                     <div class="vlm-td vlm-td-name">
                         <div class="vlm-lead-name">${name}</div>
                         <div class="vlm-lead-id">${id}</div>
@@ -484,6 +520,9 @@ window.VisaLeadManagement = class VisaLeadManagement {
                         <span class="vlm-owner-name">${owner}</span>
                     </div>
                     <div class="vlm-td vlm-td-date text-muted">${modified}</div>
+                    <div style="width:110px;text-align:right;" onclick="event.stopPropagation();">
+                        <button class="btn btn-default btn-xs vlm-btn-assign-row" data-lead="${id}">${__("Categorize")}</button>
+                    </div>
                 </div>`;
         }
 
@@ -501,9 +540,29 @@ window.VisaLeadManagement = class VisaLeadManagement {
 
         $content.html(html);
 
+        const self = this;
+        // Checkboxes & Bulk Actions
+        $content.find(".vlm-select-all").on("change", function () {
+            const checked = $(this).prop("checked");
+            $content.find(".vlm-row-check").prop("checked", checked);
+            self._update_bulk_btn();
+        });
+
+        $content.find(".vlm-row-check").on("change", function () {
+            self._update_bulk_btn();
+        });
+
+        // Row Assign Category Button
+        $content.find(".vlm-btn-assign-row").on("click", function (e) {
+            e.stopPropagation();
+            const leadId = $(this).data("lead");
+            if (leadId) self._open_assign_category_dialog([leadId]);
+        });
+
         // Click lead row → Navigate to native CRM Lead detail UI: /crm/leads/<name>#activity
         $content.find(".vlm-lead-row").on("click keydown", function (e) {
             if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") return;
+            if ($(e.target).is("input, button, a")) return;
             const leadId = $(this).data("lead");
             if (leadId) {
                 window.location.href = "/crm/leads/" + encodeURIComponent(leadId) + "#activity";
@@ -511,10 +570,112 @@ window.VisaLeadManagement = class VisaLeadManagement {
         });
 
         // Load more
-        const self = this;
         $content.find(".vlm-btn-load-more").on("click", () => {
             if (!state.loading && state.has_more) {
                 self._fetch_leads(category, subcategory, state.page + 1);
+            }
+        });
+    }
+
+    _update_bulk_btn() {
+        const checkedCount = this.$root.find(".vlm-row-check:checked").length;
+        const $btn = this.$root.find(".vlm-btn-bulk-assign");
+        if (checkedCount > 0) {
+            $btn.text(__("Assign Category ({0})", [checkedCount])).show();
+        } else {
+            $btn.hide();
+        }
+    }
+
+    _open_assign_category_dialog(leadIds) {
+        const self = this;
+        const isBulk = Array.isArray(leadIds) && leadIds.length > 1;
+
+        frappe.call({
+            method: "visa_crm.api.lead_management.subcategories",
+            callback: function (r) {
+                const res = r.message || {};
+                const categories = res.categories || [];
+                const catNames = categories.map(c => c.name);
+
+                const dialog = new frappe.ui.Dialog({
+                    title: isBulk ? __("Bulk Assign Category ({0} leads)", [leadIds.length]) : __("Assign Lead Category"),
+                    fields: [
+                        {
+                            fieldname: "category",
+                            fieldtype: "Select",
+                            label: __("Category"),
+                            options: catNames.join("\n"),
+                            reqd: 1,
+                            onchange: function () {
+                                const selectedCat = dialog.get_value("category");
+                                frappe.call({
+                                    method: "visa_crm.api.lead_management.subcategories",
+                                    args: { category: selectedCat },
+                                    callback: function (subRes) {
+                                        const subs = (subRes.message || {}).subcategories || [];
+                                        dialog.set_df_property("group", "options", ["Unspecified"].concat(subs).join("\n"));
+                                    }
+                                });
+                            }
+                        },
+                        {
+                            fieldname: "group",
+                            fieldtype: "Select",
+                            label: __("Subcategory"),
+                            options: "Unspecified",
+                        },
+                        {
+                            fieldname: "reason",
+                            fieldtype: "Small Text",
+                            label: __("Classification Reason / Note"),
+                            default: "Manual category assignment by management"
+                        }
+                    ],
+                    primary_action_label: __("Save Category"),
+                    primary_action: function (values) {
+                        dialog.hide();
+                        if (isBulk) {
+                            frappe.call({
+                                method: "visa_crm.api.lead_management.bulk_classify",
+                                args: {
+                                    leads: leadIds,
+                                    category: values.category,
+                                    group: values.group,
+                                    reason: values.reason
+                                },
+                                callback: function (res) {
+                                    if (res.message && res.message.ok) {
+                                        frappe.show_alert({ message: __("Successfully categorized {0} leads", [res.message.total]), indicator: "green" });
+                                    } else {
+                                        frappe.show_alert({ message: __("Categorized {0} leads ({1} failed)", [(res.message.succeeded || []).length, (res.message.failed || []).length]), indicator: "orange" });
+                                    }
+                                    self._cat_cache = null;
+                                    self._sub_cache = {};
+                                    self.handle_route();
+                                }
+                            });
+                        } else {
+                            const singleId = Array.isArray(leadIds) ? leadIds[0] : leadIds;
+                            frappe.call({
+                                method: "visa_crm.api.lead_management.classify",
+                                args: {
+                                    lead: singleId,
+                                    category: values.category,
+                                    group: values.group,
+                                    reason: values.reason
+                                },
+                                callback: function () {
+                                    frappe.show_alert({ message: __("Lead category updated successfully"), indicator: "green" });
+                                    self._cat_cache = null;
+                                    self._sub_cache = {};
+                                    self.handle_route();
+                                }
+                            });
+                        }
+                    }
+                });
+                dialog.show();
             }
         });
     }

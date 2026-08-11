@@ -66,24 +66,45 @@ def groups(category):
 
 
 @frappe.whitelist()
-def leads(category, group=None, search=None, start=0, page_length=30, from_date=None, to_date=None):
-    _require_category(category)
-    filters = {"lead_category": category}
+def leads(category=None, group=None, search=None, start=0, page_length=30, from_date=None, to_date=None, classification_filter=None):
+    _require_operational()
+    filters = {}
+    if category and category not in ("All", "all"):
+        if category == "Uncategorized":
+            filters["lead_category"] = ["in", ["", "Uncategorized", None]]
+        else:
+            _require_category(category)
+            filters["lead_category"] = category
+
+    if classification_filter:
+        if classification_filter == "Categorized":
+            filters["lead_category"] = ["not in", ["", "Uncategorized", None]]
+        elif classification_filter == "Uncategorized":
+            filters["lead_category"] = ["in", ["", "Uncategorized", None]]
+        elif classification_filter in ("Manual", "Automatic"):
+            filters["classification_source"] = classification_filter
+
     if group:
-        filters["lead_group"] = group
+        if group in ("Unspecified", "No Subcategory"):
+            filters["lead_group"] = ["in", ["", "Unspecified", "No Subcategory", None]]
+        else:
+            filters["lead_group"] = group
+
     if from_date:
         filters["creation"] = [">=", getdate(from_date)]
     if to_date:
         filters["creation"] = ["<=", getdate(to_date)]
+
     fields = [field for field in LEAD_FIELDS if _lead_has_field(field)]
     or_filters = None
     if search:
         term = f"%{str(search).strip()}%"
         searchable = [field for field in ("lead_name", "first_name", "last_name", "mobile_no", "phone", "email", "facebook_lead_id", "meta_campaign_name", "lead_group", "visa_type", "custom_visa_type") if frappe.get_meta("CRM Lead").has_field(field)]
         or_filters = [["CRM Lead", field, "like", term] for field in searchable]
+
     rows = frappe.get_all("CRM Lead", filters=filters, or_filters=or_filters, fields=fields, order_by="creation desc, name desc", start=max(cint(start), 0), page_length=min(max(cint(page_length), 1), 100))
     _add_operational_flags(rows)
-    return {"category": category, "group": group, "rows": rows, "has_more": len(rows) == min(max(cint(page_length), 1), 100)}
+    return {"category": category or "All", "group": group, "rows": rows, "has_more": len(rows) == min(max(cint(page_length), 1), 100)}
 
 
 @frappe.whitelist()
@@ -91,6 +112,59 @@ def classify(lead, category, group=None, reason=None):
     result = apply_manual_classification(lead, category, group=group, reason=reason)
     frappe.db.commit()
     return {"ok": True, "classification": result}
+
+
+@frappe.whitelist()
+def bulk_classify(leads, category, group=None, reason=None):
+    _require_operational()
+    if isinstance(leads, str):
+        import json
+        leads = json.loads(leads)
+    if not isinstance(leads, list):
+        frappe.throw("Invalid leads parameter: must be a list of lead names")
+
+    succeeded = []
+    failed = []
+    for lead_name in leads:
+        try:
+            res = apply_manual_classification(lead_name, category, group=group, reason=reason)
+            succeeded.append({"lead": lead_name, "result": res})
+        except Exception as exc:
+            failed.append({"lead": lead_name, "error": str(exc)})
+
+    frappe.db.commit()
+    return {
+        "ok": len(failed) == 0,
+        "succeeded": succeeded,
+        "failed": failed,
+        "total": len(leads),
+    }
+
+
+@frappe.whitelist()
+def subcategories(category=None):
+    _require_operational()
+    filters = {}
+    if category and category not in ("All", "all"):
+        if category == "Uncategorized":
+            filters["lead_category"] = ["in", ["", "Uncategorized", None]]
+        else:
+            filters["lead_category"] = category
+
+    groups_list = frappe.get_all("CRM Lead", filters=filters, pluck="lead_group", distinct=True)
+    valid_groups = sorted([g for g in groups_list if g and g not in ("Unspecified", "No Subcategory")])
+
+    categories_list = frappe.get_all(
+        "Lead Category",
+        filters={"is_active": 1},
+        fields=["name", "category_name", "department"],
+        order_by="sort_order asc, category_name asc"
+    )
+    return {
+        "category": category,
+        "subcategories": valid_groups,
+        "categories": categories_list
+    }
 
 
 @frappe.whitelist()
@@ -131,9 +205,10 @@ def _permitted_leads(filters=None):
         if not categories:
             return []
         requested = filters.get("lead_category")
-        if requested and requested not in categories:
+        if isinstance(requested, str) and requested not in categories and requested not in ("Uncategorized", "All"):
             frappe.throw("Not permitted for this lead category", frappe.PermissionError)
-        filters["lead_category"] = requested or ["in", categories]
+        if not requested:
+            filters["lead_category"] = ["in", categories]
     return frappe.get_all("CRM Lead", filters=filters, fields=fields, order_by="creation desc", page_length=0)
 
 
