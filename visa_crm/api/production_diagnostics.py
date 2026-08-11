@@ -203,15 +203,48 @@ def inspect_queue_pipeline(queue_name):
         m_fields = [f for f in ("name", "event_id", "source_channel", "customer", "lead") if has_field("Communication Event", f)]
         docs["communication_event"] = frappe.db.get_value("Communication Event", queue.communication_event, m_fields, as_dict=True)
 
+    from visa_crm.api.lead_permissions import crm_lead_query
+    crm_lead_name = queue.get("matched_lead")
+    crm_visible = False
+    if crm_lead_name and frappe.db.exists("CRM Lead", crm_lead_name):
+        cond = crm_lead_query("Administrator")
+        filters = {"name": crm_lead_name}
+        crm_visible = len(frappe.get_all("CRM Lead", filters=filters, limit=1)) > 0
+
+    source_lead_id = queue.source_lead_id
+    graph_request_lead_id = str(source_lead_id) if source_lead_id and str(source_lead_id).strip().lower() not in ("none", "null", "0", "") else "INVALID: source_lead_id exists but Graph request parameter is None"
+
+    graph_url = f"https://graph.facebook.com/v20.0/{graph_request_lead_id}" if "INVALID" not in graph_request_lead_id else "N/A"
+
+    creation_dt = get_datetime(queue.creation) if getattr(queue, "creation", None) else None
+    next_action_dt = get_datetime(queue.get("next_action_at")) if queue.get("next_action_at") else None
+    timestamp_invariant = (not next_action_dt or not creation_dt or next_action_dt >= creation_dt)
+
+    stage_states = {s.stage: s.state for s in stages}
+
     return {
-        "ok": True,
+        "ok": "INVALID" not in graph_request_lead_id,
         "queue": {
             "name": queue.name,
-            "source_lead_id": queue.source_lead_id,
+            "meta_webhook_event": queue.get("meta_webhook_event"),
+            "leadgen_id": source_lead_id,
+            "source_lead_id": source_lead_id,
+            "page_id": queue.get("page_id"),
+            "form_id": queue.get("form_id"),
+            "graph_request_lead_id": graph_request_lead_id,
+            "graph_request_url_without_token": graph_url,
+            "graph_download_status": stage_states.get("GRAPH_DOWNLOAD", "NOT_STARTED"),
+            "normalization_status": stage_states.get("NORMALIZE", "NOT_STARTED"),
+            "customer360_status": stage_states.get("CUSTOMER360", "NOT_STARTED"),
+            "crm_lead_status": stage_states.get("CRM_LEAD", "NOT_STARTED"),
+            "crm_lead_name": crm_lead_name,
+            "crm_ui_visibility_status": "VISIBLE" if crm_visible else "HIDDEN",
+            "next_action_timestamp": str(queue.get("next_action_at")) if queue.get("next_action_at") else None,
+            "queue_creation_timestamp": str(queue.creation),
+            "timestamp_invariant": timestamp_invariant,
             "status": queue.status,
             "orchestration_status": queue.orchestration_status,
             "current_stage": queue.current_stage,
-            "creation": str(queue.creation),
             "modified": str(queue.modified),
             "last_error": queue.get("last_error"),
             "matched_customer": queue.get("matched_customer"),

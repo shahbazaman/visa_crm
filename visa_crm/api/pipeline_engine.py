@@ -57,7 +57,7 @@ def next_eligible_stage(queue_name,include_ai=False,at=None):
     for row in rows:
         if row.stage not in allowed or not _dependencies_complete(row.stage,states):
             continue
-        if row.state=="NOT_STARTED":
+        if row.state in ("NOT_STARTED", "BLOCKED"):
             return row
         if row.state=="FAILED" and _retry_due(row,at) and _attempts_available(row):
             return row
@@ -207,7 +207,7 @@ def rollup_queue(queue_name,progress=False):
     states={row.stage:row.state for row in rows}
     for row in rows:
         if row.state in ("NOT_STARTED", "BLOCKED"):
-            failed_deps = [dep for dep in STAGE_BY_NAME[row.stage].get("dependencies", ()) if states.get(dep) == "FAILED"]
+            failed_deps = [dep for dep in STAGE_BY_NAME[row.stage].get("dependencies", ()) if states.get(dep) == "FAILED" and not (row.stage == "NORMALIZE" and dep == "GRAPH_DOWNLOAD")]
             if failed_deps:
                 if row.state != "BLOCKED":
                     frappe.db.set_value("Lead Intake Stage", row.name, {"state": "BLOCKED", "skip_reason": f"Blocked by failed dependency: {', '.join(failed_deps)}"}, update_modified=False)
@@ -269,7 +269,14 @@ def _states(queue_name):
     return dict(frappe.get_all("Lead Intake Stage",filters={"queue":queue_name},fields=["stage","state"],as_list=True))
 
 def _dependencies_complete(stage,states):
-    return all(states.get(dependency) in TERMINAL_STATES for dependency in STAGE_BY_NAME[stage].get("dependencies",()))
+    for dependency in STAGE_BY_NAME[stage].get("dependencies",()):
+        dep_state = states.get(dependency)
+        if dep_state in TERMINAL_STATES:
+            continue
+        if stage == "NORMALIZE" and dependency == "GRAPH_DOWNLOAD" and dep_state == "FAILED":
+            continue
+        return False
+    return True
 
 def _retry_due(row,at):
     return not row.next_retry_at or get_datetime(row.next_retry_at)<=at
