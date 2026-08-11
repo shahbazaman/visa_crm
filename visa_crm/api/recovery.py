@@ -244,6 +244,90 @@ def retry_queue(queue_name):
         "result": result
     }
 
+
+@frappe.whitelist()
+def verify_queue(queue_name):
+    """
+    Read-only diagnostic function to inspect the full pipeline state,
+    data contracts, stage ledger, Customer, CRM Lead, and downstream records
+    for a given Lead Intake Queue without mutating any database state.
+    """
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw("System Manager role required", frappe.PermissionError)
+
+    if not frappe.db.exists("Lead Intake Queue", queue_name):
+        frappe.throw(f"Lead Intake Queue {queue_name} not found")
+
+    queue = frappe.get_doc("Lead Intake Queue", queue_name)
+
+    stages = frappe.get_all(
+        "Lead Intake Stage",
+        filters={"queue": queue_name},
+        fields=[
+            "stage", "sequence", "requirement_class", "state",
+            "attempt_count", "max_attempts", "next_retry_at",
+            "last_error_class", "last_error", "result_doctype",
+            "result_name", "warning", "skip_reason", "result_json"
+        ],
+        order_by="sequence asc"
+    )
+
+    customer = None
+    if queue.get("matched_customer") and frappe.db.exists("Customer", queue.matched_customer):
+        c_doc = frappe.get_doc("Customer", queue.matched_customer)
+        customer = {
+            "name": c_doc.name,
+            "customer_name": c_doc.customer_name,
+            "mobile_no": c_doc.get("mobile_no"),
+            "email_id": c_doc.get("email_id"),
+            "crm_lead": c_doc.get("crm_lead")
+        }
+
+    crm_lead = None
+    if queue.get("matched_lead") and frappe.db.exists("CRM Lead", queue.matched_lead):
+        l_doc = frappe.get_doc("CRM Lead", queue.matched_lead)
+        crm_lead = {
+            "name": l_doc.name,
+            "lead_name": l_doc.lead_name,
+            "mobile_no": l_doc.get("mobile_no"),
+            "email": l_doc.get("email"),
+            "facebook_lead_id": l_doc.get("facebook_lead_id"),
+            "meta_campaign_name": l_doc.get("meta_campaign_name"),
+            "meta_ad_name": l_doc.get("meta_ad_name"),
+            "meta_adset_name": l_doc.get("meta_adset_name"),
+            "meta_ad_id": l_doc.get("meta_ad_id"),
+            "facebook_form_id": l_doc.get("facebook_form_id"),
+            "page_id": l_doc.get("page_id"),
+            "customer360": l_doc.get("customer360") or l_doc.get("customer_360")
+        }
+
+    norm_stage_row = next((s for s in stages if s.stage == "NORMALIZE"), None)
+
+    return {
+        "queue": {
+            "name": queue.name,
+            "status": queue.status,
+            "orchestration_status": queue.orchestration_status,
+            "current_stage": queue.current_stage,
+            "source_lead_id": queue.source_lead_id,
+            "matched_customer": queue.get("matched_customer"),
+            "matched_lead": queue.get("matched_lead"),
+            "visa_application": queue.get("visa_application"),
+            "communication_event": queue.get("communication_event"),
+            "followup_reference": queue.get("followup_reference"),
+            "assigned_employee": queue.get("assigned_employee"),
+            "ai_status": queue.get("ai_status"),
+            "normalized_payload": queue.get("normalized_payload")
+        },
+        "customer": customer,
+        "crm_lead": crm_lead,
+        "stages": stages,
+        "normalization_check": {
+            "normalize_stage_state": norm_stage_row.state if norm_stage_row else None,
+            "normalize_stage_result_json": norm_stage_row.result_json if norm_stage_row else None
+        }
+    }
+
 if __name__ == "__main__":
     print("This script must be run via bench console or bench execute.")
     print("Usage:")
