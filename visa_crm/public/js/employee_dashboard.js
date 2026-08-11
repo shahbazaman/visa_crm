@@ -1,4 +1,4 @@
-const DASHBOARD_BUILD_ID = "v2026.08.11-1b8eec8";
+const DASHBOARD_BUILD_ID = "v2026.08.11-1e7e609";
 
 frappe.pages["employee-performance-dashboard"] = frappe.pages["employee-performance-dashboard"] || {};
 frappe.pages["employee-dashboard"] = frappe.pages["employee-dashboard"] || {};

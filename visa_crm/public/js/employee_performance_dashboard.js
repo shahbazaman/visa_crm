@@ -1,4 +1,4 @@
-const DASHBOARD_BUILD_ID = "v2026.08.11-1b8eec8";
+const DASHBOARD_BUILD_ID = "v2026.08.11-1e7e609";
 
 frappe.pages["employee-performance-dashboard"] = frappe.pages["employee-performance-dashboard"] || {};
 frappe.pages["employee-dashboard"] = frappe.pages["employee-dashboard"] || {};
@@ -7,7 +7,7 @@ function render_employee_performance_dashboard(wrapper) {
   const boot_log = [
     "EMPLOYEE DASHBOARD BOOTING",
     "ROUTE DETECTED: " + (frappe.get_route ? frappe.get_route().join("/") : "employee-dashboard"),
-    "PAGE SCRIPT LOADED: public/js/employee_performance_dashboard.js (" + DASHBOARD_BUILD_ID + ")",
+    "PAGE SCRIPT LOADED: public/js/employee_dashboard.js (" + DASHBOARD_BUILD_ID + ")",
     "USER LOADED: " + (frappe.session ? frappe.session.user : "unknown")
   ];
 
