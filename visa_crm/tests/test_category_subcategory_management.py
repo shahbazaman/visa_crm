@@ -1,0 +1,123 @@
+import unittest
+import frappe
+from frappe.tests.utils import FrappeTestCase
+from visa_crm.api.lead_management import create_category, create_sub_category, bulk_classify, subcategories
+from visa_crm.api.lead_classification import apply_manual_classification
+from visa_crm.api.pipeline_stage_services import ai_retry_at
+
+
+class TestCategorySubcategoryManagement(FrappeTestCase):
+    def setUp(self):
+        frappe.set_user("Administrator")
+        if not frappe.db.exists("Lead Category", "Test Category Alpha"):
+            create_category("Test Category Alpha", description="Alpha test category")
+        if not frappe.db.exists("Lead Category", "Test Category Beta"):
+            create_category("Test Category Beta", description="Beta test category")
+
+    def test_01_create_category_and_subcategory(self):
+        cat_res = create_category("Test Category Gamma", description="Gamma Category")
+        self.assertEqual(cat_res["name"], "Test Category Gamma")
+
+        sub_res = create_sub_category("Sub Gamma 1", "Test Category Gamma", description="Subcategory 1")
+        self.assertEqual(sub_res["sub_category_name"], "Sub Gamma 1")
+        self.assertEqual(sub_res["parent_category"], "Test Category Gamma")
+
+        # Test duplicate subcategory under same parent raises error
+        with self.assertRaises(frappe.DuplicateEntryError):
+            create_sub_category("Sub Gamma 1", "Test Category Gamma")
+
+    def test_02_subcategory_under_different_parent_is_allowed(self):
+        s1 = create_sub_category("Common Sub", "Test Category Alpha")
+        s2 = create_sub_category("Common Sub", "Test Category Beta")
+        self.assertEqual(s1["sub_category_name"], "Common Sub")
+        self.assertEqual(s2["sub_category_name"], "Common Sub")
+
+    def test_03_subcategories_api_returns_parent_filtered_nodes(self):
+        res = subcategories(category="Test Category Alpha")
+        self.assertEqual(res["category"], "Test Category Alpha")
+        self.assertIn("Common Sub", res["subcategories"])
+
+    def test_04_single_move_preserves_meta_attribution(self):
+        lead = frappe.get_doc({
+            "doctype": "CRM Lead",
+            "first_name": "MetaLeadTest",
+            "lead_name": "Meta Lead Test Case",
+            "mobile_no": "+919876543210",
+            "facebook_lead_id": "META-LEAD-TEST-999",
+            "meta_campaign_name": "Campaign Test Preserved",
+            "meta_ad_name": "Ad Test Preserved",
+            "meta_adset_name": "Adset Test Preserved",
+            "status": "Open",
+            "lead_category": "Uncategorized",
+        }).insert(ignore_permissions=True)
+
+        res = apply_manual_classification(lead.name, "Test Category Alpha", group="Common Sub", reason="Manual unit test move")
+        self.assertEqual(res["lead_category"], "Test Category Alpha")
+        self.assertEqual(res["lead_group"], "Common Sub")
+
+        reloaded = frappe.get_doc("CRM Lead", lead.name)
+        self.assertEqual(reloaded.lead_category, "Test Category Alpha")
+        self.assertEqual(reloaded.lead_group, "Common Sub")
+
+        # Verify Meta Attribution Preserved
+        self.assertEqual(reloaded.facebook_lead_id, "META-LEAD-TEST-999")
+        self.assertEqual(reloaded.meta_campaign_name, "Campaign Test Preserved")
+        self.assertEqual(reloaded.meta_ad_name, "Ad Test Preserved")
+        self.assertEqual(reloaded.meta_adset_name, "Adset Test Preserved")
+
+    def test_05_bulk_move_and_move_back_to_uncategorised(self):
+        l1 = frappe.get_doc({"doctype": "CRM Lead", "first_name": "B1", "lead_name": "Bulk Lead Test 1", "status": "Open"}).insert(ignore_permissions=True)
+        l2 = frappe.get_doc({"doctype": "CRM Lead", "first_name": "B2", "lead_name": "Bulk Lead Test 2", "status": "Open"}).insert(ignore_permissions=True)
+
+        res_bulk = bulk_classify([l1.name, l2.name], "Test Category Beta", group="Common Sub", reason="Bulk move unit test")
+        self.assertTrue(res_bulk["ok"])
+        self.assertEqual(res_bulk["moved"], 2)
+        self.assertEqual(len(res_bulk["results"]), 2)
+
+        self.assertEqual(frappe.db.get_value("CRM Lead", l1.name, "lead_category"), "Test Category Beta")
+        self.assertEqual(frappe.db.get_value("CRM Lead", l2.name, "lead_category"), "Test Category Beta")
+
+        # Move back to Uncategorized
+        res_uncat = bulk_classify([l1.name], "Uncategorized", group="Unspecified", reason="Move back to uncategorized")
+        self.assertTrue(res_uncat["ok"])
+        self.assertEqual(frappe.db.get_value("CRM Lead", l1.name, "lead_category"), "Uncategorized")
+        # Document still exists and is intact
+        self.assertTrue(frappe.db.exists("CRM Lead", l1.name))
+
+    def test_06_gemini_429_quota_backoff_delays(self):
+        from frappe.utils import now_datetime, time_diff_in_seconds
+
+        # Test daily quota exhaustion 429 error
+        err_daily_quota = 'Gemini API HTTP 429: {"error": {"code": 429, "message": "Quota exceeded for GenerateRequestsPerDayPerProjectPerModel-FreeTier limit: 20 model: gemini-2.5-flash"}}'
+        retry_at = ai_retry_at(1, at=now_datetime(), error_str=err_daily_quota)
+        diff = time_diff_in_seconds(retry_at, now_datetime())
+        # Must enforce minimum 3600 seconds (1 hour) backoff for daily quota
+        self.assertGreaterEqual(diff, 3590)
+
+        # Test 429 with parsed retryDelay
+        err_retry_delay = 'HTTP 429 RESOURCE_EXHAUSTED Please retry in 45s'
+        retry_at_delay = ai_retry_at(1, at=now_datetime(), error_str=err_retry_delay)
+        diff_delay = time_diff_in_seconds(retry_at_delay, now_datetime())
+        self.assertGreaterEqual(diff_delay, 40)
+
+        # Test permanent 401 Auth error returns None (no retry)
+        err_auth = 'Gemini API HTTP 401: Invalid API Key'
+        self.assertIsNone(ai_retry_at(1, error_str=err_auth))
+
+    def test_07_production_lead_invariants(self):
+        if frappe.db.exists("Lead Intake Queue", "LIQ-2026-00007"):
+            queue = frappe.get_doc("Lead Intake Queue", "LIQ-2026-00007")
+            self.assertEqual(queue.source_lead_id, "1272720881498434")
+            self.assertEqual(queue.matched_lead, "CRM-LEAD-2026-00129")
+            self.assertEqual(queue.matched_customer, "Meta Lead 1272720881498434")
+
+            lead = frappe.get_doc("CRM Lead", "CRM-LEAD-2026-00129")
+            self.assertEqual(lead.lead_name, "Thanha fathima")
+            self.assertEqual(lead.mobile_no, "8921868959")
+            self.assertEqual(lead.meta_campaign_name, "Thailand rizwann")
+            self.assertEqual(lead.meta_ad_name, "poster 2")
+            self.assertEqual(lead.assigned_employee, "HR-EMP-00009")
+
+            customer = frappe.get_doc("Customer", "Meta Lead 1272720881498434")
+            self.assertEqual(customer.customer_name, "Thanha fathima")
+            self.assertEqual(customer.mobile_no, "8921868959")

@@ -328,6 +328,13 @@ def _ai_key(event):
 
 def ai_retry_at(attempt,at=None,error_str=None):
     at=at or now_datetime()
+    err_msg=str(error_str or "").lower()
+    
+    # 1. Permanent Auth / Configuration Failures
+    if any(k in err_msg for k in ("401", "403", "invalid api key", "not configured", "unauthorized", "forbidden")):
+        return None
+
+    # 2. Parse provider retry delay if present
     parsed_delay=None
     if error_str:
         import re
@@ -339,11 +346,20 @@ def ai_retry_at(attempt,at=None,error_str=None):
             if m2:
                 parsed_delay=int(float(m2.group(1)))
 
-    is_quota_error=bool(error_str and any(k in str(error_str).lower() for k in ("429","resource_exhausted","quota","rate limit")))
+    # 3. 429 Quota / Rate Limit Errors
+    is_quota_error=bool(any(k in err_msg for k in ("429","resource_exhausted","quota","rate limit")))
+    is_daily_quota=bool(any(k in err_msg for k in ("free_tier_requests", "requestsperday", "daily", "per day", "quota exceeded")))
+    
     if is_quota_error:
-        seconds=max(parsed_delay or 3600, 1800)
+        if is_daily_quota:
+            seconds=max(parsed_delay or 3600, 3600)
+        else:
+            seconds=max(parsed_delay or 120, 60)
     elif parsed_delay:
         seconds=max(parsed_delay, 60)
+    elif any(k in err_msg for k in ("500", "502", "503", "504", "server error", "timeout")):
+        delays=(60, 300, 900, 1800, 3600)
+        seconds=delays[cint(attempt)-1] if 1<=cint(attempt)<=len(delays) else 3600
     else:
         delays=(30,120,300,600,1800)
         seconds=delays[cint(attempt)-1] if 1<=cint(attempt)<=len(delays) else 3600

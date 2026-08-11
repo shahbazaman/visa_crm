@@ -55,13 +55,13 @@ def _process_staged_ai(event_name,queue_name,ai_job_name=None):
     except Exception as exc:
         traceback=frappe.get_traceback()
         frappe.db.rollback()
+        attempt=frappe.db.get_value("Lead Intake AI Job",ai_job_name,"attempt_count") or 1 if ai_job_name else 1
+        from visa_crm.api.pipeline_stage_services import ai_retry_at,_append_ai_retry_history
+        retry_at=ai_retry_at(attempt,now_datetime(),error_str=str(exc))
         if active_claim:
-            fail_stage(active_claim,exc,traceback=traceback)
+            fail_stage(active_claim,exc,traceback=traceback,retry_at=retry_at)
         frappe.db.set_value("Lead Intake Queue",queue_name,{"ai_status":"Failed","ai_error":str(exc),"ai_traceback":traceback},update_modified=False)
         if ai_job_name:
-            attempt=frappe.db.get_value("Lead Intake AI Job",ai_job_name,"attempt_count") or 1
-            from visa_crm.api.pipeline_stage_services import ai_retry_at,_append_ai_retry_history
-            retry_at=ai_retry_at(attempt,now_datetime(),error_str=str(exc))
             frappe.db.set_value("Lead Intake AI Job",ai_job_name,{"state":"FAILED","next_retry_at":retry_at,"heartbeat_at":now_datetime(),"last_error_class":f"{type(exc).__module__}.{type(exc).__qualname__}","last_error":str(exc),"last_traceback":traceback},update_modified=False)
             _append_ai_retry_history(ai_job_name,{"at":str(now_datetime()),"attempt":attempt,"result":"FAILED","error":str(exc),"next_retry_at":str(retry_at)})
         else:

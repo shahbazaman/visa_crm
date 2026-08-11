@@ -123,20 +123,27 @@ def bulk_classify(leads, category, group=None, reason=None):
     if not isinstance(leads, list):
         frappe.throw("Invalid leads parameter: must be a list of lead names")
 
+    results = []
     succeeded = []
     failed = []
     for lead_name in leads:
         try:
             res = apply_manual_classification(lead_name, category, group=group, reason=reason)
             succeeded.append({"lead": lead_name, "result": res})
+            results.append({"lead": lead_name, "status": "moved"})
         except Exception as exc:
-            failed.append({"lead": lead_name, "error": str(exc)})
+            err_msg = str(exc)
+            failed.append({"lead": lead_name, "error": err_msg})
+            results.append({"lead": lead_name, "status": "failed", "error": err_msg})
 
     frappe.db.commit()
     return {
         "ok": len(failed) == 0,
+        "success": len(failed) == 0,
+        "moved": len(succeeded),
         "succeeded": succeeded,
         "failed": failed,
+        "results": results,
         "total": len(leads),
     }
 
