@@ -112,7 +112,11 @@ def _persist_normalized(queue,data,graph_hash,reason):
     values.update({"status":"Lead Downloaded","custom_answers":safe_json_dumps(data.get("custom_answers") or {}),"normalized_payload":safe_json_dumps(data),"normalized_payload_hash":digest,"normalization_version":MAPPING_VERSION,"graph_payload_hash":graph_hash})
     set_values("Lead Intake Queue",queue.name,values)
     _sync_webhook_event(queue,{"queue_status":"Lead Downloaded"})
-    return {"normalized":data,"input_hash":graph_hash,"output_hash":digest,"reused":False,"recovered":reason!="graph_normalization"}
+    res_dict={"normalized":data,"input_hash":graph_hash,"output_hash":digest,"reused":False,"recovered":reason!="graph_normalization"}
+    stage_name=f"{queue.name}:NORMALIZE"
+    if frappe.db.exists("Lead Intake Stage",stage_name):
+        frappe.db.set_value("Lead Intake Stage",stage_name,{"result_json":safe_json_dumps(res_dict),"output_hash":digest,"state":"COMPLETED","completed_at":frappe.utils.now_datetime()},update_modified=False)
+    return res_dict
 
 def _merge_queue_evidence(data,queue):
     answers=load_json(getattr(queue,"custom_answers",None),{})
