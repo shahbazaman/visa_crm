@@ -172,6 +172,28 @@ def get_api_key():
     settings = frappe.get_single("Gemini Settings")
     return settings.get_password("gemini_api_key")
 
+def generate_text(prompt):
+    """Generate text completion from Gemini 2.5 Flash API."""
+    api_key = get_api_key()
+    if not api_key:
+        raise RuntimeError("Gemini API key is not configured in Gemini Settings")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
+    headers = {"Content-Type": "application/json"}
+    resp = requests.post(url, headers=headers, json=payload, timeout=30)
+    if resp.status_code != 200:
+        raise RuntimeError(f"Gemini API HTTP {resp.status_code}: {resp.text}")
+    data = resp.json()
+    try:
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError):
+        raise RuntimeError(f"Unexpected Gemini API response structure: {data}")
+
+def analyze_text(prompt):
+    return generate_text(prompt)
+
 def upload_audio_to_gemini(file_path):
     """Upload raw audio bytes to Gemini Files API and return file_uri."""
     api_key = get_api_key()
