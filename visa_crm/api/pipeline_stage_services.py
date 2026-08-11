@@ -333,6 +333,14 @@ def _successful_graph_payload(queue):
         data=load_json(getattr(queue,field,None),{})
         if data and not data.get("error") and (data.get("id") or data.get("field_data")):
             return data
+    if frappe.db.exists("DocType","Lead Intake Stage"):
+        stage_name=f"{queue.name}:GRAPH_DOWNLOAD"
+        res_json=frappe.db.get_value("Lead Intake Stage",stage_name,"result_json")
+        if res_json:
+            res_data=load_json(res_json,{})
+            graph=res_data.get("graph_payload") or res_data.get("result")
+            if isinstance(graph,dict) and not graph.get("error") and (graph.get("id") or graph.get("field_data")):
+                return graph
     return None
 
 def _graph_request(source_lead_id):
