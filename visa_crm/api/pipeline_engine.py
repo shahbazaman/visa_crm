@@ -26,14 +26,22 @@ def ensure_stage_ledger(queue_name):
     rollup_queue(queue_name)
 
 def repair_normalization_checkpoint(queue_name):
-    if load_json(frappe.db.get_value("Lead Intake Queue",queue_name,"normalized_payload"),{}):
-        return False
+    norm=load_json(frappe.db.get_value("Lead Intake Queue",queue_name,"normalized_payload"),{})
+    has_pii=bool(norm and (norm.get("customer_name") or norm.get("phone") or norm.get("email")))
     row=_stage_row(queue_name,"NORMALIZE")
     if not row or row.state!="COMPLETED":
         return False
+    if norm and has_pii:
+        return False
     queue=frappe.db.get_value("Lead Intake Queue",queue_name,["graph_payload","graph_api_response","custom_answers","customer_name","phone","email"],as_dict=True) or {}
     graph=load_json(queue.get("graph_payload"),{}) or load_json(queue.get("graph_api_response"),{})
-    if not (queue.get("custom_answers") or queue.get("customer_name") or queue.get("phone") or queue.get("email") or graph and not graph.get("error") and (graph.get("id") or graph.get("field_data"))):
+    if not graph:
+        stage_res=frappe.db.get_value("Lead Intake Stage",f"{queue_name}:GRAPH_DOWNLOAD","result_json")
+        if stage_res:
+            res_data=load_json(stage_res,{})
+            graph=res_data.get("graph_payload") or res_data.get("result")
+    valid_graph=bool(graph and isinstance(graph,dict) and not graph.get("error") and (graph.get("id") or graph.get("field_data")))
+    if not (queue.get("custom_answers") or queue.get("customer_name") or queue.get("phone") or queue.get("email") or valid_graph):
         return False
     now=now_datetime()
     frappe.db.set_value("Lead Intake Stage",row.name,{"state":"NOT_STARTED","completed_at":None,"duration_ms":0,"next_retry_at":None,"lease_owner":None,"lease_token":None,"lease_expires_at":None,"heartbeat_at":None,"result_doctype":None,"result_name":None,"result_json":None,"last_error_class":None,"last_error":None,"last_traceback":None,"warning":0,"skip_reason":None},update_modified=False)
