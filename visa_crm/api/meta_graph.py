@@ -13,28 +13,35 @@ class MetaGraphError(Exception):
         self.status_code = status_code
 
 def fetch_lead(leadgen_id, settings=None, context=None):
-    context = context or {}
-    ctx = {k: v for k, v in context.items() if k != "source_lead_id"}
     if not leadgen_id or str(leadgen_id).strip().lower() in ("none", "null", "0", ""):
+        context = context or {}
+        ctx = {k: v for k, v in context.items() if k != "source_lead_id"}
         meta_debug_log("fetch_lead_exception", source_lead_id=leadgen_id, error="GRAPH_DOWNLOAD cannot execute: Meta leadgen ID is missing or invalid", **ctx)
         raise MetaGraphError("GRAPH_DOWNLOAD cannot execute: Meta leadgen ID is missing or invalid")
-    meta_debug_log("fetch_lead_start", source_lead_id=leadgen_id, **ctx)
+
+    leadgen_str = str(leadgen_id).strip()
+    assert isinstance(leadgen_str, str), "source_lead_id must be string"
+    assert leadgen_str and leadgen_str.lower() not in ("none", "null", "0", ""), "source_lead_id cannot be blank or None"
+
+    context = context or {}
+    ctx = {k: v for k, v in context.items() if k != "source_lead_id"}
+    meta_debug_log("fetch_lead_start", source_lead_id=leadgen_str, endpoint=f"https://graph.facebook.com/{GRAPH_VERSION}/{leadgen_str}", **ctx)
     settings = settings or get_meta_settings()
     token = _access_token(settings)
     if not token:
-        meta_debug_log("fetch_lead_exception", source_lead_id=leadgen_id, error="Meta Page Access Token is not configured", **ctx)
+        meta_debug_log("fetch_lead_exception", source_lead_id=leadgen_str, error="Meta Page Access Token is not configured", **ctx)
         raise MetaGraphError("Meta Page Access Token is not configured")
     try:
-        lead = _get(f"{leadgen_id}", {"fields": LEAD_FIELDS, "access_token": token})
+        lead = _get(f"{leadgen_str}", {"fields": LEAD_FIELDS, "access_token": token})
         _hydrate_names(lead, token)
-        log_info("meta_graph_lead_fetched", leadgen_id=leadgen_id)
-        meta_debug_log("fetch_lead_end", source_lead_id=leadgen_id, graph_id=lead.get("id"), **ctx)
+        log_info("meta_graph_lead_fetched", leadgen_id=leadgen_str)
+        meta_debug_log("fetch_lead_end", source_lead_id=leadgen_str, graph_id=lead.get("id"), **ctx)
         return lead
     except MetaGraphError as exc:
-        meta_debug_log("fetch_lead_exception", source_lead_id=leadgen_id, error=str(exc), status_code=exc.status_code, graph_response=exc.response, graph_request=exc.request, **ctx)
+        meta_debug_log("fetch_lead_exception", source_lead_id=leadgen_str, error=str(exc), status_code=exc.status_code, graph_response=exc.response, graph_request=exc.request, **ctx)
         raise
     except Exception:
-        meta_debug_log("fetch_lead_exception", source_lead_id=leadgen_id, traceback=frappe.get_traceback(), **ctx)
+        meta_debug_log("fetch_lead_exception", source_lead_id=leadgen_str, traceback=frappe.get_traceback(), **ctx)
         raise
 
 def _get(path, params):

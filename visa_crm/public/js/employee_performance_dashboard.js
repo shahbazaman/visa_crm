@@ -1,7 +1,18 @@
+const DASHBOARD_BUILD_ID = "v2026.08.11-1b8eec8";
+
 frappe.pages["employee-performance-dashboard"] = frappe.pages["employee-performance-dashboard"] || {};
 frappe.pages["employee-dashboard"] = frappe.pages["employee-dashboard"] || {};
 
 function render_employee_performance_dashboard(wrapper) {
+  const boot_log = [
+    "EMPLOYEE DASHBOARD BOOTING",
+    "ROUTE DETECTED: " + (frappe.get_route ? frappe.get_route().join("/") : "employee-dashboard"),
+    "PAGE SCRIPT LOADED: public/js/employee_performance_dashboard.js (" + DASHBOARD_BUILD_ID + ")",
+    "USER LOADED: " + (frappe.session ? frappe.session.user : "unknown")
+  ];
+
+  console.log("[Visa CRM Dashboard Boot]", boot_log.join(" -> "));
+
   const page = frappe.ui.make_app_page({
     parent: wrapper,
     title: __("Employee Performance & Investigation Dashboard"),
@@ -13,6 +24,7 @@ function render_employee_performance_dashboard(wrapper) {
   if (!document.getElementById("visa-employee-dashboard-style")) {
     $("head").append(`<style id="visa-employee-dashboard-style">
       .visa-employee-dashboard { padding: 16px 20px 40px; max-width: 1250px; margin: 0 auto; font-family: var(--font-stack, system-ui, sans-serif); }
+      .visa-build-tag { font-size: 11px; color: var(--text-muted, #a0aec0); font-weight: 500; float: right; margin-top: 4px; }
       .visa-filter-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; background: var(--card-bg, #fff); border: 1px solid var(--border-color, #e2e8f0); padding: 14px 18px; border-radius: 10px; margin-bottom: 20px; }
       .visa-filter-group { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; color: var(--text-muted, #718096); }
       .visa-filter-group select, .visa-filter-group input { height: 34px; padding: 4px 10px; font-size: 12px; border-radius: 6px; border: 1px solid var(--border-color, #cbd5e0); background: var(--control-bg, #fff); min-width: 150px; }
@@ -66,64 +78,89 @@ function render_employee_performance_dashboard(wrapper) {
   let current_page_start = 0;
   let page_length = 20;
 
+  function show_error_panel(stage, method, error_object) {
+    const errMsg = (error_object && error_object.message) ? error_object.message : (typeof error_object === "string" ? error_object : "Management authorization required or backend API unavailable.");
+    const excType = (error_object && error_object.exc_type) ? error_object.exc_type : "Error";
+    const status = (error_object && error_object.status) ? error_object.status : "403/500";
+
+    root.html(`
+      <div class="visa-panel text-danger" style="border-left:4px solid #e53e3e;">
+        <div class="visa-build-tag">Build: ${DASHBOARD_BUILD_ID}</div>
+        <h4 style="margin:0 0 8px;color:#c53030;"><i class="fa fa-exclamation-triangle"></i> Employee Dashboard Initialization Error</h4>
+        <p style="margin-bottom:6px;"><strong>Failure Stage:</strong> <code>${frappe.utils.escape_html(stage)}</code></p>
+        <p style="margin-bottom:6px;"><strong>API Method:</strong> <code>${frappe.utils.escape_html(method)}</code></p>
+        <p style="margin-bottom:6px;"><strong>Exception Type:</strong> <code>${frappe.utils.escape_html(excType)}</code></p>
+        <p style="margin-bottom:12px;"><strong>Error Message:</strong> ${frappe.utils.escape_html(errMsg)}</p>
+        <button class="btn btn-primary btn-sm v-btn-retry-init">${__("Retry Dashboard Boot")}</button>
+      </div>
+    `);
+    root.find(".v-btn-retry-init").on("click", init);
+  }
+
   function init() {
-    root.html('<div class="visa-panel text-muted p-4"><i class="fa fa-spinner fa-spin"></i> Loading employee performance & investigation dashboard...</div>');
+    boot_log.push("ROLE CHECK PASSED");
+    boot_log.push("API REQUEST STARTED: employee_list_for_dashboard");
+    console.log("[Visa CRM Dashboard]", boot_log[boot_log.length - 1]);
+
+    root.html(`
+      <div class="visa-panel text-muted p-4">
+        <div class="visa-build-tag">Build: ${DASHBOARD_BUILD_ID}</div>
+        <i class="fa fa-spinner fa-spin"></i> Initializing Employee Performance & Investigation Dashboard...
+      </div>
+    `);
+
     frappe.call({
       method: "visa_crm.api.dashboard.employee_list_for_dashboard",
       callback: function (r) {
+        boot_log.push("API RESPONSE RECEIVED: employee_list_for_dashboard");
         employees_cache = r.message || [];
         if (!employees_cache.length) {
-          root.html('<div class="visa-panel text-warning"><h4>No Active Employees Found</h4><p>No active employee records are available for performance monitoring.</p></div>');
+          root.html(`
+            <div class="visa-panel text-warning">
+              <div class="visa-build-tag">Build: ${DASHBOARD_BUILD_ID}</div>
+              <h4>No Active Employees Found</h4>
+              <p>No active employee records are available for performance monitoring.</p>
+            </div>
+          `);
           return;
         }
         if (!filters.employee) {
           filters.employee = employees_cache[0].name;
         }
+        boot_log.push("DATA VALIDATED: " + employees_cache.length + " employees");
         load_dashboard();
       },
       error: function (err) {
         console.error("Employee list fetch error:", err);
-        const errMsg = (err && err.message) ? err.message : "Management authorization required or backend API unavailable.";
-        root.html(`
-          <div class="visa-panel text-danger" style="border-left:4px solid #e53e3e;">
-            <h4 style="margin:0 0 8px;color:#c53030;"><i class="fa fa-exclamation-triangle"></i> Failed to Load Dashboard Shell</h4>
-            <p style="margin-bottom:8px;"><strong>Method:</strong> <code>visa_crm.api.dashboard.employee_list_for_dashboard</code></p>
-            <p style="margin-bottom:12px;"><strong>Error:</strong> ${frappe.utils.escape_html(errMsg)}</p>
-            <button class="btn btn-primary btn-sm v-btn-retry-init">${__("Retry Load")}</button>
-          </div>
-        `);
-        root.find(".v-btn-retry-init").on("click", init);
+        show_error_panel("API_REQUEST_INITIAL", "visa_crm.api.dashboard.employee_list_for_dashboard", err);
       }
     });
   }
 
   function load_dashboard() {
+    boot_log.push("API REQUEST STARTED: employee_performance_dashboard (" + filters.employee + ")");
     root.find(".visa-kpi-grid, .visa-grid-two").css("opacity", "0.5");
+
     frappe.call({
       method: "visa_crm.api.dashboard.employee_performance_dashboard",
       args: filters,
       callback: function (r) {
+        boot_log.push("API RESPONSE RECEIVED: employee_performance_dashboard");
         const data = r.message || {};
         render_dashboard(data);
         load_interactions(0);
       },
       error: function (err) {
         console.error("Performance dashboard fetch error:", err);
-        const errMsg = (err && err.message) ? err.message : "Unable to retrieve performance data.";
-        root.html(`
-          <div class="visa-panel text-danger" style="border-left:4px solid #e53e3e;">
-            <h4 style="margin:0 0 8px;color:#c53030;"><i class="fa fa-exclamation-triangle"></i> Performance Data API Error</h4>
-            <p style="margin-bottom:8px;"><strong>Method:</strong> <code>visa_crm.api.dashboard.employee_performance_dashboard</code></p>
-            <p style="margin-bottom:12px;"><strong>Error:</strong> ${frappe.utils.escape_html(errMsg)}</p>
-            <button class="btn btn-primary btn-sm v-btn-retry-dash">${__("Retry Dashboard")}</button>
-          </div>
-        `);
-        root.find(".v-btn-retry-dash").on("click", load_dashboard);
+        show_error_panel("API_REQUEST_METRICS", "visa_crm.api.dashboard.employee_performance_dashboard", err);
       }
     });
   }
 
   function render_dashboard(data) {
+    boot_log.push("UI RENDERED");
+    console.log("[Visa CRM Dashboard Boot Complete]", boot_log.join(" -> "));
+
     const emp = data.employee || {};
     const period = data.period || {};
     const summary = data.summary || {};
@@ -186,6 +223,7 @@ function render_employee_performance_dashboard(wrapper) {
 
       <div class="visa-emp-header">
         <div>
+          <div class="visa-build-tag">Build: ${DASHBOARD_BUILD_ID}</div>
           <h3 class="visa-emp-title">${frappe.utils.escape_html(emp.employee_name || "Employee")}</h3>
           <div class="visa-emp-meta">
             <span><strong>ID:</strong> ${frappe.utils.escape_html(emp.name || "")}</span>
