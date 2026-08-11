@@ -56,3 +56,26 @@ class TestGraphDownloadResilience(FrappeTestCase):
                 meta_graph.fetch_lead("None")
             self.assertIn("Meta leadgen ID is missing or invalid", str(ctx.exception))
             mock_get.assert_not_called()
+
+    def test_durable_reconstruction_evidence_from_raw_payload(self):
+        from visa_crm.api.pipeline_stage_services import _rebuild_normalized, load_normalized, customer360
+        frappe.db.set_value("Lead Intake Queue", self.queue, {
+            "graph_payload": None,
+            "normalized_payload": None,
+            "raw_payload": '{"leadgen_id": "1728701815047004", "page_id": "PAGE-123", "form_id": "FORM-123"}'
+        })
+        normalized = load_normalized(self.queue)
+        self.assertIsNotNone(normalized)
+        self.assertEqual(normalized.get("source_lead_id"), "1728701815047004")
+        self.assertEqual(normalized.get("page_id"), "PAGE-123")
+
+        cust = customer360(self.queue)
+        self.assertIsNotNone(cust.get("customer"))
+
+    def test_next_action_at_not_earlier_than_creation(self):
+        from visa_crm.api.pipeline_engine import rollup_queue
+        now = frappe.utils.now_datetime()
+        frappe.db.set_value("Lead Intake Queue", self.queue, {"creation": now})
+        frappe.db.set_value("Lead Intake Stage", f"{self.queue}:GRAPH_DOWNLOAD", {"state": "FAILED", "next_retry_at": "2020-01-01 00:00:00"})
+        res = rollup_queue(self.queue)
+        self.assertIsNone(res.get("next_action_at"))
