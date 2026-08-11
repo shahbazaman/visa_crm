@@ -33,3 +33,4 @@ visa_crm.patches.finalize_meta_pipeline_resilience
 visa_crm.patches.repair_normalized_payload_checkpoints
 visa_crm.patches.production_hardening_meta_android
 visa_crm.patches.lead_management_redesign
+visa_crm.patches.remove_employee_dashboard_workspace_v2

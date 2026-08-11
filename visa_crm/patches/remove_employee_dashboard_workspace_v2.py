@@ -15,6 +15,6 @@ def execute():
     )
 
     for workspace in set(workspaces):
-        frappe.delete_doc("Workspace", workspace, force=True)
+        frappe.db.delete("Workspace", {"name": workspace})
 
     frappe.db.commit()

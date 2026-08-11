@@ -2,7 +2,7 @@ import frappe
 from frappe.utils import cint
 
 
-DEFAULT_MANAGEMENT_ROLES = {"System Manager", "Sales Manager", "General Manager", "Managing Director", "MD"}
+DEFAULT_MANAGEMENT_ROLES = {"System Manager", "Sales Manager", "General Manager", "Managing Director", "MD", "CRM Manager"}
 DEFAULT_OPERATIONAL_ROLES = {"Sales User", "Counselor", "Visa Processing", "Lead Team", "Inbox User"}
 
 

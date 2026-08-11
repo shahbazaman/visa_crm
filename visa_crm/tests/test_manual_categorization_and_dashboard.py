@@ -31,6 +31,7 @@ class TestManualCategorizationAndDashboard(FrappeTestCase):
     def test_manual_classification_updates_lead_and_creates_history(self):
         lead = frappe.get_doc({
             "doctype": "CRM Lead",
+            "first_name": "Test",
             "lead_name": "Test Manual Lead",
             "mobile_no": "+919999888777",
             "status": "Open",
@@ -57,6 +58,7 @@ class TestManualCategorizationAndDashboard(FrappeTestCase):
     def test_invalid_category_raises_error(self):
         lead = frappe.get_doc({
             "doctype": "CRM Lead",
+            "first_name": "Test",
             "lead_name": "Test Invalid Category Lead",
             "status": "Open"
         })
@@ -66,8 +68,8 @@ class TestManualCategorizationAndDashboard(FrappeTestCase):
             apply_manual_classification(lead.name, "NonExistentCategory999")
 
     def test_bulk_classify_atomic_execution(self):
-        l1 = frappe.get_doc({"doctype": "CRM Lead", "lead_name": "Bulk Lead 1", "status": "Open"}).insert(ignore_permissions=True)
-        l2 = frappe.get_doc({"doctype": "CRM Lead", "lead_name": "Bulk Lead 2", "status": "Open"}).insert(ignore_permissions=True)
+        l1 = frappe.get_doc({"doctype": "CRM Lead", "first_name": "Bulk1", "lead_name": "Bulk Lead 1", "status": "Open"}).insert(ignore_permissions=True)
+        l2 = frappe.get_doc({"doctype": "CRM Lead", "first_name": "Bulk2", "lead_name": "Bulk Lead 2", "status": "Open"}).insert(ignore_permissions=True)
 
         res = bulk_classify([l1.name, l2.name], "Holidays", group="Europe Package", reason="Bulk manual assignment test")
         self.assertTrue(res["ok"])
@@ -83,8 +85,8 @@ class TestManualCategorizationAndDashboard(FrappeTestCase):
         self.assertIn("subcategories", res)
 
     def test_lead_list_classification_filter(self):
-        l_cat = frappe.get_doc({"doctype": "CRM Lead", "lead_name": "Categorized Lead", "status": "Open", "lead_category": "Holidays"}).insert(ignore_permissions=True)
-        l_uncat = frappe.get_doc({"doctype": "CRM Lead", "lead_name": "Uncategorized Lead", "status": "Open", "lead_category": "Uncategorized"}).insert(ignore_permissions=True)
+        l_cat = frappe.get_doc({"doctype": "CRM Lead", "first_name": "Cat", "lead_name": "Categorized Lead", "status": "Open", "lead_category": "Holidays"}).insert(ignore_permissions=True)
+        l_uncat = frappe.get_doc({"doctype": "CRM Lead", "first_name": "Uncat", "lead_name": "Uncategorized Lead", "status": "Open", "lead_category": "Uncategorized"}).insert(ignore_permissions=True)
 
         res_cat = leads(category="All", classification_filter="Categorized")
         cat_names = [row["name"] for row in res_cat.get("rows", [])]
