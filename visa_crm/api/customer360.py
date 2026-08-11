@@ -39,9 +39,27 @@ def resolve_customer(data,context=None):
         customer=_match("Customer",phones,emails)
     if not customer:
         customer=create_customer(data)
+    _populate_customer_blanks(customer,data)
     _claim_identities(customer,data)
     meta_debug_log("customer_360_customer_resolved",customer=customer,**context)
     return customer
+
+def _populate_customer_blanks(customer,data):
+    if not customer or not frappe.db.exists("Customer",customer):
+        return
+    current=frappe.db.get_value("Customer",customer,["customer_name","mobile_no","email_id","whatsapp_no"],as_dict=True) or {}
+    values={}
+    if data.get("customer_name") and (not current.get("customer_name") or current.get("customer_name").startswith("Meta Lead ")):
+        values["customer_name"]=data.get("customer_name")
+    if data.get("phone") and not current.get("mobile_no"):
+        values["mobile_no"]=data.get("phone")
+    if data.get("whatsapp") and not current.get("whatsapp_no"):
+        values["whatsapp_no"]=data.get("whatsapp")
+    if data.get("email") and not current.get("email_id"):
+        values["email_id"]=data.get("email")
+    values={f:v for f,v in values.items() if has_field("Customer",f)}
+    if values:
+        frappe.db.set_value("Customer",customer,values,update_modified=False)
 
 def resolve_lead(data,customer,context=None):
     context=context or {}
@@ -175,8 +193,11 @@ def _linked_customer(lead):
     return None
 
 def _populate_lead_blanks(lead,data):
-    mapping={"facebook_lead_id":"source_lead_id","facebook_form_id":"form_id","facebook_page_id":"page_id","meta_campaign_id":"campaign_id","meta_campaign_name":"campaign_name","meta_adset_id":"adset_id","meta_adset_name":"adset_name","meta_ad_id":"ad_id","meta_ad_name":"ad_name"}
-    current=frappe.db.get_value("CRM Lead",lead,list(mapping),as_dict=True) or {}
+    mapping={"facebook_lead_id":"source_lead_id","facebook_form_id":"form_id","facebook_page_id":"page_id","meta_campaign_id":"campaign_id","meta_campaign_name":"campaign_name","meta_adset_id":"adset_id","meta_adset_name":"adset_name","meta_ad_id":"ad_id","meta_ad_name":"ad_name","mobile_no":"phone","email":"email"}
+    current=frappe.db.get_value("CRM Lead",lead,list(mapping)+["lead_name"],as_dict=True) or {}
     values={target:data.get(source) for target,source in mapping.items() if data.get(source) and not current.get(target)}
+    if data.get("customer_name") and (not current.get("lead_name") or current.get("lead_name").startswith("Meta Lead ")):
+        values["lead_name"]=data.get("customer_name")
+    values={f:v for f,v in values.items() if has_field("CRM Lead",f)}
     if values:
         frappe.db.set_value("CRM Lead",lead,values,update_modified=False)
