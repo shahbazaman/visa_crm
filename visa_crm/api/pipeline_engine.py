@@ -240,7 +240,9 @@ def rollup_queue(queue_name,progress=False):
     else:
         overall="PENDING"
     current=_current_stage(rows)
-    next_action=min((get_datetime(row.next_retry_at) for row in rows if row.state=="FAILED" and row.next_retry_at),default=None)
+    created_at = get_datetime(frappe.db.get_value("Lead Intake Queue", queue_name, "creation") or now_datetime())
+    valid_retries = [get_datetime(row.next_retry_at) for row in rows if row.state == "FAILED" and row.next_retry_at and get_datetime(row.next_retry_at) >= add_to_date(created_at, minutes=-5)]
+    next_action = min(valid_retries, default=None)
     warnings=sum(1 for row in rows if row.warning or row.state=="FAILED" and STAGE_BY_NAME[row.stage]["requirement_class"]=="Optional")
     summary={row.stage:{"state":row.state,"attempts":cint(row.attempt_count),"duration_ms":cint(row.duration_ms),"next_retry_at":str(row.next_retry_at) if row.next_retry_at else None,"error":row.last_error} for row in rows}
     values={"orchestration_status":overall,"pipeline_version":PIPELINE_VERSION,"current_stage":current,"next_action_at":next_action,"warning_count":warnings,"stage_summary_json":safe_json_dumps(summary)}

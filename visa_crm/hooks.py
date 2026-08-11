@@ -91,5 +91,6 @@ fixtures = [
 ]
 page_js = {
     "manager-dashboard": "public/js/manager_dashboard.js",
-    "employee-dashboard": "public/js/employee_dashboard.js"
+    "employee-dashboard": "visa_crm/page/employee_performance_dashboard/employee_performance_dashboard.js",
+    "employee-performance-dashboard": "visa_crm/page/employee_performance_dashboard/employee_performance_dashboard.js"
 }

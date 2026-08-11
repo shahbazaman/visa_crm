@@ -130,11 +130,13 @@ def _graph_payload_from_queue(queue):
             value=getattr(queue,name,None)
             if value:
                 fields.append({"name":name,"values":[value]})
-    if not fields:
+    raw=load_json(getattr(queue,"raw_payload",None),{})
+    lead_id=getattr(queue,"source_lead_id",None) or (raw.get("leadgen_id") if isinstance(raw,dict) else None)
+    if not fields and not lead_id and not (isinstance(raw,dict) and (raw.get("page_id") or raw.get("form_id"))):
         return None
-    payload={"id":queue.source_lead_id,"field_data":fields}
+    payload={"id":lead_id,"field_data":fields}
     for field in ("form_id","page_id","campaign_id","campaign_name","adset_id","adset_name","ad_id","ad_name"):
-        value=getattr(queue,field,None)
+        value=getattr(queue,field,None) or (raw.get(field) if isinstance(raw,dict) else None)
         if value:
             payload[field]=value
     return payload

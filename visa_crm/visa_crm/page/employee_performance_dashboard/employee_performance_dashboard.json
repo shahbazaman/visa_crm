@@ -1,0 +1,17 @@
+{
+  "doctype": "Page",
+  "name": "employee-performance-dashboard",
+  "page_name": "employee-performance-dashboard",
+  "title": "Employee Performance & Investigation Dashboard",
+  "module": "Visa CRM",
+  "standard": "Yes",
+  "icon": "users",
+  "roles": [
+    {"role": "System Manager"},
+    {"role": "Sales Manager"},
+    {"role": "General Manager"},
+    {"role": "Managing Director"},
+    {"role": "MD"},
+    {"role": "CRM Manager"}
+  ]
+}

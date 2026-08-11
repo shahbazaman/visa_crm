@@ -51,7 +51,12 @@ def _get(path, params):
         error = data.get("error", {}) if isinstance(data, dict) else {}
         if isinstance(error, dict):
             error["http_status"] = response.status_code
-        message = error.get("message") or f"Graph API HTTP {response.status_code}"
+        raw_msg = error.get("message") or f"Graph API HTTP {response.status_code}"
+        if "Object with ID" in raw_msg and "None" in raw_msg:
+            message = f"Meta Graph API Permission Error ({raw_msg}): Page Access Token lacks 'leads_retrieval' permission or leadgen ID {path} belongs to a different Page/App."
+        else:
+            message = raw_msg
+        meta_debug_log("meta_graph_error", path=path, status_code=response.status_code, error=message, graph_request=request, graph_response=data)
         raise MetaGraphError(message, request=request, response=data, status_code=response.status_code)
     meta_debug_log("meta_graph_response", source_lead_id=path, status_code=response.status_code, graph_response=data, graph_request=request)
     return data
