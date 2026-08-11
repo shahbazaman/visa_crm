@@ -571,3 +571,58 @@ def _retry_jobs():
     if not has_doctype("Lead Intake Queue"):
         return 0
     return frappe.db.count("Lead Intake Queue", {"status": "Needs Retry"})
+
+
+@frappe.whitelist()
+def hydrate_queue(queue_name):
+    """
+    Safely hydrate blank/placeholder Customer and CRM Lead records
+    with real PII and Meta attribution from the normalized queue payload.
+    """
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw("System Manager role required", frappe.PermissionError)
+
+    if not frappe.db.exists("Lead Intake Queue", queue_name):
+        frappe.throw(f"Lead Intake Queue {queue_name} not found")
+
+    queue = frappe.get_doc("Lead Intake Queue", queue_name)
+    norm = load_json(getattr(queue, "normalized_payload", None), {})
+    if not norm:
+        from visa_crm.api.pipeline_stage_services import load_normalized
+        norm = load_normalized(queue_name)
+
+    customer_res = None
+    if queue.matched_customer and frappe.db.exists("Customer", queue.matched_customer):
+        from visa_crm.api.customer360 import _populate_customer_blanks
+        _populate_customer_blanks(queue.matched_customer, norm)
+        c_doc = frappe.get_doc("Customer", queue.matched_customer)
+        customer_res = {
+            "name": c_doc.name,
+            "customer_name": c_doc.customer_name,
+            "mobile_no": c_doc.get("mobile_no"),
+            "email_id": c_doc.get("email_id")
+        }
+
+    lead_res = None
+    if queue.matched_lead and frappe.db.exists("CRM Lead", queue.matched_lead):
+        from visa_crm.api.customer360 import _populate_lead_blanks
+        _populate_lead_blanks(queue.matched_lead, norm)
+        l_doc = frappe.get_doc("CRM Lead", queue.matched_lead)
+        lead_res = {
+            "name": l_doc.name,
+            "lead_name": l_doc.lead_name,
+            "mobile_no": l_doc.get("mobile_no"),
+            "email": l_doc.get("email"),
+            "facebook_lead_id": l_doc.get("facebook_lead_id"),
+            "meta_campaign_name": l_doc.get("meta_campaign_name"),
+            "meta_ad_name": l_doc.get("meta_ad_name"),
+            "meta_adset_name": l_doc.get("meta_adset_name")
+        }
+
+    frappe.db.commit()
+    return {
+        "ok": True,
+        "queue": queue_name,
+        "customer": customer_res,
+        "crm_lead": lead_res
+    }
