@@ -67,13 +67,13 @@ function render_employee_performance_dashboard(wrapper) {
   let page_length = 20;
 
   function init() {
-    root.html('<div class="text-muted p-4">Loading employee investigation dashboard...</div>');
+    root.html('<div class="visa-panel text-muted p-4"><i class="fa fa-spinner fa-spin"></i> Loading employee performance & investigation dashboard...</div>');
     frappe.call({
       method: "visa_crm.api.dashboard.employee_list_for_dashboard",
       callback: function (r) {
         employees_cache = r.message || [];
         if (!employees_cache.length) {
-          root.html('<div class="visa-panel text-warning">No active employees found in system.</div>');
+          root.html('<div class="visa-panel text-warning"><h4>No Active Employees Found</h4><p>No active employee records are available for performance monitoring.</p></div>');
           return;
         }
         if (!filters.employee) {
@@ -82,12 +82,23 @@ function render_employee_performance_dashboard(wrapper) {
         load_dashboard();
       },
       error: function (err) {
-        root.html('<div class="visa-panel text-danger"><h4>Access Denied</h4><p>Management authorization required to view employee performance dashboard.</p></div>');
+        console.error("Employee list fetch error:", err);
+        const errMsg = (err && err.message) ? err.message : "Management authorization required or backend API unavailable.";
+        root.html(`
+          <div class="visa-panel text-danger" style="border-left:4px solid #e53e3e;">
+            <h4 style="margin:0 0 8px;color:#c53030;"><i class="fa fa-exclamation-triangle"></i> Failed to Load Dashboard Shell</h4>
+            <p style="margin-bottom:8px;"><strong>Method:</strong> <code>visa_crm.api.dashboard.employee_list_for_dashboard</code></p>
+            <p style="margin-bottom:12px;"><strong>Error:</strong> ${frappe.utils.escape_html(errMsg)}</p>
+            <button class="btn btn-primary btn-sm v-btn-retry-init">${__("Retry Load")}</button>
+          </div>
+        `);
+        root.find(".v-btn-retry-init").on("click", init);
       }
     });
   }
 
   function load_dashboard() {
+    root.find(".visa-kpi-grid, .visa-grid-two").css("opacity", "0.5");
     frappe.call({
       method: "visa_crm.api.dashboard.employee_performance_dashboard",
       args: filters,
@@ -96,8 +107,18 @@ function render_employee_performance_dashboard(wrapper) {
         render_dashboard(data);
         load_interactions(0);
       },
-      error: function () {
-        root.html('<div class="visa-panel text-danger"><h4>Access Denied</h4><p>You are not authorized to access this performance dashboard.</p></div>');
+      error: function (err) {
+        console.error("Performance dashboard fetch error:", err);
+        const errMsg = (err && err.message) ? err.message : "Unable to retrieve performance data.";
+        root.html(`
+          <div class="visa-panel text-danger" style="border-left:4px solid #e53e3e;">
+            <h4 style="margin:0 0 8px;color:#c53030;"><i class="fa fa-exclamation-triangle"></i> Performance Data API Error</h4>
+            <p style="margin-bottom:8px;"><strong>Method:</strong> <code>visa_crm.api.dashboard.employee_performance_dashboard</code></p>
+            <p style="margin-bottom:12px;"><strong>Error:</strong> ${frappe.utils.escape_html(errMsg)}</p>
+            <button class="btn btn-primary btn-sm v-btn-retry-dash">${__("Retry Dashboard")}</button>
+          </div>
+        `);
+        root.find(".v-btn-retry-dash").on("click", load_dashboard);
       }
     });
   }
