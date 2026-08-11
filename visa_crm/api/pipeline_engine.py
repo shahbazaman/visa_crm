@@ -187,7 +187,7 @@ def recover_expired_leases(at=None):
 
 def retry_stage(queue_name,stage,force=False):
     row=_stage_row(queue_name,stage)
-    if not row or row.state not in ("FAILED","RUNNING"):
+    if not row or (not force and row.state not in ("FAILED","RUNNING")):
         return False
     if row.state=="RUNNING" and not force and (not row.lease_expires_at or get_datetime(row.lease_expires_at)>now_datetime()):
         return False
