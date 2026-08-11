@@ -6,5 +6,12 @@
   "module": "Visa CRM",
   "standard": "Yes",
   "icon": "users",
-  "roles": []
+  "roles": [
+    {"role": "System Manager"},
+    {"role": "Sales Manager"},
+    {"role": "General Manager"},
+    {"role": "Managing Director"},
+    {"role": "MD"},
+    {"role": "CRM Manager"}
+  ]
 }

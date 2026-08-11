@@ -18,3 +18,4 @@ def execute():
         frappe.db.delete("Workspace", {"name": workspace})
 
     frappe.db.commit()
+    frappe.clear_cache()
