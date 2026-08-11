@@ -463,6 +463,29 @@ def _next_run(job, cron):
 def _worker_status():
     return {"status": "active"}
 
+@frappe.whitelist()
+def run_dashboard_diagnostics():
+    _admin()
+    import visa_crm.hooks as hooks
+    page_js = getattr(hooks, "page_js", {})
+    pages = frappe.get_all("Page", filters={"name": ["in", ["employee-dashboard", "employee-performance-dashboard"]]}, fields=["name", "title", "module", "standard"])
+    roles = frappe.get_all("Has Role", filters={"parent": ["in", ["employee-dashboard", "employee-performance-dashboard"]]}, fields=["parent", "role"])
+    workspaces = frappe.get_all("Workspace", filters={"name": ["like", "%employee%"]}, fields=["name", "title", "public"])
+
+    js_files = {}
+    for p in ("public/js/employee_dashboard.js", "public/js/employee_performance_dashboard.js"):
+        full = frappe.get_app_path("visa_crm", p)
+        js_files[p] = os.path.exists(full)
+
+    return {
+        "ok": True,
+        "page_js_hooks": page_js,
+        "pages_in_db": pages,
+        "page_roles_in_db": roles,
+        "workspaces_in_db": workspaces,
+        "js_files_on_disk": js_files
+    }
+
 def _retry_jobs():
     if not has_doctype("Lead Intake Queue"):
         return 0
