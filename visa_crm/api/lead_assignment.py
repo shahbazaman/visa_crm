@@ -146,7 +146,9 @@ def _select_employee(queue_doc=None,strategy=None):
         candidates.append({"employee":employee,"working":working,"language_match":language_match,"country_match":country_match,"workload":workload,"department":frappe.db.get_value("Employee",employee,"department") if has_field("Employee","department") else None})
     available=[row["employee"] for row in candidates if row["working"]]
     preferred=[row["employee"] for row in candidates if row["working"] and (not language or row["language_match"]) and (not country or row["country_match"])]
-    pool=preferred or available
+    off_hours_preferred=[row["employee"] for row in candidates if (not language or row["language_match"]) and (not country or row["country_match"])]
+    all_candidates=[row["employee"] for row in candidates]
+    pool=preferred or available or off_hours_preferred or all_candidates
     fallback=frappe.conf.get("visa_crm_fallback_counselor")
     fallback_allowed=fallback and frappe.db.exists("Employee",fallback) and (not responsible_department or not has_field("Employee","department") or frappe.db.get_value("Employee",fallback,"department")==responsible_department)
     if not pool and fallback_allowed:
