@@ -221,10 +221,19 @@ def retry_queue(queue_name):
 
     ensure_stage_ledger(queue_name)
     stages = stages_for(queue_name)
-    failed_stage = next((s.stage for s in stages if s.state == "FAILED"), None)
+    queue = frappe.get_doc("Lead Intake Queue", queue_name)
+    c_name = frappe.db.get_value("Customer", queue.matched_customer, "customer_name") if queue.matched_customer else None
+    l_name = frappe.db.get_value("CRM Lead", queue.matched_lead, "lead_name") if queue.matched_lead else None
+    placeholder = bool((c_name and c_name.startswith("Meta Lead ")) or (l_name and l_name.startswith("Meta Lead ")))
 
-    if failed_stage:
-        retry_stage(queue_name, failed_stage, force=True)
+    failed_stages = [s.stage for s in stages if s.state == "FAILED"]
+    if placeholder:
+        for stg in ("CUSTOMER360", "CRM_LEAD"):
+            if stg not in failed_stages:
+                failed_stages.append(stg)
+
+    for stg in failed_stages:
+        retry_stage(queue_name, stg, force=True)
 
     result = process_queue(queue_name)
     frappe.db.commit()
