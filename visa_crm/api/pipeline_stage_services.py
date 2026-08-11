@@ -326,10 +326,29 @@ def recover_stale_ai_jobs(at=None):
 def _ai_key(event):
     return f"ai:{event}:1"
 
-def ai_retry_at(attempt,at=None):
+def ai_retry_at(attempt,at=None,error_str=None):
     at=at or now_datetime()
-    delays=(30,120,300,600,1800)
-    return add_to_date(at,seconds=delays[cint(attempt)-1] if 1<=cint(attempt)<=len(delays) else 3600)
+    parsed_delay=None
+    if error_str:
+        import re
+        m1=re.search(r'"retryDelay"\s*:\s*"(\d+)s?"',str(error_str))
+        if m1:
+            parsed_delay=int(m1.group(1))
+        else:
+            m2=re.search(r'Please retry in\s+([0-9\.]+)\s*s',str(error_str),re.IGNORECASE)
+            if m2:
+                parsed_delay=int(float(m2.group(1)))
+
+    is_quota_error=bool(error_str and any(k in str(error_str).lower() for k in ("429","resource_exhausted","quota","rate limit")))
+    if is_quota_error:
+        seconds=max(parsed_delay or 3600, 1800)
+    elif parsed_delay:
+        seconds=max(parsed_delay, 60)
+    else:
+        delays=(30,120,300,600,1800)
+        seconds=delays[cint(attempt)-1] if 1<=cint(attempt)<=len(delays) else 3600
+
+    return add_to_date(at,seconds=seconds)
 
 def _append_ai_retry_history(job_name,item):
     if not has_field("Lead Intake AI Job","retry_history_json"):

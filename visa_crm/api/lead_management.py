@@ -154,6 +154,16 @@ def subcategories(category=None):
     groups_list = frappe.get_all("CRM Lead", filters=filters, pluck="lead_group", distinct=True)
     valid_groups = sorted([g for g in groups_list if g and g not in ("Unspecified", "No Subcategory")])
 
+    if frappe.db.exists("DocType", "Lead Subcategory"):
+        sub_cat_filters = {"is_active": 1}
+        if category and category not in ("All", "all", "Uncategorized"):
+            sub_cat_filters["parent_category"] = category
+        db_subcats = frappe.get_all("Lead Subcategory", filters=sub_cat_filters, pluck="sub_category_name")
+        for sc in db_subcats:
+            if sc and sc not in valid_groups:
+                valid_groups.append(sc)
+        valid_groups = sorted(list(set(valid_groups)))
+
     categories_list = frappe.get_all(
         "Lead Category",
         filters={"is_active": 1},
@@ -185,6 +195,33 @@ def create_category(category_name, department=None, sort_order=100, operational_
     })
     doc.insert(ignore_permissions=True)
     return {"name": doc.name}
+
+
+@frappe.whitelist()
+def create_sub_category(sub_category_name, parent_category, description=None, sort_order=100):
+    _require_operational()
+    if not parent_category or not frappe.db.exists("Lead Category", parent_category):
+        frappe.throw("Valid Parent Lead Category is required", frappe.ValidationError)
+    name = str(sub_category_name).strip()
+    if not name:
+        frappe.throw("Sub-category Name is required", frappe.ValidationError)
+
+    if frappe.db.exists("DocType", "Lead Subcategory"):
+        if frappe.db.exists("Lead Subcategory", {"sub_category_name": name, "parent_category": parent_category}):
+            frappe.throw(f"Sub-category '{name}' already exists under category '{parent_category}'", frappe.DuplicateEntryError)
+        doc = frappe.get_doc({
+            "doctype": "Lead Subcategory",
+            "sub_category_name": name,
+            "parent_category": parent_category,
+            "description": description,
+            "sort_order": cint(sort_order),
+            "is_active": 1,
+        })
+        doc.insert(ignore_permissions=True)
+        frappe.db.commit()
+        return {"name": doc.name, "sub_category_name": name, "parent_category": parent_category}
+    else:
+        return {"name": name, "sub_category_name": name, "parent_category": parent_category}
 
 
 def _categories():

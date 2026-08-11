@@ -37,37 +37,70 @@
         </div>
       </div>
 
-      <!-- Filters & Search (Visible on Page 3: Lead List) -->
-      <div v-if="currentCategory && currentSubcategory" class="flex items-center gap-3 w-full sm:w-auto">
-        <!-- Search Input -->
-        <div class="relative flex-1 sm:w-64">
-          <FeatherIcon name="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-gray-4" />
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="Search leads..."
-            class="w-full pl-9 pr-3 py-1.5 text-sm bg-white border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-            @input="onSearchInput"
-          />
-        </div>
-
-        <!-- Status Filter -->
-        <select
-          v-model="selectedStatus"
-          class="text-sm bg-white border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 text-ink-gray-8"
-          @change="onStatusChange"
-        >
-          <option value="">All Statuses</option>
-          <option v-for="st in statusOptions" :key="st" :value="st">{{ st }}</option>
-        </select>
-
+      <!-- Action Buttons & Search/Filters -->
+      <div class="flex items-center gap-3 w-full sm:w-auto">
+        <!-- New Category Button (On Page 1) -->
         <Button
-          v-if="searchQuery || selectedStatus"
-          variant="ghost"
+          v-if="!currentCategory"
+          variant="solid"
           size="sm"
-          label="Clear"
-          @click="clearFilters"
+          iconLeft="plus"
+          label="+ New Category"
+          @click="showNewCategoryModal = true"
         />
+
+        <!-- New Subcategory Button (On Page 2) -->
+        <Button
+          v-if="currentCategory && !currentSubcategory"
+          variant="solid"
+          size="sm"
+          iconLeft="plus"
+          label="+ New Sub-category"
+          @click="showNewSubcategoryModal = true"
+        />
+
+        <!-- Filters & Search (Visible on Page 3: Lead List) -->
+        <template v-if="currentCategory && currentSubcategory">
+          <!-- Move Selected Leads Button -->
+          <Button
+            v-if="selectedLeads.size > 0"
+            variant="solid"
+            size="sm"
+            iconLeft="folder"
+            :label="`Move (${selectedLeads.size}) Leads`"
+            @click="openMoveModalForSelected"
+          />
+
+          <!-- Search Input -->
+          <div class="relative flex-1 sm:w-64">
+            <FeatherIcon name="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-gray-4" />
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="Search leads..."
+              class="w-full pl-9 pr-3 py-1.5 text-sm bg-white border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+              @input="onSearchInput"
+            />
+          </div>
+
+          <!-- Status Filter -->
+          <select
+            v-model="selectedStatus"
+            class="text-sm bg-white border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 text-ink-gray-8"
+            @change="onStatusChange"
+          >
+            <option value="">All Statuses</option>
+            <option v-for="st in statusOptions" :key="st" :value="st">{{ st }}</option>
+          </select>
+
+          <Button
+            v-if="searchQuery || selectedStatus"
+            variant="ghost"
+            size="sm"
+            label="Clear"
+            @click="clearFilters"
+          />
+        </template>
       </div>
     </div>
 
@@ -82,7 +115,7 @@
         <EmptyState
           v-else-if="categories.length === 0"
           title="No Categories Found"
-          description="No lead categories are currently available."
+          description="No lead categories are currently available. Click + New Category above to create one."
           icon="folder"
         />
         <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -119,7 +152,7 @@
         <EmptyState
           v-else-if="subcategories.length === 0"
           title="No Subcategories Found"
-          description="There are no subcategories under this category."
+          description="There are no subcategories under this category. Click + New Sub-category above to create one."
           icon="layers"
         />
         <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -176,6 +209,7 @@
                 <th scope="col" class="px-4 py-3 text-left">Status</th>
                 <th scope="col" class="px-4 py-3 text-left">Owner</th>
                 <th scope="col" class="px-4 py-3 text-right">Modified</th>
+                <th scope="col" class="px-4 py-3 text-right w-24">Actions</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 bg-white text-sm">
@@ -243,6 +277,15 @@
                     {{ timeAgo(lead.modified) }}
                   </Tooltip>
                 </td>
+                <td class="px-4 py-3 text-right" @click.stop>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    icon="folder"
+                    label="Move"
+                    @click="openMoveModalForSingle(lead)"
+                  />
+                </td>
               </tr>
             </tbody>
           </table>
@@ -262,12 +305,150 @@
         </div>
       </template>
     </div>
+
+    <!-- CREATE CATEGORY MODAL -->
+    <Dialog v-model="showNewCategoryModal" :options="{ title: 'Create New Category', size: 'md' }">
+      <template #body-content>
+        <div class="space-y-4 p-4">
+          <div>
+            <label class="block text-xs font-medium text-ink-gray-7 mb-1">Category Name *</label>
+            <input
+              v-model="newCategoryName"
+              type="text"
+              placeholder="e.g. Thailand"
+              class="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-ink-gray-7 mb-1">Description (Optional)</label>
+            <textarea
+              v-model="newCategoryDescription"
+              placeholder="Category description..."
+              rows="3"
+              class="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            ></textarea>
+          </div>
+        </div>
+      </template>
+      <template #actions>
+        <div class="flex justify-end gap-2 px-4 pb-4">
+          <Button variant="subtle" label="Cancel" @click="showNewCategoryModal = false" />
+          <Button
+            variant="solid"
+            label="Create Category"
+            :loading="submittingCategory"
+            @click="handleCreateCategory"
+          />
+        </div>
+      </template>
+    </Dialog>
+
+    <!-- CREATE SUBCATEGORY MODAL -->
+    <Dialog v-model="showNewSubcategoryModal" :options="{ title: 'Create New Sub-category', size: 'md' }">
+      <template #body-content>
+        <div class="space-y-4 p-4">
+          <div>
+            <label class="block text-xs font-medium text-ink-gray-7 mb-1">Parent Category *</label>
+            <select
+              v-model="newSubcategoryParent"
+              class="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-ink-gray-8"
+            >
+              <option v-for="cat in availableCategories" :key="cat.name" :value="cat.name">
+                {{ cat.category_name || cat.name }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-ink-gray-7 mb-1">Sub-category Name *</label>
+            <input
+              v-model="newSubcategoryName"
+              type="text"
+              placeholder="e.g. Hot"
+              class="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-ink-gray-7 mb-1">Description (Optional)</label>
+            <textarea
+              v-model="newSubcategoryDescription"
+              placeholder="Sub-category description..."
+              rows="3"
+              class="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            ></textarea>
+          </div>
+        </div>
+      </template>
+      <template #actions>
+        <div class="flex justify-end gap-2 px-4 pb-4">
+          <Button variant="subtle" label="Cancel" @click="showNewSubcategoryModal = false" />
+          <Button
+            variant="solid"
+            label="Create Sub-category"
+            :loading="submittingSubcategory"
+            @click="handleCreateSubcategory"
+          />
+        </div>
+      </template>
+    </Dialog>
+
+    <!-- MOVE LEADS MODAL -->
+    <Dialog v-model="showMoveModal" :options="{ title: `Move (${targetLeadNames.length}) Lead(s) to Category`, size: 'md' }">
+      <template #body-content>
+        <div class="space-y-4 p-4">
+          <div>
+            <label class="block text-xs font-medium text-ink-gray-7 mb-1">Target Category *</label>
+            <select
+              v-model="targetCategory"
+              class="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-ink-gray-8"
+              @change="onTargetCategoryChange"
+            >
+              <option value="">Select Category</option>
+              <option v-for="cat in availableCategories" :key="cat.name" :value="cat.name">
+                {{ cat.category_name || cat.name }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-ink-gray-7 mb-1">Target Sub-category</label>
+            <select
+              v-model="targetSubcategory"
+              class="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-ink-gray-8"
+            >
+              <option value="Unspecified">Unspecified / No Subcategory</option>
+              <option v-for="sub in targetSubcategoriesList" :key="sub" :value="sub">
+                {{ sub }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-ink-gray-7 mb-1">Reason (Optional)</label>
+            <input
+              v-model="moveReason"
+              type="text"
+              placeholder="e.g. Manually moved to Hot lead queue"
+              class="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+      </template>
+      <template #actions>
+        <div class="flex justify-end gap-2 px-4 pb-4">
+          <Button variant="subtle" label="Cancel" @click="showMoveModal = false" />
+          <Button
+            variant="solid"
+            label="Move Lead(s)"
+            :loading="submittingMove"
+            @click="handleMoveLeads"
+          />
+        </div>
+      </template>
+    </Dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { call, Avatar, Badge, Tooltip, FeatherIcon, Spinner, Button } from 'frappe-ui'
+import { call, Avatar, Badge, Tooltip, FeatherIcon, Spinner, Button, Dialog } from 'frappe-ui'
 import { useRoute, useRouter } from 'vue-router'
 import { usersStore } from '@/stores/users'
 import { statusesStore } from '@/stores/statuses'
@@ -316,6 +497,27 @@ const isAllSelected = computed(() => {
   return leadsData.value.every(l => selectedLeads.value.has(l.name))
 })
 
+// Modals State
+const showNewCategoryModal = ref(false)
+const newCategoryName = ref('')
+const newCategoryDescription = ref('')
+const submittingCategory = ref(false)
+
+const showNewSubcategoryModal = ref(false)
+const newSubcategoryParent = ref('')
+const newSubcategoryName = ref('')
+const newSubcategoryDescription = ref('')
+const submittingSubcategory = ref(false)
+
+const showMoveModal = ref(false)
+const targetLeadNames = ref([])
+const targetCategory = ref('')
+const targetSubcategory = ref('Unspecified')
+const moveReason = ref('')
+const targetSubcategoriesList = ref([])
+const submittingMove = ref(false)
+const availableCategories = ref([])
+
 watch(() => [route.query.category, route.query.subcategory], ([cat, sub]) => {
   if (!cat) {
     fetchCategories()
@@ -334,6 +536,9 @@ async function fetchCategories() {
       parent_level: 'Categories'
     })
     categories.value = data || []
+
+    const catList = await call('visa_crm.api.lead_management.subcategories', {})
+    availableCategories.value = catList.categories || []
   } catch (e) {
     console.error("Error fetching categories:", e)
   } finally {
@@ -488,6 +693,114 @@ function toggleSelectAll() {
     selectedLeads.value.clear()
   } else {
     leadsData.value.forEach(l => selectedLeads.value.add(l.name))
+  }
+}
+
+// Category Creation
+async function handleCreateCategory() {
+  if (!newCategoryName.value.trim()) return
+  submittingCategory.value = true
+  try {
+    await call('visa_crm.api.lead_management.create_category', {
+      category_name: newCategoryName.value.trim(),
+      description: newCategoryDescription.value.trim()
+    })
+    showNewCategoryModal.value = false
+    newCategoryName.value = ''
+    newCategoryDescription.value = ''
+    fetchCategories()
+  } catch (e) {
+    console.error("Error creating category:", e)
+  } finally {
+    submittingCategory.value = false
+  }
+}
+
+// Subcategory Creation
+async function handleCreateSubcategory() {
+  const parent = newSubcategoryParent.value || currentCategory.value
+  if (!parent || !newSubcategoryName.value.trim()) return
+  submittingSubcategory.value = true
+  try {
+    await call('visa_crm.api.lead_management.create_sub_category', {
+      sub_category_name: newSubcategoryName.value.trim(),
+      parent_category: parent,
+      description: newSubcategoryDescription.value.trim()
+    })
+    showNewSubcategoryModal.value = false
+    newSubcategoryName.value = ''
+    newSubcategoryDescription.value = ''
+    if (currentCategory.value) {
+      fetchSubcategories(currentCategory.value)
+    }
+  } catch (e) {
+    console.error("Error creating subcategory:", e)
+  } finally {
+    submittingSubcategory.value = false
+  }
+}
+
+// Move Leads
+async function openMoveModalForSingle(lead) {
+  targetLeadNames.value = [lead.name]
+  targetCategory.value = currentCategory.value !== 'Uncategorized' ? currentCategory.value : ''
+  targetSubcategory.value = 'Unspecified'
+  moveReason.value = ''
+  await loadAvailableCategoriesAndSubcategories(targetCategory.value)
+  showMoveModal.value = true
+}
+
+async function openMoveModalForSelected() {
+  targetLeadNames.value = Array.from(selectedLeads.value)
+  targetCategory.value = currentCategory.value !== 'Uncategorized' ? currentCategory.value : ''
+  targetSubcategory.value = 'Unspecified'
+  moveReason.value = ''
+  await loadAvailableCategoriesAndSubcategories(targetCategory.value)
+  showMoveModal.value = true
+}
+
+async function loadAvailableCategoriesAndSubcategories(cat) {
+  try {
+    const res = await call('visa_crm.api.lead_management.subcategories', { category: cat || null })
+    availableCategories.value = res.categories || []
+    targetSubcategoriesList.value = res.subcategories || []
+    if (cat && !newSubcategoryParent.value) {
+      newSubcategoryParent.value = cat
+    }
+  } catch (e) {
+    console.error("Error fetching subcategories for move modal:", e)
+  }
+}
+
+async function onTargetCategoryChange() {
+  if (targetCategory.value) {
+    await loadAvailableCategoriesAndSubcategories(targetCategory.value)
+  } else {
+    targetSubcategoriesList.value = []
+  }
+}
+
+async function handleMoveLeads() {
+  if (!targetCategory.value || targetLeadNames.value.length === 0) return
+  submittingMove.value = true
+  try {
+    await call('visa_crm.api.lead_management.bulk_classify', {
+      leads: targetLeadNames.value,
+      category: targetCategory.value,
+      group: targetSubcategory.value !== 'Unspecified' ? targetSubcategory.value : null,
+      reason: moveReason.value.trim() || 'Moved via CRM Tree View'
+    })
+    showMoveModal.value = false
+    selectedLeads.value.clear()
+    targetLeadNames.value = []
+    if (currentCategory.value && currentSubcategory.value) {
+      currentPage.value = 1
+      fetchLeads(currentCategory.value, currentSubcategory.value, 1)
+    }
+  } catch (e) {
+    console.error("Error moving leads:", e)
+  } finally {
+    submittingMove.value = false
   }
 }
 </script>

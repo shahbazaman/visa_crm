@@ -1,0 +1,30 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "autoname": "autoincrement",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["sub_category_name", "parent_category", "is_active", "sort_order", "description"],
+ "fields": [
+  {"fieldname": "sub_category_name", "fieldtype": "Data", "label": "Sub-category Name", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "parent_category", "fieldtype": "Link", "label": "Parent Category", "options": "Lead Category", "reqd": 1, "in_list_view": 1},
+  {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "label": "Active", "in_list_view": 1},
+  {"default": "100", "fieldname": "sort_order", "fieldtype": "Int", "label": "Sort Order"},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"}
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "module": "Visa CRM",
+ "name": "Lead Subcategory",
+ "naming_rule": "Autoincrement",
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1},
+  {"role": "Sales Manager", "read": 1, "write": 1, "create": 1, "report": 1},
+  {"role": "Sales User", "read": 1},
+  {"role": "Counselor", "read": 1},
+  {"role": "Visa Processing", "read": 1}
+ ],
+ "sort_field": "sort_order",
+ "sort_order": "ASC",
+ "track_changes": 1
+}

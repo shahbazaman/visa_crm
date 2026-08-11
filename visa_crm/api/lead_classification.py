@@ -156,13 +156,17 @@ def sync_lead_classification(lead_name, result, overwrite_automatic=False):
 
 
 def apply_manual_classification(lead_name, category, group=None, reason=None):
-    from visa_crm.api.lead_permissions import require_management
+    from visa_crm.api.lead_permissions import accessible_categories, is_management, is_operational
 
-    require_management()
+    if not is_operational():
+        frappe.throw("Visa CRM operational access required", frappe.PermissionError)
+
     if not frappe.db.exists("CRM Lead", lead_name):
         frappe.throw("CRM Lead not found", frappe.DoesNotExistError)
     if not frappe.db.exists("Lead Category", {"name": category, "is_active": 1}):
         frappe.throw("Active Lead Category not found", frappe.ValidationError)
+    if not is_management() and category not in accessible_categories():
+        frappe.throw("Not permitted for this lead category", frappe.PermissionError)
     current = frappe.db.get_value("CRM Lead", lead_name, list(CLASSIFICATION_FIELDS), as_dict=True) or {}
     queue_name = frappe.db.get_value("Lead Intake Queue", {"matched_lead": lead_name}, "name", order_by="creation desc")
     result = {
