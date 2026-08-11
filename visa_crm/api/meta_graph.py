@@ -142,10 +142,26 @@ def check_page_subscription(settings=None):
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 
+def _page_access_token(settings=None):
+    settings = settings or get_meta_settings()
+    token = _access_token(settings)
+    page_id = getattr(settings, "page_id", None) if settings else None
+    if not token or not page_id:
+        return token
+    try:
+        resp = requests.get(f"https://graph.facebook.com/{GRAPH_VERSION}/{page_id}", params={"fields": "access_token", "access_token": token}, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, dict) and data.get("access_token"):
+                return data.get("access_token")
+    except Exception:
+        pass
+    return token
+
 def subscribe_page_leadgen(settings=None):
     settings = settings or get_meta_settings()
     page_id = getattr(settings, "page_id", None) if settings else None
-    token = _access_token(settings)
+    token = _page_access_token(settings) or _access_token(settings)
     if not page_id or not token:
         return {"ok": False, "error": "Missing page_id or access_token in Meta Settings"}
     try:
