@@ -69,18 +69,24 @@ def normalize(queue_name,claim=None):
     queue=frappe.get_doc("Lead Intake Queue",queue_name)
     graph_payload=_successful_graph_payload(queue)
     existing=load_json(getattr(queue,"normalized_payload",None),{})
-    if existing and getattr(queue,"normalized_payload_hash",None) and getattr(queue,"normalization_version",None)==MAPPING_VERSION:
-        return {"normalized":existing,"input_hash":getattr(queue,"graph_payload_hash",None) or _hash(existing),"output_hash":queue.normalized_payload_hash,"reused":True}
+    graph_hash=getattr(queue,"graph_payload_hash",None) or (_hash(graph_payload) if graph_payload else None)
+    has_pii=bool(existing and (existing.get("customer_name") or existing.get("phone") or existing.get("email")))
+    is_valid_reuse=bool(existing and getattr(queue,"normalized_payload_hash",None) and getattr(queue,"normalization_version",None)==MAPPING_VERSION)
+    if is_valid_reuse:
+        if not graph_payload or (has_pii and getattr(queue,"graph_payload_hash",None)==graph_hash):
+            return {"normalized":existing,"input_hash":graph_hash or _hash(existing),"output_hash":queue.normalized_payload_hash,"reused":True}
     if not graph_payload:
         return _rebuild_normalized(queue_name,queue=queue,reason="normalize_stage_recovery")
-    graph_hash=getattr(queue,"graph_payload_hash",None) or _hash(graph_payload)
     context={"queue_name":queue.name,"source_lead_id":queue.source_lead_id,"status":queue.status}
     data=normalize_lead(graph_payload,get_meta_settings(),context)
     return _persist_normalized(queue,data,graph_hash,reason="graph_normalization")
 
 def load_normalized(queue_name):
     data=load_json(frappe.db.get_value("Lead Intake Queue",queue_name,"normalized_payload"),{})
-    return data or _rebuild_normalized(queue_name,reason="consumer_recovery")["normalized"]
+    has_pii=bool(data and (data.get("customer_name") or data.get("phone") or data.get("email")))
+    if data and (has_pii or not _successful_graph_payload(frappe.get_doc("Lead Intake Queue",queue_name))):
+        return data
+    return _rebuild_normalized(queue_name,reason="consumer_recovery")["normalized"]
 
 def _rebuild_normalized(queue_name,queue=None,reason="recovery"):
     queue=queue or frappe.get_doc("Lead Intake Queue",queue_name)
