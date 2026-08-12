@@ -413,10 +413,14 @@
             <select
               v-model="targetSubcategory"
               class="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-ink-gray-8"
+              @change="onTargetSubcategoryChange"
             >
               <option value="Unspecified">Unspecified / No Subcategory</option>
               <option v-for="sub in targetSubcategoriesList" :key="sub" :value="sub">
                 {{ sub }}
+              </option>
+              <option value="__ADD_NEW_SUBCATEGORY__" class="font-medium text-blue-600">
+                + Add New Sub-category
               </option>
             </select>
           </div>
@@ -439,6 +443,57 @@
             label="Move Lead(s)"
             :loading="submittingMove"
             @click="handleMoveLeads"
+          />
+        </div>
+      </template>
+    </Dialog>
+
+    <!-- INLINE CREATE SUBCATEGORY MODAL (From Move Leads Modal) -->
+    <Dialog v-model="showInlineSubcategoryModal" :options="{ title: 'Create New Sub-category', size: 'md' }">
+      <template #body-content>
+        <div class="space-y-4 p-4">
+          <div>
+            <label class="block text-xs font-medium text-ink-gray-7 mb-1">Parent Category</label>
+            <input
+              :value="targetCategory"
+              type="text"
+              disabled
+              readonly
+              class="w-full px-3 py-2 border border-gray-200 rounded-md text-sm bg-gray-100 text-ink-gray-6 focus:outline-none cursor-not-allowed"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-ink-gray-7 mb-1">Sub-category Name *</label>
+            <input
+              v-model="inlineSubcategoryName"
+              type="text"
+              placeholder="e.g. Hot Prospects"
+              class="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              @keyup.enter="handleInlineCreateSubcategory"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-ink-gray-7 mb-1">Description (Optional)</label>
+            <textarea
+              v-model="inlineSubcategoryDescription"
+              placeholder="Sub-category description..."
+              rows="3"
+              class="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            ></textarea>
+          </div>
+          <div v-if="inlineSubcategoryError" class="text-xs text-red-600 font-medium">
+            {{ inlineSubcategoryError }}
+          </div>
+        </div>
+      </template>
+      <template #actions>
+        <div class="flex justify-end gap-2 px-4 pb-4">
+          <Button variant="subtle" label="Cancel" @click="cancelInlineCreateSubcategory" />
+          <Button
+            variant="solid"
+            label="Create Sub-category"
+            :loading="submittingInlineSubcategory"
+            @click="handleInlineCreateSubcategory"
           />
         </div>
       </template>
@@ -513,10 +568,17 @@ const showMoveModal = ref(false)
 const targetLeadNames = ref([])
 const targetCategory = ref('')
 const targetSubcategory = ref('Unspecified')
+const previousTargetSubcategory = ref('Unspecified')
 const moveReason = ref('')
 const targetSubcategoriesList = ref([])
 const submittingMove = ref(false)
 const availableCategories = ref([])
+
+const showInlineSubcategoryModal = ref(false)
+const inlineSubcategoryName = ref('')
+const inlineSubcategoryDescription = ref('')
+const inlineSubcategoryError = ref('')
+const submittingInlineSubcategory = ref(false)
 
 watch(() => [route.query.category, route.query.subcategory], ([cat, sub]) => {
   if (!cat) {
@@ -773,6 +835,8 @@ async function loadAvailableCategoriesAndSubcategories(cat) {
 }
 
 async function onTargetCategoryChange() {
+  previousTargetSubcategory.value = 'Unspecified'
+  targetSubcategory.value = 'Unspecified'
   if (targetCategory.value) {
     await loadAvailableCategoriesAndSubcategories(targetCategory.value)
   } else {
@@ -780,14 +844,94 @@ async function onTargetCategoryChange() {
   }
 }
 
+function onTargetSubcategoryChange() {
+  if (targetSubcategory.value === '__ADD_NEW_SUBCATEGORY__') {
+    if (!targetCategory.value) {
+      targetSubcategory.value = 'Unspecified'
+      return
+    }
+    inlineSubcategoryName.value = ''
+    inlineSubcategoryDescription.value = ''
+    inlineSubcategoryError.value = ''
+    showInlineSubcategoryModal.value = true
+  } else {
+    previousTargetSubcategory.value = targetSubcategory.value
+  }
+}
+
+function cancelInlineCreateSubcategory() {
+  showInlineSubcategoryModal.value = false
+  inlineSubcategoryError.value = ''
+  targetSubcategory.value = previousTargetSubcategory.value || 'Unspecified'
+}
+
+async function handleInlineCreateSubcategory() {
+  const name = inlineSubcategoryName.value.trim()
+  inlineSubcategoryError.value = ''
+
+  if (!name) {
+    inlineSubcategoryError.value = 'Sub-category name is required.'
+    return
+  }
+
+  if (!targetCategory.value) {
+    inlineSubcategoryError.value = 'Parent Target Category is required.'
+    return
+  }
+
+  submittingInlineSubcategory.value = true
+  try {
+    await call('visa_crm.api.lead_management.create_sub_category', {
+      sub_category_name: name,
+      parent_category: targetCategory.value,
+      description: inlineSubcategoryDescription.value.trim()
+    })
+
+    // Refresh subcategory list for targetCategory
+    await loadAvailableCategoriesAndSubcategories(targetCategory.value)
+
+    // Auto-select newly created subcategory
+    targetSubcategory.value = name
+    previousTargetSubcategory.value = name
+    showInlineSubcategoryModal.value = false
+
+    // Refresh subcategories list if currently viewing targetCategory
+    if (currentCategory.value === targetCategory.value) {
+      fetchSubcategories(currentCategory.value)
+    }
+  } catch (e) {
+    const msg = (e && (e.message || (e.messages && e.messages[0]))) || String(e || '')
+    if (msg.toLowerCase().includes('already exists')) {
+      inlineSubcategoryError.value = `A sub-category named "${name}" already exists under "${targetCategory.value}".`
+      await loadAvailableCategoriesAndSubcategories(targetCategory.value)
+      if (targetSubcategoriesList.value.includes(name)) {
+        targetSubcategory.value = name
+        previousTargetSubcategory.value = name
+        showInlineSubcategoryModal.value = false
+      }
+    } else {
+      inlineSubcategoryError.value = msg || 'Failed to create sub-category.'
+    }
+  } finally {
+    submittingInlineSubcategory.value = false
+  }
+}
+
 async function handleMoveLeads() {
   if (!targetCategory.value || targetLeadNames.value.length === 0) return
+
+  // Guard against submitting special option value
+  let groupVal = targetSubcategory.value
+  if (groupVal === '__ADD_NEW_SUBCATEGORY__' || groupVal === 'Unspecified') {
+    groupVal = null
+  }
+
   submittingMove.value = true
   try {
     await call('visa_crm.api.lead_management.bulk_classify', {
       leads: targetLeadNames.value,
       category: targetCategory.value,
-      group: targetSubcategory.value !== 'Unspecified' ? targetSubcategory.value : null,
+      group: groupVal,
       reason: moveReason.value.trim() || 'Moved via CRM Tree View'
     })
     showMoveModal.value = false
