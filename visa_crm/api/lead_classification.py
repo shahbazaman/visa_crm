@@ -88,6 +88,7 @@ def active_rules():
 def default_rules():
     return [
         frappe._dict(name="whatsapp-reservation", priority=10, source_channel="WhatsApp", match_field="Source", match_type="Equals", match_value="WhatsApp", category="Reservation", reason="WhatsApp inquiry"),
+        frappe._dict(name="email-holidays", priority=50, source_channel="Email", match_field="Source", match_type="Equals", match_value="Email", category="Holidays", reason="Email enquiry — classified as Holidays"),
         frappe._dict(name="meta-global-visa", priority=100, source_channel="Meta", match_field="Campaign Name", match_type="Ends With", match_value="visa", category="Global Visa", reason="Meta campaign ends with visa"),
         frappe._dict(name="meta-holidays", priority=110, source_channel="Meta", match_field="Campaign Name", match_type="Ends With", match_value="package", category="Holidays", reason="Meta campaign ends with package"),
     ]
@@ -100,6 +101,11 @@ def detect_source(payload, lead_source=None):
         return "WhatsApp"
     if "google" in normalized and "ad" in normalized:
         return "Google Ads"
+    # Email source detection
+    if lead_source == "Email" or "email" == normalize_text(lead_source or "") or any(
+        normalize_text(value or "") == "email" for value in candidates if value
+    ):
+        return "Email"
     if any((payload.get(key) for key in ("source_lead_id", "facebook_lead_id", "form_id", "facebook_form_id", "campaign_id", "meta_campaign_id"))) or "meta" in normalized or "facebook" in normalized:
         return "Meta"
     return "Manual" if normalized else "Unknown"

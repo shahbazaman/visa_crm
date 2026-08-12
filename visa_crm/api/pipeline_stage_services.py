@@ -10,13 +10,14 @@ from visa_crm.api.meta_mapping import MAPPING_VERSION,normalize_lead
 from visa_crm.api.meta_utils import get_meta_settings,has_field,load_json,log_info,safe_json_dumps,set_values
 from visa_crm.api.customer360 import resolve_customer,resolve_lead
 from visa_crm.api.followup import create_meta_followup
-from visa_crm.api.lead_assignment import assign_lead
+from visa_crm.api.lead_assignment import assign_lead, NotApplicable
 from visa_crm.api.visa_application import create_for_lead
 from visa_crm.api.workflow import create_deal_if_supported,mark_lead_stage,qualify_lead
 from visa_crm.api.execution_history import record
 from visa_crm.api.lead_classification import classify_queue,sync_lead_classification
 
 class NoEligibleCounselor(RuntimeError):
+    """Raised when a supported department has no eligible counselors (retryable)."""
     pass
 
 def graph_download(queue_name,claim=None):
@@ -229,9 +230,16 @@ def follow_up(queue_name,claim=None):
 
 def counselor_assignment(queue_name,claim=None):
     queue=_business_context(queue_name)
-    employee=assign_lead(queue.lead,queue.queue,context=_context(queue_name,queue.data),communication_event=queue.queue.get("communication_event"))
+    try:
+        employee=assign_lead(queue.lead,queue.queue,context=_context(queue_name,queue.data),communication_event=queue.queue.get("communication_event"))
+    except NotApplicable as exc:
+        # Unsupported department: mark stage SKIPPED, do NOT fail pipeline
+        record(queue=queue_name,stage="COUNSELOR_ASSIGNMENT",execution_type="Stage",result="SKIPPED",details={"reason":str(exc)})
+        if has_field("CRM Lead","assignment_status"):
+            frappe.db.set_value("CRM Lead",queue.lead,"assignment_status","Not Applicable",update_modified=False)
+        return {"employee":None,"assignment_type":"NOT_APPLICABLE","result_doctype":None,"result_name":None,"output_hash":_hash({"not_applicable":str(exc)})}
     if not employee:
-            raise NoEligibleCounselor("No eligible counselor is configured for Meta lead assignment")
+        raise NoEligibleCounselor("No eligible counselor found for the department")
     set_values("Lead Intake Queue",queue_name,{"assigned_employee":employee})
     _set_assignment_status(queue.lead,"Assigned")
     if has_field("CRM Lead","assigned_counselor"):
@@ -239,7 +247,7 @@ def counselor_assignment(queue_name,claim=None):
     event=queue.queue.get("communication_event")
     if event and frappe.db.exists("Communication Event",event) and has_field("Communication Event","employee") and not frappe.db.get_value("Communication Event",event,"employee"):
         frappe.db.set_value("Communication Event",event,"employee",employee,update_modified=False)
-    return {"employee":employee,"result_doctype":"Employee","result_name":employee,"output_hash":_hash({"employee":employee})}
+    return {"employee":employee,"assignment_type":"Automatic Round Robin","result_doctype":"Employee","result_name":employee,"output_hash":_hash({"employee":employee})}
 
 def assignment_failure(queue_name,claim,exc,traceback):
     lead=frappe.db.get_value("Lead Intake Queue",queue_name,"matched_lead")

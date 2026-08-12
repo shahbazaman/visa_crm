@@ -1,0 +1,100 @@
+{
+ "actions": [],
+ "autoname": "field:department",
+ "creation": "2026-08-12 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "department",
+  "current_index",
+  "last_assigned_employee",
+  "last_assignment_at",
+  "eligible_counselors_json",
+  "last_refreshed_at",
+  "lock_token",
+  "lock_expires_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Department",
+   "options": "Department",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "current_index",
+   "fieldtype": "Int",
+   "label": "Current Index",
+   "default": "0"
+  },
+  {
+   "fieldname": "last_assigned_employee",
+   "fieldtype": "Link",
+   "label": "Last Assigned Employee",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "last_assignment_at",
+   "fieldtype": "Datetime",
+   "label": "Last Assignment At"
+  },
+  {
+   "fieldname": "eligible_counselors_json",
+   "fieldtype": "Long Text",
+   "label": "Eligible Counselors (JSON cache)"
+  },
+  {
+   "fieldname": "last_refreshed_at",
+   "fieldtype": "Datetime",
+   "label": "Last Refreshed At"
+  },
+  {
+   "fieldname": "lock_token",
+   "fieldtype": "Data",
+   "label": "Lock Token"
+  },
+  {
+   "fieldname": "lock_expires_at",
+   "fieldtype": "Datetime",
+   "label": "Lock Expires At"
+  }
+ ],
+ "links": [],
+ "modified": "2026-08-12 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Visa CRM",
+ "name": "Department Round Robin State",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 0,
+   "role": "System Manager",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 0,
+   "role": "CRM Manager",
+   "share": 0,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

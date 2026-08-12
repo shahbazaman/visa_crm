@@ -1153,13 +1153,16 @@ def enqueue_processing(doc, method=None):
     if not doc.processing_status:
         set_call_status(doc.name, "Pending")
 
-    frappe.enqueue(
-        "visa_crm.api.gemini_service.process_call_intelligence",
-        queue="long",
-        timeout=1800,
-        enqueue_after_commit=True,
-        docname=doc.name,
-    )
+    try:
+        frappe.enqueue(
+            "visa_crm.api.gemini_service.process_call_intelligence",
+            queue="long",
+            timeout=1800,
+            enqueue_after_commit=True,
+            docname=doc.name,
+        )
+    except Exception as exc:
+        frappe.logger("visa_crm.gemini").warning(f"Could not enqueue call processing for {doc.name}: {exc}")
 
 
 def auto_process(doc, method=None):

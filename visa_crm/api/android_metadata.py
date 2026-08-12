@@ -9,7 +9,7 @@ from visa_crm.api.meta_utils import has_field,safe_json_dumps
 
 AUDIO_EXTENSIONS=(".m4a",".mp3",".wav",".aac",".mpeg",".ogg",".webm",".mp4")
 METADATA_SUFFIX="_metadata.json"
-RECORDING_PREFIX=re.compile(r"^(CALL-\d{8}-\d{6}-[A-Za-z0-9]+)",re.I)
+RECORDING_PREFIX=re.compile(r"^(CALL-\d{8}-[A-Za-z0-9]+-[A-Za-z0-9]+)",re.I)
 VALID_DIRECTIONS={"INCOMING":"Inbound","OUTGOING":"Outbound","INBOUND":"Inbound","OUTBOUND":"Outbound"}
 AUTHORITATIVE_FIELDS=("recording_id","call_uuid","employee_id","employee_name","employee_phone","employee_email","customer_phone","call_direction","start_time","end_time","duration_seconds","timezone","device_model","manufacturer","android_version","device_id","sim_slot","call_source","app_version","audio_format","sha256","md5","file_size","mime_type","upload_timestamp","upload_retry_count","upload_status","is_auto_uploaded")
 

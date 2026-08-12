@@ -19,6 +19,9 @@ doc_events = {
         "before_insert": ["visa_crm.api.communication_event.auto_link"],
         "after_insert": ["visa_crm.api.communication_center.after_communication_insert"]
     },
+    "Communication": {
+        "after_insert": ["visa_crm.api.email_intake.on_communication_insert"]
+    },
     "Call Intelligence": {
         "before_insert": ["visa_crm.api.gemini_service.prevent_duplicate_call_intelligence"],
         "after_insert": ["visa_crm.api.gemini_service.enqueue_processing"],
@@ -73,7 +76,8 @@ scheduler_events = {
             "visa_crm.api.gemini_service.process_unprocessed_audio_files",
             "visa_crm.api.android_metadata.process_pending_metadata_pairs",
             "visa_crm.api.gemini_service.retry_failed_calls",
-            "visa_crm.api.intake_processor.process_pending"
+            "visa_crm.api.intake_processor.process_pending",
+            "visa_crm.api.email_intake.process_pending_email_communications"
         ],
         "0 * * * *": ["visa_crm.api.crm_lifecycle.process_overdue_followups"]
     },
