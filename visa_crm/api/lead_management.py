@@ -209,6 +209,7 @@ def create_sub_category(sub_category_name, parent_category, description=None, so
     _require_operational()
     if not parent_category or not frappe.db.exists("Lead Category", parent_category):
         frappe.throw("Valid Parent Lead Category is required", frappe.ValidationError)
+    parent_category = frappe.db.get_value("Lead Category", parent_category, "name") or parent_category
     name = str(sub_category_name).strip()
     if not name:
         frappe.throw("Sub-category Name is required", frappe.ValidationError)
