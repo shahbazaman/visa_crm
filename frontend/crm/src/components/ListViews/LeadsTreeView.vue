@@ -206,6 +206,7 @@
                 </th>
                 <th scope="col" class="px-4 py-3 text-left">Lead Name</th>
                 <th scope="col" class="px-4 py-3 text-left">Customer / Contact</th>
+                <th scope="col" class="px-4 py-3 text-left">Campaign Name</th>
                 <th scope="col" class="px-4 py-3 text-left">Status</th>
                 <th scope="col" class="px-4 py-3 text-left">Owner</th>
                 <th scope="col" class="px-4 py-3 text-right">Modified</th>
@@ -250,6 +251,11 @@
                   </div>
                   <div class="text-xs text-ink-gray-5 truncate max-w-xs">
                     {{ lead.email_id || lead.mobile_no || 'No contact info' }}
+                  </div>
+                </td>
+                <td class="px-4 py-3">
+                  <div class="text-ink-gray-8 font-medium truncate max-w-xs" :title="lead.meta_campaign_name || ''">
+                    {{ lead.meta_campaign_name || '—' }}
                   </div>
                 </td>
                 <td class="px-4 py-3">

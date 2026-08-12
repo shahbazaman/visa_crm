@@ -141,7 +141,7 @@ def _get_leads(category, subcategory, filters):
     fields = [
         "name", "lead_name", "status", "lead_owner", "creation", "modified",
         "image", "first_name", "organization", "website", "sla_status",
-        "response_by", "first_responded_on", "mobile_no", "email",
+        "response_by", "first_responded_on", "mobile_no", "email", "meta_campaign_name",
         "first_response_time", "_assign", "_liked_by",
         "_email_count", "_note_count", "_task_count", "_comment_count"
     ]

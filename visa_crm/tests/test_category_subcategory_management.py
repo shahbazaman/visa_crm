@@ -121,3 +121,27 @@ class TestCategorySubcategoryManagement(FrappeTestCase):
             customer = frappe.get_doc("Customer", "Meta Lead 1272720881498434")
             self.assertEqual(customer.customer_name, "Thanha fathima")
             self.assertEqual(customer.mobile_no, "8921868959")
+
+    def test_08_sidepanel_and_table_campaign_name(self):
+        from frappe.utils import cint
+        meta = frappe.get_meta("CRM Lead")
+        df = meta.get_field("meta_campaign_name")
+        self.assertIsNotNone(df)
+        self.assertEqual(df.label, "Campaign Name")
+        self.assertEqual(cint(df.read_only), 1)
+
+        from crm.fcrm.doctype.crm_fields_layout.crm_fields_layout import get_sidepanel_sections
+        sections = get_sidepanel_sections("CRM Lead")
+        details = next((s for s in sections if s.get("name") in ("details_section", "Details") or s.get("label") == "Details"), None)
+        self.assertIsNotNone(details)
+        cols = details.get("columns") or []
+        fields = [f.get("fieldname") if isinstance(f, dict) else str(f) for c in cols for f in (c.get("fields") or [])]
+        self.assertIn("meta_campaign_name", fields)
+
+        from visa_crm.api.lead_tree import get_lead_tree_nodes
+        nodes = get_lead_tree_nodes(parent_level="Leads", category="All", subcategory="All", filters='{"page":1, "page_length":20}')
+        leads_list = nodes.get("data") or []
+        if frappe.db.exists("CRM Lead", "CRM-LEAD-2026-00129"):
+            prod_lead = next((l for l in leads_list if l.get("name") == "CRM-LEAD-2026-00129"), None)
+            if prod_lead:
+                self.assertEqual(prod_lead.get("meta_campaign_name"), "Thailand rizwann")
