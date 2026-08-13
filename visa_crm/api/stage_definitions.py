@@ -12,7 +12,7 @@ STAGES=(
     {"stage":"VISA_APPLICATION","sequence":60,"requirement_class":"Required Downstream","max_attempts":5,"dependencies":("CRM_LEAD",)},
     {"stage":"COMMUNICATION_EVENT","sequence":70,"requirement_class":"Required Downstream","max_attempts":5,"dependencies":("CRM_LEAD",)},
     {"stage":"FOLLOW_UP","sequence":80,"requirement_class":"Required Downstream","max_attempts":5,"dependencies":("CRM_LEAD",)},
-    {"stage":"COUNSELOR_ASSIGNMENT","sequence":90,"requirement_class":"Optional","max_attempts":0,"dependencies":("CRM_LEAD",)},
+    {"stage":"COUNSELOR_ASSIGNMENT","sequence":90,"requirement_class":"Optional","max_attempts":10,"dependencies":("CRM_LEAD",)},
     {"stage":"AI_DISPATCH","sequence":100,"requirement_class":"Optional","max_attempts":0,"dependencies":("COMMUNICATION_EVENT",)},
     {"stage":"AI_GEMINI","sequence":110,"requirement_class":"Optional","max_attempts":0,"parent_stage":"AI_DISPATCH","dependencies":("AI_DISPATCH",)},
     {"stage":"AI_TRANSLATION","sequence":120,"requirement_class":"Optional","max_attempts":0,"parent_stage":"AI_DISPATCH","dependencies":("AI_GEMINI",)},

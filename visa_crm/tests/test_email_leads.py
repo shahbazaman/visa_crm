@@ -23,6 +23,9 @@ from visa_crm.api.lead_classification import detect_source, classify_payload
 
 class TestEmailLeads(unittest.TestCase):
 
+    def setUp(self):
+        frappe.set_user("Administrator")
+
     def _make_communication(self, message_id, sender="Test User <test@example.com>",
                              subject="Visa Enquiry for Thailand", body=None, in_reply_to=None,
                              sent_or_received="Received"):
@@ -74,7 +77,7 @@ class TestEmailLeads(unittest.TestCase):
                 lead_source = frappe.db.get_value("Lead Intake Queue", queue_name, "lead_source")
                 self.assertEqual(lead_source, "Email", "Lead source should be Email")
         finally:
-            frappe.delete_doc("Communication", comm.name, ignore_permissions=True, force=True)
+            frappe.db.delete("Communication", {"name": comm.name})
             frappe.db.commit()
 
     # ------------------------------------------------------------------
@@ -105,7 +108,7 @@ class TestEmailLeads(unittest.TestCase):
                 self.assertEqual(matching, 1, "Should have exactly 1 queue for the email")
 
         finally:
-            frappe.delete_doc("Communication", comm1.name, ignore_permissions=True, force=True)
+            frappe.db.delete("Communication", {"name": comm1.name})
             frappe.db.commit()
 
     # ------------------------------------------------------------------
@@ -123,7 +126,7 @@ class TestEmailLeads(unittest.TestCase):
         original_queue = result1.get("queue")
 
         if not original_queue:
-            frappe.delete_doc("Communication", comm_original.name, ignore_permissions=True, force=True)
+            frappe.db.delete("Communication", {"name": comm_original.name})
             self.skipTest("Original email not processable — skipping reply test")
 
         # Now create a reply
@@ -132,7 +135,7 @@ class TestEmailLeads(unittest.TestCase):
             message_id=reply_msg_id,
             subject="Re: Thailand visa enquiry",
             body="Thank you for your response. I have a follow-up question about the documents.",
-            in_reply_to=original_msg_id,
+            in_reply_to=comm_original.name,
         )
 
         try:
@@ -149,8 +152,8 @@ class TestEmailLeads(unittest.TestCase):
                 self.assertIn("ok", result2)
 
         finally:
-            frappe.delete_doc("Communication", comm_original.name, ignore_permissions=True, force=True)
-            frappe.delete_doc("Communication", comm_reply.name, ignore_permissions=True, force=True)
+            frappe.db.delete("Communication", {"name": comm_original.name})
+            frappe.db.delete("Communication", {"name": comm_reply.name})
             frappe.db.commit()
 
     # ------------------------------------------------------------------
@@ -171,7 +174,7 @@ class TestEmailLeads(unittest.TestCase):
             self.assertFalse(result.get("ok"), "Spam email should not create a Lead")
             self.assertIn("enquiry", result.get("reason", "").lower(), "Reason should mention enquiry check")
         finally:
-            frappe.delete_doc("Communication", comm.name, ignore_permissions=True, force=True)
+            frappe.db.delete("Communication", {"name": comm.name})
             frappe.db.commit()
 
     # ------------------------------------------------------------------
@@ -229,5 +232,5 @@ class TestEmailLeads(unittest.TestCase):
             result = email_intake.process_communication(comm.name)
             self.assertFalse(result.get("ok"), "Outgoing email should not be processed")
         finally:
-            frappe.delete_doc("Communication", comm.name, ignore_permissions=True, force=True)
+            frappe.db.delete("Communication", {"name": comm.name})
             frappe.db.commit()

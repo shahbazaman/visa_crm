@@ -35,8 +35,19 @@ from visa_crm.api.meta_utils import (
 # Public constants
 # ---------------------------------------------------------------------------
 
-#: Departments that receive automatic round-robin counselor assignment in V1.
-SUPPORTED_DEPARTMENTS = {"Holidays", "Global Visa"}
+#: Department name prefixes that receive automatic round-robin assignment in V1.
+#: Any Frappe department whose name starts with one of these prefixes is eligible.
+#: This handles company-suffix variants like "Holidays - HNC" or "Global Visa - Client".
+SUPPORTED_DEPARTMENT_PREFIXES = ("Holidays", "Global Visa")
+
+
+def is_supported_department(department):
+    """Return True if department is supported for automatic round-robin assignment."""
+    if not department:
+        return False
+    dept_lower = department.strip().lower()
+    return any(dept_lower == p.lower() or dept_lower.startswith(p.lower() + " ")
+               for p in SUPPORTED_DEPARTMENT_PREFIXES)
 
 #: How long (seconds) to hold the round-robin lock before expiry.
 LOCK_TTL_SECONDS = 30
@@ -74,7 +85,7 @@ def assign_lead(lead, queue_doc=None, strategy=None, context=None, communication
     responsible_department = _get_responsible_department(queue_doc, lead)
 
     # 3. Route by department support
-    if responsible_department and responsible_department not in SUPPORTED_DEPARTMENTS:
+    if responsible_department and not is_supported_department(responsible_department):
         # Unsupported department — raise sentinel so caller marks NOT_APPLICABLE
         raise NotApplicable(
             f"Automatic counselor assignment is not configured for department: {responsible_department}"

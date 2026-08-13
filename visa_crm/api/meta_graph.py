@@ -2,26 +2,67 @@ import requests
 import frappe
 from visa_crm.api.meta_utils import get_meta_settings, log_info, meta_debug_log, safe_json_dumps
 
-GRAPH_VERSION = "v20.0"
+GRAPH_VERSION = "v21.0"
 LEAD_FIELDS = "id,created_time,field_data,form_id,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name"
 
 class MetaGraphError(Exception):
+    permanent = False
     def __init__(self, message, request=None, response=None, status_code=None):
         super().__init__(message)
         self.request = request or {}
         self.response = response
         self.status_code = status_code
 
+class PermanentGraphError(MetaGraphError):
+    """Non-retryable Graph API error (e.g., object does not exist, invalid ID, revoked token)."""
+    permanent = True
+
+# Prefixes that indicate a synthetic/internal ID — never a real Meta leadgen ID.
+# This follows the same convention as intake_processor._ignored_test_event().
+# Real Meta leadgen IDs are always numeric strings of ≥13 digits.
+_SYNTHETIC_ID_PREFIXES = ("attr-", "manual-", "test-", "synthetic-", "dummy-", "fake-")
+
+
+def is_synthetic_leadgen_id(leadgen_id):
+    """Return True when *leadgen_id* is clearly not a real Meta leadgen ID.
+
+    Real Meta leadgen IDs are always large decimal integers (≥ 13 digits).
+    Internal CRM attribution records, test harnesses and built-in CRM sync
+    produce identifiers such as ``ATTR-4aafda9a``, ``manual-...`` etc.
+    These must never be sent to the Meta Graph API as a leadgen object path.
+    """
+    if not leadgen_id:
+        return False
+    s = str(leadgen_id).strip().lower()
+    if any(s.startswith(p) for p in _SYNTHETIC_ID_PREFIXES):
+        return True
+    # A real Meta leadgen ID is a large pure-decimal number (≥ 13 digits).
+    if s.isdigit() and len(s) >= 13:
+        return False
+    # Anything else — non-numeric IDs, short numeric IDs, hex strings — is synthetic.
+    return True
+
+
 def fetch_lead(leadgen_id, settings=None, context=None):
     if not leadgen_id or str(leadgen_id).strip().lower() in ("none", "null", "0", ""):
         context = context or {}
         ctx = {k: v for k, v in context.items() if k != "source_lead_id"}
         meta_debug_log("fetch_lead_exception", source_lead_id=leadgen_id, error="GRAPH_DOWNLOAD cannot execute: Meta leadgen ID is missing or invalid", **ctx)
-        raise MetaGraphError("GRAPH_DOWNLOAD cannot execute: Meta leadgen ID is missing or invalid")
+        raise PermanentGraphError("GRAPH_DOWNLOAD cannot execute: Meta leadgen ID is missing or invalid")
 
     leadgen_str = str(leadgen_id).strip()
     assert isinstance(leadgen_str, str), "source_lead_id must be string"
     assert leadgen_str and leadgen_str.lower() not in ("none", "null", "0", ""), "source_lead_id cannot be blank or None"
+
+    # Guard: synthetic / internal IDs must never reach the Meta Graph API.
+    if is_synthetic_leadgen_id(leadgen_str):
+        context = context or {}
+        ctx = {k: v for k, v in context.items() if k != "source_lead_id"}
+        msg = (f"GRAPH_DOWNLOAD cannot execute: source_lead_id '{leadgen_str}' is a synthetic/internal "
+               f"identifier and is not a valid Meta leadgen ID. "
+               f"This record should be ignored rather than retried.")
+        meta_debug_log("fetch_lead_exception", source_lead_id=leadgen_str, error=msg, **ctx)
+        raise PermanentGraphError(msg)
 
     context = context or {}
     ctx = {k: v for k, v in context.items() if k != "source_lead_id"}
@@ -33,9 +74,15 @@ def fetch_lead(leadgen_id, settings=None, context=None):
         raise MetaGraphError("Meta Page Access Token is not configured")
     try:
         lead = _get(f"{leadgen_str}", {"fields": LEAD_FIELDS, "access_token": token})
-        _hydrate_names(lead, token)
+        # Optional enrichment: resolve human-readable campaign/ad names.
+        # Failures here MUST NOT affect the primary lead payload or error state.
+        enrichment_warnings = _hydrate_names(lead, token)
+        if enrichment_warnings:
+            lead.setdefault("_enrichment_warnings", [])
+            lead["_enrichment_warnings"].extend(enrichment_warnings)
         log_info("meta_graph_lead_fetched", leadgen_id=leadgen_str)
-        meta_debug_log("fetch_lead_end", source_lead_id=leadgen_str, graph_id=lead.get("id"), **ctx)
+        meta_debug_log("fetch_lead_end", source_lead_id=leadgen_str, graph_id=lead.get("id"),
+                       enrichment_warnings=enrichment_warnings or [], **ctx)
         return lead
     except MetaGraphError as exc:
         meta_debug_log("fetch_lead_exception", source_lead_id=leadgen_str, error=str(exc), status_code=exc.status_code, graph_response=exc.response, graph_request=exc.request, **ctx)
@@ -59,12 +106,22 @@ def _get(path, params):
         if isinstance(error, dict):
             error["http_status"] = response.status_code
         raw_msg = error.get("message") or f"Graph API HTTP {response.status_code}"
+        err_code = error.get("code")
+        err_subcode = error.get("error_subcode") or error.get("subcode")
         if "Object with ID" in raw_msg and "None" in raw_msg:
             message = f"Meta Graph API Permission Error ({raw_msg}): Page Access Token lacks 'leads_retrieval' permission or leadgen ID {path} belongs to a different Page/App."
         else:
             message = raw_msg
         meta_debug_log("meta_graph_error", path=path, status_code=response.status_code, error=message, graph_request=request, graph_response=data)
-        raise MetaGraphError(message, request=request, response=data, status_code=response.status_code)
+        # Classify permanent (non-retryable) errors:
+        # 100/33: object does not exist; 190: invalid/expired token; 4: rate limit (retryable)
+        is_permanent = (
+            (err_code == 100 and err_subcode in (33, 100)) or  # object not found / nonexistent field
+            err_code == 190 or  # invalid/expired OAuth token
+            response.status_code == 400 and err_subcode == 33  # explicit object-not-found
+        )
+        exc_class = PermanentGraphError if is_permanent else MetaGraphError
+        raise exc_class(message, request=request, response=data, status_code=response.status_code)
     meta_debug_log("meta_graph_response", source_lead_id=path, status_code=response.status_code, graph_response=data, graph_request=request)
     return data
 
@@ -77,18 +134,35 @@ def _response_json(response):
         return {"raw_response": response.text[:5000]}
 
 def _hydrate_names(lead, token):
+    """Resolve human-readable campaign/adset/ad names from their IDs.
+
+    This is optional metadata enrichment.  Failures here are non-fatal and
+    must not affect the primary lead payload or propagate as Graph errors.
+
+    Returns a list of warning dicts (possibly empty) describing any lookup
+    failures so callers can log/store them without polluting error fields.
+    """
+    warnings = []
     if not isinstance(lead, dict):
-        return
+        return warnings
     for key, field in {"campaign_id": "campaign_name", "adset_id": "adset_name", "ad_id": "ad_name"}.items():
         val = lead.get(key)
         if lead.get(field) or not val or str(val).strip().lower() in ("none", "null", "0", ""):
+            continue
+        # Synthetic IDs cannot be looked up — skip silently.
+        if is_synthetic_leadgen_id(str(val)):
+            warnings.append({"field": key, "id": val, "reason": "synthetic_id_skipped"})
+            log_info("meta_graph_enrichment_skipped", id=val, field=field, reason="synthetic_id")
             continue
         try:
             name_resp = _get(str(val), {"fields": "name", "access_token": token})
             if isinstance(name_resp, dict) and name_resp.get("name"):
                 lead[field] = name_resp.get("name")
-        except MetaGraphError:
-            log_info("meta_graph_context_name_missing", id=val, field=field)
+        except MetaGraphError as exc:
+            # Optional enrichment failure — log but do NOT re-raise.
+            warnings.append({"field": key, "id": val, "reason": "lookup_failed", "error": str(exc)})
+            log_info("meta_graph_context_name_missing", id=val, field=field, error=str(exc))
+    return warnings
 
 def _access_token(settings):
     if not settings:

@@ -34,9 +34,9 @@ def _todo(data, lead, customer, employee, queue_name):
     todo = frappe.new_doc("ToDo")
     todo.description = description
     todo.date = add_days(today(), 1)
-    todo.allocated_to = _employee_user(employee)
-    todo.reference_type = "Lead Intake Queue"
-    todo.reference_name = queue_name
+    todo.allocated_to = _employee_user(employee) or "Administrator"
+    todo.reference_type = "CRM Lead" if lead else "Lead Intake Queue"
+    todo.reference_name = lead if lead else queue_name
     set_if_has(todo,"meta_intake_key",key)
     todo.insert(ignore_permissions=True)
     return todo.name

@@ -49,10 +49,11 @@ def _populate_customer_blanks(customer,data):
         return
     current=frappe.db.get_value("Customer",customer,["customer_name","mobile_no","email_id","whatsapp_no","first_name"],as_dict=True) or {}
     doc=frappe.get_doc("Customer",customer)
-    if data.get("customer_name") and (not current.get("customer_name") or current.get("customer_name").startswith("Meta Lead ")):
-        doc.db_set("customer_name",data.get("customer_name"),update_modified=False)
+    clean_name = _clean_name(data.get("customer_name"))
+    if clean_name and (not current.get("customer_name") or current.get("customer_name").startswith("Meta Lead ")):
+        doc.db_set("customer_name",clean_name,update_modified=False)
         if has_field("Customer","first_name") and not current.get("first_name"):
-            doc.db_set("first_name",data.get("customer_name"),update_modified=False)
+            doc.db_set("first_name",clean_name,update_modified=False)
     if data.get("phone") and not current.get("mobile_no"):
         doc.db_set("mobile_no",data.get("phone"),update_modified=False)
     if data.get("whatsapp") and has_field("Customer","whatsapp_no") and not current.get("whatsapp_no"):
@@ -191,6 +192,12 @@ def _linked_customer(lead):
                 return customer
     return None
 
+def _clean_name(value):
+    text = str(value or "").strip()
+    if not text or (text.startswith("<test lead: dummy data for ") and text.endswith(">")):
+        return None
+    return text
+
 def _populate_lead_blanks(lead,data):
     mapping={"facebook_lead_id":"source_lead_id","facebook_form_id":"form_id","facebook_page_id":"page_id","meta_campaign_id":"campaign_id","meta_campaign_name":"campaign_name","meta_adset_id":"adset_id","meta_adset_name":"adset_name","meta_ad_id":"ad_id","meta_ad_name":"ad_name","mobile_no":"phone","phone":"phone","email":"email"}
     current=frappe.db.get_value("CRM Lead",lead,list(mapping)+["lead_name","first_name"],as_dict=True) or {}
@@ -199,7 +206,13 @@ def _populate_lead_blanks(lead,data):
         val=data.get(source)
         if val and not current.get(target) and has_field("CRM Lead",target):
             doc.db_set(target,val,update_modified=False)
-    if data.get("customer_name") and (not current.get("lead_name") or current.get("lead_name").startswith("Meta Lead ")):
-        doc.db_set("lead_name",data.get("customer_name"),update_modified=False)
-        if has_field("CRM Lead","first_name") and (not current.get("first_name") or current.get("first_name").startswith("Meta Lead ")):
-            doc.db_set("first_name",data.get("customer_name"),update_modified=False)
+    clean_name = _clean_name(data.get("customer_name"))
+    if clean_name and (not current.get("lead_name") or current.get("lead_name").startswith("Meta Lead ") or current.get("lead_name").startswith("<test lead:")):
+        doc.db_set("lead_name",clean_name,update_modified=False)
+        if has_field("CRM Lead","first_name") and (not current.get("first_name") or current.get("first_name").startswith("Meta Lead ") or current.get("first_name").startswith("<test lead:")):
+            doc.db_set("first_name",clean_name,update_modified=False)
+    elif not current.get("first_name") or str(current.get("first_name")).startswith("<test lead:"):
+        default_name = current.get("lead_name") or f"Meta Lead {data.get('source_lead_id') or ''}".strip()
+        if str(default_name).startswith("<test lead:"):
+            default_name = f"Meta Lead {data.get('source_lead_id') or ''}".strip()
+        doc.db_set("first_name", default_name, update_modified=False)

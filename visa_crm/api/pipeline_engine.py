@@ -215,7 +215,7 @@ def rollup_queue(queue_name,progress=False):
     states={row.stage:row.state for row in rows}
     for row in rows:
         if row.state in ("NOT_STARTED", "BLOCKED"):
-            failed_deps = [dep for dep in STAGE_BY_NAME[row.stage].get("dependencies", ()) if states.get(dep) == "FAILED" and not (row.stage == "NORMALIZE" and dep == "GRAPH_DOWNLOAD")]
+            failed_deps = [dep for dep in STAGE_BY_NAME[row.stage].get("dependencies", ()) if states.get(dep) == "FAILED"]
             if failed_deps:
                 if row.state != "BLOCKED":
                     frappe.db.set_value("Lead Intake Stage", row.name, {"state": "BLOCKED", "skip_reason": f"Blocked by failed dependency: {', '.join(failed_deps)}"}, update_modified=False)
@@ -277,11 +277,16 @@ def _states(queue_name):
     return dict(frappe.get_all("Lead Intake Stage",filters={"queue":queue_name},fields=["stage","state"],as_list=True))
 
 def _dependencies_complete(stage,states):
+    """Return True if all declared dependencies of this stage are in a terminal state.
+
+    A stage may only run if every dependency is COMPLETED or SKIPPED.
+    There are no exemptions — if GRAPH_DOWNLOAD FAILED, NORMALIZE is blocked.
+    The normalize() handler itself handles graceful recovery if the queue
+    already has a valid durable normalized_payload from a previous run.
+    """
     for dependency in STAGE_BY_NAME[stage].get("dependencies",()):
         dep_state = states.get(dependency)
         if dep_state in TERMINAL_STATES:
-            continue
-        if stage == "NORMALIZE" and dependency == "GRAPH_DOWNLOAD" and dep_state == "FAILED":
             continue
         return False
     return True

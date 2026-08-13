@@ -50,7 +50,7 @@ class TestCounselorRoundRobin(unittest.TestCase):
                 d = frappe.new_doc("Department")
                 d.department_name = dept
                 d.parent_department = "All Departments"
-                d.insert(ignore_permissions=True)
+                d.insert(ignore_permissions=True, ignore_if_duplicate=True)
 
         # Create test users for employees
         for i in range(1, 4):

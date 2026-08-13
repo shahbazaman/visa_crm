@@ -5,7 +5,7 @@ import socket
 import uuid
 import frappe
 from frappe.utils import add_to_date,cint,get_datetime,now,now_datetime
-from visa_crm.api.meta_graph import GRAPH_VERSION,LEAD_FIELDS,fetch_lead
+from visa_crm.api.meta_graph import GRAPH_VERSION,LEAD_FIELDS,fetch_lead,is_synthetic_leadgen_id,PermanentGraphError
 from visa_crm.api.meta_mapping import MAPPING_VERSION,normalize_lead
 from visa_crm.api.meta_utils import get_meta_settings,has_field,load_json,log_info,safe_json_dumps,set_values
 from visa_crm.api.customer360 import resolve_customer,resolve_lead
@@ -40,6 +40,9 @@ def graph_download(queue_name,claim=None):
     payload=fetch_lead(source_lead_id,get_meta_settings(),context)
     digest=_hash(payload)
     values={"graph_payload":safe_json_dumps(payload),"graph_api_response":safe_json_dumps(payload),"graph_api_request":safe_json_dumps(request),"graph_payload_hash":digest}
+    # Task 1: clear any stale error fields left by a previous failed attempt.
+    # Only cleared after a confirmed successful primary fetch.
+    _clear_graph_error_fields(values)
     set_values("Lead Intake Queue",queue.name,values)
     _sync_webhook_event(queue,{"graph_api_request":values["graph_api_request"],"graph_api_response":values["graph_api_response"],"queue_status":"Lead Downloaded"})
     return {"graph_payload":payload,"input_hash":_hash({"source_lead_id":source_lead_id}),"output_hash":digest,"request":request,"reused":False}
@@ -48,13 +51,18 @@ def _recover_source_lead_id(queue):
     if has_field("Lead Intake Queue","meta_webhook_event") and queue.get("meta_webhook_event"):
         evt_id=frappe.db.get_value("Meta Webhook Event",queue.meta_webhook_event,"leadgen_id")
         if evt_id and str(evt_id).strip().lower() not in ("none", "null", "0", ""):
-            return str(evt_id)
+            candidate=str(evt_id)
+            # Never recover a synthetic/internal ID — it cannot be used as a Graph leadgen ID.
+            if not is_synthetic_leadgen_id(candidate):
+                return candidate
     payload=load_json(getattr(queue,"raw_payload",None),{})
     if isinstance(payload,dict):
         for key in ("source_lead_id","leadgen_id","lead_id"):
             val=payload.get(key) or (payload.get("value") or {}).get(key)
             if val and str(val).strip().lower() not in ("none", "null", "0", ""):
-                return str(val)
+                candidate=str(val)
+                if not is_synthetic_leadgen_id(candidate):
+                    return candidate
     return None
 
 def graph_failure(queue_name,claim,exc,traceback):
@@ -65,6 +73,21 @@ def graph_failure(queue_name,claim,exc,traceback):
     set_values("Lead Intake Queue",queue_name,values)
     queue=frappe.get_doc("Lead Intake Queue",queue_name)
     _sync_webhook_event(queue,{"graph_api_request":values.get("graph_api_request"),"graph_api_response":values.get("graph_api_response"),"queue_status":"Needs Retry"})
+    if getattr(exc, "permanent", False) and claim:
+        stage_doc_name = getattr(claim, "name", None)
+        if stage_doc_name:
+            current_attempts = frappe.db.get_value("Lead Intake Stage", stage_doc_name, "attempt_count") or 1
+            frappe.db.set_value("Lead Intake Stage", stage_doc_name, {"max_attempts": current_attempts, "next_retry_at": None}, update_modified=False)
+        # Task 4: when the Graph failure is permanent AND there is no durable customer
+        # evidence that would allow NORMALIZE to reconstruct meaningful lead data,
+        # cascade the permanent failure to NORMALIZE (and thereby CLASSIFICATION,
+        # CUSTOMER360, CRM_LEAD ...) by marking NORMALIZE as SKIPPED with a clear reason.
+        # This prevents the queue being silently stuck forever waiting for a stage that
+        # can never produce useful data.
+        # If custom_answers or any PII field already exists on the queue, NORMALIZE can
+        # still attempt reconstruction from that durable evidence — do not cascade in
+        # that case.
+        _cascade_permanent_graph_failure_if_no_evidence(queue_name, queue, str(exc))
 
 def normalize(queue_name,claim=None):
     queue=frappe.get_doc("Lead Intake Queue",queue_name)
@@ -116,7 +139,9 @@ def _persist_normalized(queue,data,graph_hash,reason):
     res_dict={"normalized":data,"input_hash":graph_hash,"output_hash":digest,"reused":False,"recovered":reason!="graph_normalization"}
     stage_name=f"{queue.name}:NORMALIZE"
     if frappe.db.exists("Lead Intake Stage",stage_name):
-        frappe.db.set_value("Lead Intake Stage",stage_name,{"result_json":safe_json_dumps(res_dict),"output_hash":digest,"state":"COMPLETED","completed_at":frappe.utils.now_datetime()},update_modified=False)
+        current_state = frappe.db.get_value("Lead Intake Stage", stage_name, "state")
+        if current_state != "RUNNING":
+            frappe.db.set_value("Lead Intake Stage",stage_name,{"result_json":safe_json_dumps(res_dict),"output_hash":digest},update_modified=False)
     return res_dict
 
 def _merge_queue_evidence(data,queue):
@@ -144,6 +169,12 @@ def _graph_payload_from_queue(queue):
     raw=load_json(getattr(queue,"raw_payload",None),{})
     lead_id=getattr(queue,"source_lead_id",None) or (raw.get("leadgen_id") if isinstance(raw,dict) else None)
     if not fields and not lead_id and not (isinstance(raw,dict) and (raw.get("page_id") or raw.get("form_id"))):
+        return None
+    # Task 3: require at least some useful customer/lead field data for reconstruction.
+    # An ID alone (without any customer PII or form answers) is NOT sufficient evidence
+    # to produce a meaningful normalized payload. Returning a minimal skeleton would
+    # allow empty Customers/Leads to be created silently.
+    if not fields:
         return None
     payload={"id":lead_id,"field_data":fields}
     for field in ("form_id","page_id","campaign_id","campaign_name","adset_id","adset_name","ad_id","ad_name"):
@@ -405,6 +436,27 @@ def _graph_error_values(response,status_code,message):
     error=(response or {}).get("error",{}) if isinstance(response,dict) else {}
     return {"graph_http_status":error.get("http_status") or status_code,"graph_fbtrace_id":error.get("fbtrace_id"),"graph_error_code":error.get("code"),"graph_error_subcode":error.get("error_subcode") or error.get("subcode"),"graph_error_type":error.get("type"),"graph_error_message":error.get("message") or message}
 
+# Fields that record Graph failure detail.  On a successful fetch these must be
+# cleared so that operators and monitors see only the current outcome, not stale
+# state from a previous failed attempt.
+_GRAPH_ERROR_FIELDS=("graph_error_code","graph_error_subcode","graph_error_message","graph_error_type","graph_fbtrace_id","graph_http_status")
+
+def _clear_graph_error_fields(values):
+    """Merge null-values for all graph error fields into *values*.
+
+    Called only on the success path of graph_download().  The caller passes the
+    dict that is about to be written to the Lead Intake Queue so all changes are
+    committed in a single set_values() call, avoiding a separate DB round-trip.
+
+    Only clears fields that actually exist on the DocType so the function is safe
+    to call regardless of schema version.
+    """
+    meta=frappe.get_meta("Lead Intake Queue")
+    for field in _GRAPH_ERROR_FIELDS:
+        if meta.has_field(field):
+            values[field]=None
+
+
 def _set_if_blank(doctype_name,values):
     current=frappe.db.get_value("Lead Intake Queue",doctype_name,list(values),as_dict=True) or {}
     set_values("Lead Intake Queue",doctype_name,{field:value for field,value in values.items() if value is not None and not current.get(field)})
@@ -436,3 +488,60 @@ def _business_context(queue_name):
 def _set_assignment_status(lead,status):
     if has_field("CRM Lead","assignment_status"):
         frappe.db.set_value("CRM Lead",lead,"assignment_status",status,update_modified=False)
+
+def _cascade_permanent_graph_failure_if_no_evidence(queue_name,queue,error_message):
+    """Skip NORMALIZE (and thereby all dependent stages) when GRAPH_DOWNLOAD has
+    failed permanently AND there is no durable customer evidence on the queue.
+
+    When there IS useful evidence (custom_answers, PII fields already stored),
+    NORMALIZE can still reconstruct meaningful data from the queue record alone
+    — so we do NOT cascade in that case.
+
+    The Skip is only applied to NORMALIZE; the rollup_queue() BLOCKED logic
+    propagates the terminal state to CLASSIFICATION, CUSTOMER360 etc. automatically.
+    """
+    from visa_crm.api.pipeline_engine import skip_stage,STAGE_BY_NAME
+    # Check whether there is any durable customer evidence on the queue.
+    queue_rec=frappe.db.get_value(
+        "Lead Intake Queue",queue_name,
+        ["custom_answers","customer_name","phone","email"],as_dict=True
+    ) or {}
+    answers=load_json(queue_rec.get("custom_answers"),{})
+    has_custom_answers=bool(isinstance(answers,dict) and answers)
+    has_pii=bool(queue_rec.get("customer_name") or queue_rec.get("phone") or queue_rec.get("email"))
+    if has_custom_answers or has_pii:
+        # Durable evidence exists; NORMALIZE may still attempt reconstruction.
+        log_info(
+            "graph_permanent_failure_reconstruction_possible",
+            queue_name=queue_name,
+            has_custom_answers=has_custom_answers,
+            has_pii=has_pii,
+        )
+        return
+    # No evidence: mark NORMALIZE skipped so dependent stages become BLOCKED
+    # by rollup_queue() rather than silently waiting forever.
+    reason=(f"GRAPH_DOWNLOAD failed permanently with no durable reconstruction "
+            f"evidence on queue {queue_name}. "
+            f"Graph error: {error_message[:200]}.")
+    try:
+        # Only skip when NORMALIZE is still NOT_STARTED or BLOCKED
+        norm_stage_name=f"{queue_name}:NORMALIZE"
+        norm_state=frappe.db.get_value("Lead Intake Stage",norm_stage_name,"state")
+        if norm_state not in ("NOT_STARTED","BLOCKED",None):
+            return
+        # skip_stage() requires requirement_class=Optional, so we set directly.
+        frappe.db.set_value(
+            "Lead Intake Stage",norm_stage_name,
+            {"state":"SKIPPED","skip_reason":reason,"completed_at":now_datetime(),
+             "next_retry_at":None,"lease_owner":None,"lease_token":None,"lease_expires_at":None},
+            update_modified=False
+        )
+        log_info(
+            "graph_permanent_failure_normalize_skipped",
+            queue_name=queue_name,
+            reason=reason,
+        )
+    except Exception as skip_exc:
+        # Non-fatal: cascade skip is best-effort. The pipeline will remain stuck
+        # for this queue but no data is corrupted.
+        log_info("graph_permanent_failure_cascade_skip_error",queue_name=queue_name,error=str(skip_exc))

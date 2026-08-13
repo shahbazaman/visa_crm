@@ -58,19 +58,41 @@ class TestGraphDownloadResilience(FrappeTestCase):
             mock_get.assert_not_called()
 
     def test_durable_reconstruction_evidence_from_raw_payload(self):
-        from visa_crm.api.pipeline_stage_services import _rebuild_normalized, load_normalized, customer360
+        from visa_crm.api.pipeline_stage_services import load_normalized
+        # Task 3: a raw_payload with only identifiers (leadgen_id, page_id, form_id)
+        # but NO customer PII (no field_data, no name, no phone, no email) must NOT
+        # produce a successful normalized payload.  The system must fail clearly rather
+        # than silently creating empty Customer/Lead records.
         frappe.db.set_value("Lead Intake Queue", self.queue, {
             "graph_payload": None,
             "normalized_payload": None,
-            "raw_payload": '{"leadgen_id": "1728701815047004", "page_id": "PAGE-123", "form_id": "FORM-123"}'
+            "customer_name": None,
+            "phone": None,
+            "email": None,
+            "custom_answers": None,
+            "raw_payload": '{"leadgen_id": "1728701815047004", "page_id": "PAGE-123", "form_id": "FORM-123"}',
+        })
+        # Expect a clear error rather than a silent empty-PII payload.
+        with self.assertRaises(ValueError) as ctx:
+            load_normalized(self.queue)
+        self.assertIn("durable reconstruction evidence is unavailable", str(ctx.exception))
+
+    def test_durable_reconstruction_with_pii_succeeds(self):
+        from visa_crm.api.pipeline_stage_services import load_normalized
+        # When the queue has actual PII (customer_name + phone), reconstruction must succeed.
+        frappe.db.set_value("Lead Intake Queue", self.queue, {
+            "graph_payload": None,
+            "normalized_payload": None,
+            "raw_payload": '{"leadgen_id": "1728701815047004", "page_id": "PAGE-123"}',
+            "customer_name": "Test Person",
+            "phone": "+971501234567",
         })
         normalized = load_normalized(self.queue)
         self.assertIsNotNone(normalized)
-        self.assertEqual(normalized.get("source_lead_id"), "1728701815047004")
-        self.assertEqual(normalized.get("page_id"), "PAGE-123")
-
-        cust = customer360(self.queue)
-        self.assertIsNotNone(cust.get("customer"))
+        # The normalized payload must contain the PII that was stored.
+        has_name = normalized.get("customer_name") == "Test Person"
+        has_phone = normalized.get("phone") == "+971501234567"
+        self.assertTrue(has_name or has_phone, f"Expected PII in normalized: {normalized}")
 
     def test_next_action_at_not_earlier_than_creation(self):
         from visa_crm.api.pipeline_engine import rollup_queue
