@@ -9,8 +9,18 @@ def get_meta_settings():
     name = frappe.get_all("Meta Settings", pluck="name", limit=1)
     return frappe.get_doc("Meta Settings", name[0]) if name else None
 
+def redact_meta_tokens(text):
+    if not text:
+        return text
+    s = str(text)
+    s = re.sub(r'(access_token=)[^&\s"\']+', r'\1[REDACTED]', s)
+    s = re.sub(r'("access_token"\s*:\s*")[^"]+(")', r'\1[REDACTED]\2', s)
+    s = re.sub(r'(\'access_token\'\s*:\s*\')[^\']+(\')', r'\1[REDACTED]\2', s)
+    return s
+
 def safe_json_dumps(value):
-    return json.dumps(value, default=str, ensure_ascii=False, separators=(",", ":"))
+    s = json.dumps(value, default=str, ensure_ascii=False, separators=(",", ":"))
+    return redact_meta_tokens(s)
 
 def load_json(value, default=None):
     if not value:
@@ -56,14 +66,15 @@ def log_info(event, **data):
     frappe.logger("visa_crm.meta").info(message)
 
 def log_exception(event, **data):
-    data["traceback"] = frappe.get_traceback()
+    data["traceback"] = redact_meta_tokens(frappe.get_traceback())
     frappe.logger("visa_crm.meta").error(safe_json_dumps({"event": event, "data": data, "ts": now()}))
 
 def meta_context(queue_name=None, source_lead_id=None, status=None):
     return {"queue_name": queue_name, "source_lead_id": source_lead_id, "status": status}
 
 def meta_debug_log(event, queue_name=None, source_lead_id=None, status=None, **data):
-    payload = {"event": event, "queue_name": queue_name, "source_lead_id": source_lead_id, "status": status, "traceback": data.pop("traceback", "") or "", "data": data, "ts": now()}
+    tb = redact_meta_tokens(data.pop("traceback", "") or "")
+    payload = {"event": event, "queue_name": queue_name, "source_lead_id": source_lead_id, "status": status, "traceback": tb, "data": data, "ts": now()}
     logger = frappe.logger("visa_crm.meta")
     if payload["traceback"]:
         logger.error(safe_json_dumps(payload))

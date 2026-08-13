@@ -143,8 +143,9 @@ def skip_stage(queue_name,stage,reason):
     if not reason:
         raise ValueError("A skip reason is required")
     definition=STAGE_BY_NAME[stage]
-    if definition["requirement_class"]!="Optional":
-        raise ValueError(f"Required stage cannot be skipped: {stage}")
+    is_optional = definition.get("skip_allowed") or definition.get("requirement_class") == "Optional"
+    if not is_optional:
+        raise ValueError(f"Mandatory stage cannot be skipped: {stage}")
     frappe.db.set_value("Lead Intake Stage",stage_key(queue_name,stage),{"state":"SKIPPED","skip_reason":reason,"completed_at":now_datetime(),"next_retry_at":None,"lease_owner":None,"lease_token":None,"lease_expires_at":None},update_modified=False)
     rollup_queue(queue_name,progress=True)
 
@@ -215,7 +216,14 @@ def rollup_queue(queue_name,progress=False):
     states={row.stage:row.state for row in rows}
     for row in rows:
         if row.state in ("NOT_STARTED", "BLOCKED"):
-            failed_deps = [dep for dep in STAGE_BY_NAME[row.stage].get("dependencies", ()) if states.get(dep) == "FAILED"]
+            failed_deps = []
+            for dep in STAGE_BY_NAME[row.stage].get("dependencies", ()): 
+                dep_state = states.get(dep)
+                dep_def = STAGE_BY_NAME.get(dep, {})
+                if dep_state in ("FAILED", "BLOCKED"):
+                    failed_deps.append(f"{dep} ({dep_state})")
+                elif dep_state == "SKIPPED" and not (dep_def.get("skip_allowed") or dep_def.get("requirement_class") == "Optional"):
+                    failed_deps.append(f"{dep} (SKIPPED)")
             if failed_deps:
                 if row.state != "BLOCKED":
                     frappe.db.set_value("Lead Intake Stage", row.name, {"state": "BLOCKED", "skip_reason": f"Blocked by failed dependency: {', '.join(failed_deps)}"}, update_modified=False)
@@ -277,16 +285,19 @@ def _states(queue_name):
     return dict(frappe.get_all("Lead Intake Stage",filters={"queue":queue_name},fields=["stage","state"],as_list=True))
 
 def _dependencies_complete(stage,states):
-    """Return True if all declared dependencies of this stage are in a terminal state.
+    """Return True if all declared dependencies of this stage are satisfied.
 
-    A stage may only run if every dependency is COMPLETED or SKIPPED.
-    There are no exemptions — if GRAPH_DOWNLOAD FAILED, NORMALIZE is blocked.
-    The normalize() handler itself handles graceful recovery if the queue
-    already has a valid durable normalized_payload from a previous run.
+    - COMPLETED: Satisfies dependency for all stages.
+    - SKIPPED: Satisfies dependency ONLY IF the dependency stage has skip_allowed=True
+      or requirement_class='Optional'. If a mandatory stage is SKIPPED, its dependency
+      is NOT satisfied and downstream mandatory stages remain BLOCKED.
     """
     for dependency in STAGE_BY_NAME[stage].get("dependencies",()):
         dep_state = states.get(dependency)
-        if dep_state in TERMINAL_STATES:
+        if dep_state == "COMPLETED":
+            continue
+        dep_def = STAGE_BY_NAME.get(dependency, {})
+        if dep_state == "SKIPPED" and (dep_def.get("skip_allowed") or dep_def.get("requirement_class") == "Optional"):
             continue
         return False
     return True

@@ -543,7 +543,7 @@ def _cascade_permanent_graph_failure_if_no_evidence(queue_name,queue,error_messa
         # skip_stage() requires requirement_class=Optional, so we set directly.
         frappe.db.set_value(
             "Lead Intake Stage",norm_stage_name,
-            {"state":"SKIPPED","skip_reason":reason,"completed_at":now_datetime(),
+            {"state":"FAILED","last_error_class":"PermanentGraphFailure","last_error":reason,"completed_at":now_datetime(),
              "next_retry_at":None,"lease_owner":None,"lease_token":None,"lease_expires_at":None},
             update_modified=False
         )
