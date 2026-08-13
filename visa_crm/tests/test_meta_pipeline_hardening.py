@@ -160,3 +160,63 @@ class TestMetaPipelineHardening(unittest.TestCase):
         class_stage = pipeline_engine._stage_row(queue.name, "CLASSIFICATION")
         self.assertEqual(class_stage.state, "BLOCKED", "CLASSIFICATION stage must remain BLOCKED when NORMALIZE is SKIPPED")
         frappe.db.rollback()
+
+    def test_redact_meta_tokens_covers_http_error_url(self):
+        """requests.HTTPError str() embeds the full URL; token must be redacted."""
+        from visa_crm.api.meta_utils import redact_meta_tokens
+        # Simulate what requests.HTTPError.__str__() produces
+        fake_exc_str = (
+            "400 Client Error: Bad Request for url: "
+            "https://graph.facebook.com/v21.0/1772075190460251"
+            "?fields=id,field_data,form_id&access_token=EAAxxxxxxSECRETTOKEN1234567890&other=val"
+        )
+        redacted = redact_meta_tokens(fake_exc_str)
+        self.assertNotIn("EAAxxxxxxSECRETTOKEN1234567890", redacted)
+        self.assertIn("[REDACTED]", redacted)
+        self.assertIn("400 Client Error", redacted)
+        # Ensure the non-token parts of the URL are preserved
+        self.assertIn("graph.facebook.com", redacted)
+
+    def test_graph_download_failed_not_completed_when_durability_check_fails(self):
+        """GRAPH_DOWNLOAD must end up FAILED if the payload durability check fails."""
+        import json
+        from unittest.mock import patch
+        from visa_crm.api.pipeline_stage_services import graph_download
+        from visa_crm.api.pipeline_engine import ensure_stage_ledger, claim_stage, run_stage
+
+        test_lead_id = f"995{int(time.time())}123"
+        queue = frappe.get_doc({
+            "doctype": "Lead Intake Queue",
+            "source_lead_id": test_lead_id,
+            "status": "Fetching Meta Lead"
+        }).insert(ignore_permissions=True)
+        ensure_stage_ledger(queue.name)
+
+        # Override: fetch_lead succeeds but durability check raises (simulating Scenario A/B)
+        mock_payload = {
+            "id": test_lead_id,
+            "field_data": [{"name": "full_name", "values": ["Test User"]}]
+        }
+
+        def _fetch_lead_mock(lead_id, settings, ctx):
+            return mock_payload
+
+        def _durability_fail(qname, slid):
+            raise ValueError(f"GRAPH_DOWNLOAD payload durability check failed for queue {qname}")
+
+        with patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=_fetch_lead_mock), \
+             patch("visa_crm.api.pipeline_stage_services._verify_graph_payload_durable", side_effect=_durability_fail):
+            outcome = run_stage(queue.name, graph_download, stage="GRAPH_DOWNLOAD")
+
+        # Stage must be FAILED, not COMPLETED
+        row = frappe.db.get_value(
+            "Lead Intake Stage", f"{queue.name}:GRAPH_DOWNLOAD",
+            ["state", "last_error"], as_dict=True
+        )
+        self.assertIsNotNone(row)
+        self.assertEqual(row.state, "FAILED",
+            f"GRAPH_DOWNLOAD must be FAILED when durability check fails, got: {row.state}")
+        self.assertIn("durability check failed", (row.last_error or "").lower(),
+            f"last_error must mention durability check, got: {row.last_error!r}")
+        frappe.db.rollback()
+

@@ -7,7 +7,7 @@ import frappe
 from frappe.utils import add_to_date,cint,get_datetime,now,now_datetime
 from visa_crm.api.meta_graph import GRAPH_VERSION,LEAD_FIELDS,fetch_lead,is_synthetic_leadgen_id,PermanentGraphError
 from visa_crm.api.meta_mapping import MAPPING_VERSION,normalize_lead
-from visa_crm.api.meta_utils import get_meta_settings,has_field,load_json,log_info,safe_json_dumps,set_values
+from visa_crm.api.meta_utils import get_meta_settings,has_field,load_json,log_info,redact_meta_tokens,safe_json_dumps,set_values
 from visa_crm.api.customer360 import resolve_customer,resolve_lead
 from visa_crm.api.followup import create_meta_followup
 from visa_crm.api.lead_assignment import assign_lead, NotApplicable
@@ -44,6 +44,10 @@ def graph_download(queue_name,claim=None):
     # Only cleared after a confirmed successful primary fetch.
     _clear_graph_error_fields(values)
     set_values("Lead Intake Queue",queue.name,values)
+    frappe.db.commit()
+    # Durability invariant: verify the payload was actually committed before marking COMPLETED.
+    # If this raises, run_stage() calls fail_stage() and GRAPH_DOWNLOAD stays FAILED.
+    _verify_graph_payload_durable(queue.name,source_lead_id)
     _sync_webhook_event(queue,{"graph_api_request":values["graph_api_request"],"graph_api_response":values["graph_api_response"],"queue_status":"Lead Downloaded"})
     return {"graph_payload":payload,"input_hash":_hash({"source_lead_id":source_lead_id}),"output_hash":digest,"request":request,"reused":False}
 
@@ -69,7 +73,7 @@ def graph_failure(queue_name,claim,exc,traceback):
     request=getattr(exc,"request",None) or _graph_request(frappe.db.get_value("Lead Intake Queue",queue_name,"source_lead_id"))
     response=getattr(exc,"response",None)
     values={"graph_api_request":safe_json_dumps(request),"graph_api_response":safe_json_dumps(response) if response is not None else None}
-    values.update(_graph_error_values(response,getattr(exc,"status_code",None),str(exc)))
+    values.update(_graph_error_values(response,getattr(exc,"status_code",None),redact_meta_tokens(str(exc))))
     set_values("Lead Intake Queue",queue_name,values)
     queue=frappe.get_doc("Lead Intake Queue",queue_name)
     _sync_webhook_event(queue,{"graph_api_request":values.get("graph_api_request"),"graph_api_response":values.get("graph_api_response"),"queue_status":"Needs Retry"})
@@ -426,9 +430,16 @@ def _append_ai_retry_history(job_name,item):
     frappe.db.set_value("Lead Intake AI Job",job_name,"retry_history_json",safe_json_dumps(history[-200:]),update_modified=False)
 
 def _successful_graph_payload(queue):
+    source_id=str(getattr(queue,"source_lead_id","") or "").strip()
     for field in ("graph_payload","graph_api_response"):
         data=load_json(getattr(queue,field,None),{})
         if data and not data.get("error") and (data.get("id") or data.get("field_data")):
+            # Identity guard: if payload id is present and does not match source_lead_id,
+            # treat as stale/mismatched cache and fall through to force a real Graph fetch.
+            payload_id=str(data.get("id") or "").strip()
+            if source_id and payload_id and payload_id!=source_id:
+                log_info("graph_payload_identity_mismatch",queue_name=queue.name,source_lead_id=source_id,payload_id=payload_id,field=field)
+                continue
             return data
     if frappe.db.exists("DocType","Lead Intake Stage"):
         stage_name=f"{queue.name}:GRAPH_DOWNLOAD"
@@ -439,6 +450,54 @@ def _successful_graph_payload(queue):
             if isinstance(graph,dict) and not graph.get("error") and (graph.get("id") or graph.get("field_data")):
                 return graph
     return None
+
+def _verify_graph_payload_durable(queue_name, source_lead_id):
+    """Post-write durability check for GRAPH_DOWNLOAD.
+
+    Reads back the graph_payload column from the database (bypassing any ORM
+    cache) and verifies that:
+      1. It is valid, parseable JSON.
+      2. It does not contain a Graph API error payload.
+      3. It has at least an 'id' or 'field_data' key.
+      4. If source_lead_id is known, the payload 'id' matches it.
+
+    Raises ValueError if any check fails.  The caller (graph_download via
+    run_stage) will then call fail_stage(), recording the true outcome rather
+    than falsely marking GRAPH_DOWNLOAD as COMPLETED.
+    """
+    import json as _json
+    row = frappe.db.get_value(
+        "Lead Intake Queue", queue_name,
+        ["graph_payload", "graph_api_response"], as_dict=True
+    ) or {}
+    payload = None
+    for field in ("graph_payload", "graph_api_response"):
+        raw = row.get(field)
+        if not raw:
+            continue
+        try:
+            data = _json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        if data and not data.get("error") and (data.get("id") or data.get("field_data")):
+            payload = data
+            break
+    if not payload:
+        raise ValueError(
+            f"GRAPH_DOWNLOAD payload durability check failed for queue {queue_name}: "
+            f"graph_payload is missing, empty, or an error response after set_values(). "
+            f"Stage will be marked FAILED to prevent false COMPLETED state."
+        )
+    # Identity check
+    expected_id = str(source_lead_id or "").strip()
+    actual_id = str(payload.get("id") or "").strip()
+    if expected_id and actual_id and actual_id != expected_id:
+        raise ValueError(
+            f"GRAPH_DOWNLOAD payload durability check failed for queue {queue_name}: "
+            f"stored payload id={actual_id!r} does not match source_lead_id={expected_id!r}. "
+            f"Stage will be marked FAILED to prevent corrupted data propagation."
+        )
+
 
 def _graph_request(source_lead_id):
     return {"url":f"https://graph.facebook.com/{GRAPH_VERSION}/{source_lead_id}","path":str(source_lead_id or ""),"params":{"fields":LEAD_FIELDS}}

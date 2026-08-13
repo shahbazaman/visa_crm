@@ -10,12 +10,32 @@ def get_meta_settings():
     return frappe.get_doc("Meta Settings", name[0]) if name else None
 
 def redact_meta_tokens(text):
+    """Scrub Meta Graph API access tokens from any string form.
+
+    Covers:
+    1. URL query-param:   access_token=EAA...
+    2. JSON double-quote: "access_token": "EAA..."
+    3. JSON single-quote: 'access_token': 'EAA...'
+    4. Full Graph API URL (as emitted by requests.HTTPError.__str__):
+       https://graph.facebook.com/.../...?fields=...&access_token=EAA...
+    5. Bare token after access_token keyword in tracebacks
+    """
     if not text:
         return text
     s = str(text)
-    s = re.sub(r'(access_token=)[^&\s"\']+', r'\1[REDACTED]', s)
-    s = re.sub(r'("access_token"\s*:\s*")[^"]+(")', r'\1[REDACTED]\2', s)
-    s = re.sub(r'(\'access_token\'\s*:\s*\')[^\']+(\')', r'\1[REDACTED]\2', s)
+    # Pattern 4 first: full Graph API URL with embedded token.
+    s = re.sub(
+        '(https://graph\\.facebook\\.com/[^\\s\\"\']*?access_token=)[^\\s\\"\'&]+',
+        '\\1[REDACTED]', s
+    )
+    # Pattern 1: generic URL query-param ?access_token=EAA...
+    s = re.sub('(access_token=)[^&\\s\\"\']+', '\\1[REDACTED]', s)
+    # Pattern 2: JSON / Python dict double-quoted value
+    s = re.sub('("access_token"\\s*:\\s*")[^"]+(")', '\\1[REDACTED]\\2', s)
+    # Pattern 3: JSON / Python dict single-quoted value
+    s = re.sub("('access_token'\\s*:\\s*')[^']+(')", '\\1[REDACTED]\\2', s)
+    # Pattern 5: bare token after access_token keyword in tracebacks
+    s = re.sub('\\baccess_token\\s+([A-Za-z0-9_\\-]{10,})', 'access_token [REDACTED]', s)
     return s
 
 def safe_json_dumps(value):
