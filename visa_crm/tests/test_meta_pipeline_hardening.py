@@ -2,7 +2,8 @@ import json
 import time
 import unittest
 import frappe
-from visa_crm.api import meta_graph, pipeline_stage_services, intake_processor, pipeline_engine
+from frappe.utils.safe_exec import safe_exec
+from visa_crm.api import meta_graph, pipeline_stage_services, intake_processor, pipeline_engine, recovery
 from visa_crm.api.stage_definitions import STAGE_BY_NAME
 from visa_crm.patches import fix_meta_access_token_length
 
@@ -33,6 +34,54 @@ class TestMetaPipelineHardening(unittest.TestCase):
         field = meta.get_field("access_token")
         self.assertIsNotNone(field)
         self.assertGreaterEqual(int(field.length or 0), 400, "access_token field length must be at least 400")
+
+    def test_safe_exec_recovery_invocation(self):
+        # Test that System Console safe_exec can invoke retry_queue via frappe.call
+        test_lead_id = f"998{int(time.time())}123"
+        queue = frappe.get_doc({
+            "doctype": "Lead Intake Queue",
+            "source_lead_id": test_lead_id,
+            "status": "Failed"
+        }).insert(ignore_permissions=True)
+
+        pipeline_engine.ensure_stage_ledger(queue.name)
+        frappe.db.set_value("Lead Intake Stage", f"{queue.name}:GRAPH_DOWNLOAD", {"state": "FAILED"})
+
+        snippet = f'frappe.call("visa_crm.api.recovery.retry_queue", queue_name="{queue.name}")'
+        safe_exec(snippet)
+
+        stages = dict(frappe.get_all("Lead Intake Stage", filters={"queue": queue.name}, fields=["stage", "state"], as_list=True))
+        self.assertIn("GRAPH_DOWNLOAD", stages, "Stage ledger must be accessible after recovery call")
+        frappe.db.rollback()
+
+    def test_unauthorized_user_blocked(self):
+        # Test that non-System Manager user is rejected
+        frappe.set_user("Guest")
+        with self.assertRaises(frappe.PermissionError):
+            recovery.retry_queue("LIQ-2026-00001")
+        frappe.set_user("Administrator")
+
+    def test_invalid_queue_rejected(self):
+        # Test that non-existent queue throws error
+        with self.assertRaises(frappe.ValidationError):
+            recovery.retry_queue("NON_EXISTENT_QUEUE_99999")
+
+    def test_customer360_blocked_when_normalize_fails(self):
+        test_lead_id = f"997{int(time.time())}123"
+        queue = frappe.get_doc({
+            "doctype": "Lead Intake Queue",
+            "source_lead_id": test_lead_id,
+            "status": "Failed"
+        }).insert(ignore_permissions=True)
+
+        pipeline_engine.ensure_stage_ledger(queue.name)
+        frappe.db.set_value("Lead Intake Stage", f"{queue.name}:GRAPH_DOWNLOAD", {"state": "FAILED"})
+        frappe.db.set_value("Lead Intake Stage", f"{queue.name}:NORMALIZE", {"state": "FAILED"})
+
+        pipeline_engine.rollup_queue(queue.name)
+        c360_stage = pipeline_engine._stage_row(queue.name, "CUSTOMER360")
+        self.assertEqual(c360_stage.state, "BLOCKED", "CUSTOMER360 stage must remain BLOCKED when NORMALIZE is FAILED")
+        frappe.db.rollback()
 
     def test_pipeline_idempotency_and_evidence_merge(self):
         test_lead_id = f"999{int(time.time())}123"
