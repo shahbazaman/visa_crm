@@ -63,7 +63,8 @@ class TestMetaLeadIngestionRepair(FrappeTestCase):
         self.assertTrue(q_name)
 
     def test_03_graph_success_creates_normalized_payload(self):
-        leadgen_id = f"9900{frappe.generate_hash(length=8)}"
+        suffix = frappe.generate_hash(length=8)
+        leadgen_id = f"158403067{''.join(str(ord(c)%10) for c in suffix)[:7]}"
         queue = frappe.new_doc("Lead Intake Queue")
         queue.status = "Lead Received"
         queue.source_lead_id = leadgen_id
@@ -84,7 +85,7 @@ class TestMetaLeadIngestionRepair(FrappeTestCase):
             "form_id": "FORM-03",
         }
 
-        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", return_value=graph_response), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"), patch("visa_crm.api.lead_assignment._is_working", return_value=True):
+        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", return_value=graph_response), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"):
             res = intake_processor.process_queue(queue.name)
 
         queue.reload()
@@ -93,7 +94,8 @@ class TestMetaLeadIngestionRepair(FrappeTestCase):
         self.assertEqual(queue.status, "Processed")
 
     def test_04_graph_failure_creates_normalized_fallback(self):
-        leadgen_id = f"9900{frappe.generate_hash(length=8)}"
+        suffix = frappe.generate_hash(length=8)
+        leadgen_id = f"158403067{''.join(str(ord(c)%10) for c in suffix)[:7]}"
         queue = frappe.new_doc("Lead Intake Queue")
         queue.status = "Lead Received"
         queue.source_lead_id = leadgen_id
@@ -101,65 +103,81 @@ class TestMetaLeadIngestionRepair(FrappeTestCase):
         queue.page_id = "PAGE-04"
         queue.form_id = "FORM-04"
         queue.raw_payload = frappe.as_json({"value": {"leadgen_id": leadgen_id, "page_id": "PAGE-04", "form_id": "FORM-04"}})
+        queue.customer_name = f"Test Lead {leadgen_id}"
+        queue.phone = "+971501234567"
+        queue.custom_answers = frappe.as_json({"full_name": f"Test Lead {leadgen_id}", "phone": "+971501234567"})
         queue.insert(ignore_permissions=True)
 
         err = MetaGraphError("Graph API Error #100", status_code=400)
-        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=err), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"), patch("visa_crm.api.lead_assignment._is_working", return_value=True):
+        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=err), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"):
             intake_processor.process_queue(queue.name)
 
         queue.reload()
         self.assertTrue(queue.normalized_payload)
 
     def test_05_graph_failure_does_not_block_customer360(self):
-        leadgen_id = f"9900{frappe.generate_hash(length=8)}"
+        suffix = frappe.generate_hash(length=8)
+        leadgen_id = f"158403067{''.join(str(ord(c)%10) for c in suffix)[:7]}"
         queue = frappe.new_doc("Lead Intake Queue")
         queue.status = "Lead Received"
         queue.source_lead_id = leadgen_id
         queue.event_type = "leadgen"
         queue.raw_payload = frappe.as_json({"value": {"leadgen_id": leadgen_id}})
+        queue.customer_name = f"Test Lead {leadgen_id}"
+        queue.phone = "+971501234567"
+        queue.custom_answers = frappe.as_json({"full_name": f"Test Lead {leadgen_id}", "phone": "+971501234567"})
         queue.insert(ignore_permissions=True)
 
         err = MetaGraphError("Graph API Error #100", status_code=400)
-        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=err), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"), patch("visa_crm.api.lead_assignment._is_working", return_value=True):
+        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=err), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"):
             intake_processor.process_queue(queue.name)
 
         queue.reload()
         self.assertTrue(queue.matched_customer)
 
     def test_06_graph_failure_does_not_block_crm_lead_creation(self):
-        leadgen_id = f"9900{frappe.generate_hash(length=8)}"
+        suffix = frappe.generate_hash(length=8)
+        leadgen_id = f"158403067{''.join(str(ord(c)%10) for c in suffix)[:7]}"
         queue = frappe.new_doc("Lead Intake Queue")
         queue.status = "Lead Received"
         queue.source_lead_id = leadgen_id
         queue.event_type = "leadgen"
         queue.raw_payload = frappe.as_json({"value": {"leadgen_id": leadgen_id}})
+        queue.customer_name = f"Test Lead {leadgen_id}"
+        queue.phone = "+971501234567"
+        queue.custom_answers = frappe.as_json({"full_name": f"Test Lead {leadgen_id}", "phone": "+971501234567"})
         queue.insert(ignore_permissions=True)
 
         err = MetaGraphError("Graph API Error #100", status_code=400)
-        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=err), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"), patch("visa_crm.api.lead_assignment._is_working", return_value=True):
+        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=err), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"):
             intake_processor.process_queue(queue.name)
 
         queue.reload()
         self.assertTrue(queue.matched_lead)
 
     def test_07_crm_lead_is_physically_saved(self):
-        leadgen_id = f"9900{frappe.generate_hash(length=8)}"
+        suffix = frappe.generate_hash(length=8)
+        leadgen_id = f"158403067{''.join(str(ord(c)%10) for c in suffix)[:7]}"
         queue = frappe.new_doc("Lead Intake Queue")
         queue.status = "Lead Received"
         queue.source_lead_id = leadgen_id
         queue.event_type = "leadgen"
         queue.raw_payload = frappe.as_json({"value": {"leadgen_id": leadgen_id}})
+        queue.customer_name = f"Test Lead {leadgen_id}"
+        queue.phone = "+971501234567"
+        queue.custom_answers = frappe.as_json({"full_name": f"Test Lead {leadgen_id}", "phone": "+971501234567"})
         queue.insert(ignore_permissions=True)
 
         err = MetaGraphError("Graph API Error #100", status_code=400)
-        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=err), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"), patch("visa_crm.api.lead_assignment._is_working", return_value=True):
+        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=err), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"):
             intake_processor.process_queue(queue.name)
 
         queue.reload()
         self.assertTrue(frappe.db.exists("CRM Lead", queue.matched_lead))
 
     def test_08_customer360_creates_customer_and_crm_lead_together(self):
-        leadgen_id = f"9900{frappe.generate_hash(length=8)}"
+        suffix = frappe.generate_hash(length=8)
+        leadgen_id = f"158403067{''.join(str(ord(c)%10) for c in suffix)[:7]}"
         data = {
             "source_lead_id": leadgen_id,
             "customer_name": f"Combined Customer {leadgen_id}",
@@ -175,7 +193,8 @@ class TestMetaLeadIngestionRepair(FrappeTestCase):
         self.assertTrue(frappe.db.exists("CRM Lead", lead_name))
 
     def test_09_existing_customer_is_reused(self):
-        leadgen_id = f"9900{frappe.generate_hash(length=8)}"
+        suffix = frappe.generate_hash(length=8)
+        leadgen_id = f"158403067{''.join(str(ord(c)%10) for c in suffix)[:7]}"
         data = {
             "source_lead_id": leadgen_id,
             "customer_name": f"Reuse Customer {leadgen_id}",
@@ -188,7 +207,8 @@ class TestMetaLeadIngestionRepair(FrappeTestCase):
         self.assertEqual(res1, res2)
 
     def test_10_existing_crm_lead_is_reused(self):
-        leadgen_id = f"9900{frappe.generate_hash(length=8)}"
+        suffix = frappe.generate_hash(length=8)
+        leadgen_id = f"158403067{''.join(str(ord(c)%10) for c in suffix)[:7]}"
         data = {
             "source_lead_id": leadgen_id,
             "customer_name": f"Reuse Lead {leadgen_id}",
@@ -230,16 +250,20 @@ class TestMetaLeadIngestionRepair(FrappeTestCase):
         self.assertEqual(q_count, 1)
 
     def test_12_retry_is_idempotent(self):
-        leadgen_id = f"9900{frappe.generate_hash(length=8)}"
+        suffix = frappe.generate_hash(length=8)
+        leadgen_id = f"158403067{''.join(str(ord(c)%10) for c in suffix)[:7]}"
         queue = frappe.new_doc("Lead Intake Queue")
         queue.status = "Lead Received"
         queue.source_lead_id = leadgen_id
         queue.event_type = "leadgen"
         queue.raw_payload = frappe.as_json({"value": {"leadgen_id": leadgen_id}})
+        queue.customer_name = f"Test Lead {leadgen_id}"
+        queue.phone = "+971501234567"
+        queue.custom_answers = frappe.as_json({"full_name": f"Test Lead {leadgen_id}", "phone": "+971501234567"})
         queue.insert(ignore_permissions=True)
 
         err = MetaGraphError("Graph API Error #100", status_code=400)
-        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=err), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"), patch("visa_crm.api.lead_assignment._is_working", return_value=True):
+        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=err), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"):
             intake_processor.process_queue(queue.name)
             intake_processor.process_queue(queue.name)
 
@@ -256,16 +280,20 @@ class TestMetaLeadIngestionRepair(FrappeTestCase):
             self.assertEqual(cond, "")
 
     def test_15_crm_leads_list_query_returns_newly_created_meta_leads(self):
-        leadgen_id = f"9900{frappe.generate_hash(length=8)}"
+        suffix = frappe.generate_hash(length=8)
+        leadgen_id = f"158403067{''.join(str(ord(c)%10) for c in suffix)[:7]}"
         queue = frappe.new_doc("Lead Intake Queue")
         queue.status = "Lead Received"
         queue.source_lead_id = leadgen_id
         queue.event_type = "leadgen"
         queue.raw_payload = frappe.as_json({"value": {"leadgen_id": leadgen_id}})
+        queue.customer_name = f"Test Lead {leadgen_id}"
+        queue.phone = "+971501234567"
+        queue.custom_answers = frappe.as_json({"full_name": f"Test Lead {leadgen_id}", "phone": "+971501234567"})
         queue.insert(ignore_permissions=True)
 
         err = MetaGraphError("Graph API Error #100", status_code=400)
-        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=err), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"), patch("visa_crm.api.lead_assignment._is_working", return_value=True):
+        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=err), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"):
             intake_processor.process_queue(queue.name)
 
         queue.reload()
@@ -293,19 +321,23 @@ class TestMetaLeadIngestionRepair(FrappeTestCase):
         queue.insert(ignore_permissions=True)
 
         err = MetaGraphError("Graph API Error #100", status_code=400)
-        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=err), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"), patch("visa_crm.api.lead_assignment._is_working", return_value=True):
+        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=err), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"):
             intake_processor.process_queue(queue.name)
 
         queue.reload()
         self.assertTrue(queue.matched_lead)
 
     def test_17_counselor_assignment_failure_does_not_delete_crm_lead(self):
-        leadgen_id = f"9900{frappe.generate_hash(length=8)}"
+        suffix = frappe.generate_hash(length=8)
+        leadgen_id = f"158403067{''.join(str(ord(c)%10) for c in suffix)[:7]}"
         queue = frappe.new_doc("Lead Intake Queue")
         queue.status = "Lead Received"
         queue.source_lead_id = leadgen_id
         queue.event_type = "leadgen"
         queue.raw_payload = frappe.as_json({"value": {"leadgen_id": leadgen_id}})
+        queue.customer_name = f"Test Lead {leadgen_id}"
+        queue.phone = "+971501234567"
+        queue.custom_answers = frappe.as_json({"full_name": f"Test Lead {leadgen_id}", "phone": "+971501234567"})
         queue.insert(ignore_permissions=True)
 
         err = MetaGraphError("Graph API Error #100", status_code=400)
@@ -343,16 +375,20 @@ class TestMetaLeadIngestionRepair(FrappeTestCase):
         self.assertTrue(frappe.db.exists("Lead Intake Queue", {"source_lead_id": leadgen_id}))
 
     def test_19_graph_api_failure_remains_recorded_diagnostically(self):
-        leadgen_id = f"9900{frappe.generate_hash(length=8)}"
+        suffix = frappe.generate_hash(length=8)
+        leadgen_id = f"158403067{''.join(str(ord(c)%10) for c in suffix)[:7]}"
         queue = frappe.new_doc("Lead Intake Queue")
         queue.status = "Lead Received"
         queue.source_lead_id = leadgen_id
         queue.event_type = "leadgen"
         queue.raw_payload = frappe.as_json({"value": {"leadgen_id": leadgen_id}})
+        queue.customer_name = f"Test Lead {leadgen_id}"
+        queue.phone = "+971501234567"
+        queue.custom_answers = frappe.as_json({"full_name": f"Test Lead {leadgen_id}", "phone": "+971501234567"})
         queue.insert(ignore_permissions=True)
 
         err = MetaGraphError("Graph API Error #100", status_code=400)
-        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=err), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"), patch("visa_crm.api.lead_assignment._is_working", return_value=True):
+        with patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()), patch("visa_crm.api.pipeline_stage_services.fetch_lead", side_effect=err), patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"):
             intake_processor.process_queue(queue.name)
 
         states = dict(frappe.get_all("Lead Intake Stage", filters={"queue": queue.name}, fields=["stage", "state"], as_list=True))

@@ -42,7 +42,7 @@ class TestPipelineDownstreamStages(FrappeTestCase):
         self.assertEqual(event1,event2)
         self.assertEqual(todo1,todo2)
         self.assertEqual(frappe.db.count("Visa Application",{"meta_intake_key":f"visa:{self.queue}"}),1)
-        self.assertEqual(frappe.db.count("Communication Event",{"event_id":f"meta:{self.source}"}),1)
+        self.assertEqual(frappe.db.count("Communication Event",{"event_id":["in",[f"meta:lead:{self.source}",f"meta:{self.source}"]]}),1)
         self.assertEqual(frappe.db.count("ToDo",{"meta_intake_key":f"followup:{self.queue}"}),1)
         if frappe.db.exists("DocType","Reminder Scheduler") and frappe.get_meta("Reminder Scheduler").has_field("meta_intake_key"):
             self.assertEqual(frappe.db.count("Reminder Scheduler",{"meta_intake_key":f"reminder:{self.queue}"}),1)

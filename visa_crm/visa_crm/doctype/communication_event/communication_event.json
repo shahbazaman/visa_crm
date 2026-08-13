@@ -8,250 +8,324 @@
  "document_type": "",
  "engine": "InnoDB",
  "editable_grid": 0,
-
  "module": "Visa CRM",
  "name": "Communication Event",
-
  "track_changes": 1,
  "track_views": 1,
  "show_name_in_global_search": 1,
-
  "title_field": "name",
-
  "sort_field": "creation",
  "sort_order": "DESC",
-
- "search_fields": "name,phone,email,channel_id",
-
+ "search_fields": "name,phone,email,channel_id,event_id",
  "field_order": [
-
   "status",
   "naming_series",
-
   "source",
   "event_type",
   "direction",
-
   "customer",
   "lead",
   "employee",
   "call_intelligence",
-
   "phone",
   "email",
-
   "content",
   "summary",
-
   "sentiment",
   "lead_score",
   "ai_score",
-
   "event_datetime",
   "duration",
   "response_time",
-
   "recording_file",
   "channel_id",
-
   "converted",
   "conversion_value",
-
   "lost_reason",
-  "coaching_suggestion"
-
+  "coaching_suggestion",
+  "source_channel",
+  "event_id",
+  "conversation_id",
+  "customer360",
+  "visa_application",
+  "lead_intake_queue",
+  "followup_reference",
+  "meta_campaign_name",
+  "meta_campaign_id",
+  "meta_adset_name",
+  "meta_adset_id",
+  "meta_ad_name",
+  "meta_ad_id",
+  "facebook_page_id",
+  "facebook_form_id",
+  "facebook_lead_id",
+  "original_normalized_payload",
+  "meta_attribution_json",
+  "processing_timeline"
  ],
-
  "fields": [
-
   {
-   "fieldname":"status",
-   "fieldtype":"Select",
-   "label":"Status",
-   "options":"Open\nPending\nQualified\nConverted\nLost\nClosed",
-   "default":"Open"
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Open\nPending\nQualified\nConverted\nLost\nClosed",
+   "default": "Open"
   },
-
   {
-   "fieldname":"naming_series",
-   "fieldtype":"Select",
-   "label":"Naming Series",
-   "options":"CE-.YYYY.-.#####",
-   "default":"CE-.YYYY.-.#####"
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "CE-.YYYY.-.#####",
+   "default": "CE-.YYYY.-.#####"
   },
-
   {
-   "fieldname":"source",
-   "fieldtype":"Select",
-   "label":"Source",
-   "options":"Phone\nWhatsApp\nFacebook\nInstagram\nMessenger\nEmail\nManual\nWebsite\nMeta Form"
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Source",
+   "options": "Phone\nWhatsApp\nFacebook\nInstagram\nMessenger\nEmail\nManual\nWebsite\nMeta Form"
   },
-
   {
-   "fieldname":"event_type",
-   "fieldtype":"Select",
-   "label":"Event Type",
-   "options":"Call\nChat\nEmail\nNote\nLead\nMeeting"
+   "fieldname": "event_type",
+   "fieldtype": "Select",
+   "label": "Event Type",
+   "options": "Call\nChat\nEmail\nNote\nLead\nMeeting"
   },
-
   {
-   "fieldname":"direction",
-   "fieldtype":"Select",
-   "label":"Direction",
-   "options":"Inbound\nOutbound"
+   "fieldname": "direction",
+   "fieldtype": "Select",
+   "label": "Direction",
+   "options": "Inbound\nOutbound"
   },
-
   {
-   "fieldname":"customer",
-   "fieldtype":"Link",
-   "label":"Customer",
-   "options":"Customer"
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer"
   },
-
   {
-   "fieldname":"lead",
-   "fieldtype":"Link",
-   "label":"Lead",
-   "options":"CRM Lead"
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "label": "Lead",
+   "options": "CRM Lead"
   },
-
   {
-   "fieldname":"employee",
-   "fieldtype":"Link",
-   "label":"Employee",
-   "options":"Employee"
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "label": "Employee",
+   "options": "Employee"
   },
-
   {
-   "fieldname":"call_intelligence",
-   "fieldtype":"Link",
-   "label":"Call Intelligence",
-   "options":"Call Intelligence"
+   "fieldname": "call_intelligence",
+   "fieldtype": "Link",
+   "label": "Call Intelligence",
+   "options": "Call Intelligence"
   },
-
   {
-   "fieldname":"phone",
-   "fieldtype":"Data",
-   "label":"Phone"
+   "fieldname": "phone",
+   "fieldtype": "Data",
+   "label": "Phone"
   },
-
   {
-   "fieldname":"email",
-   "fieldtype":"Data",
-   "label":"Email"
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "label": "Email"
   },
-
   {
-   "fieldname":"content",
-   "fieldtype":"Long Text",
-   "label":"Content"
+   "fieldname": "content",
+   "fieldtype": "Long Text",
+   "label": "Content"
   },
-
   {
-   "fieldname":"summary",
-   "fieldtype":"Long Text",
-   "label":"Summary"
+   "fieldname": "summary",
+   "fieldtype": "Long Text",
+   "label": "Summary"
   },
-
   {
-   "fieldname":"sentiment",
-   "fieldtype":"Select",
-   "label":"Sentiment",
-   "options":"Positive\nNeutral\nNegative"
+   "fieldname": "sentiment",
+   "fieldtype": "Select",
+   "label": "Sentiment",
+   "options": "Positive\nNeutral\nNegative"
   },
-
   {
-   "fieldname":"lead_score",
-   "fieldtype":"Int",
-   "label":"Lead Score"
+   "fieldname": "lead_score",
+   "fieldtype": "Int",
+   "label": "Lead Score"
   },
-
   {
-   "fieldname":"ai_score",
-   "fieldtype":"Float",
-   "label":"AI Score"
+   "fieldname": "ai_score",
+   "fieldtype": "Float",
+   "label": "AI Score"
   },
-
   {
-   "fieldname":"event_datetime",
-   "fieldtype":"Datetime",
-   "label":"Event Datetime"
+   "fieldname": "event_datetime",
+   "fieldtype": "Datetime",
+   "label": "Event Datetime"
   },
-
   {
-   "fieldname":"duration",
-   "fieldtype":"Duration",
-   "label":"Duration"
+   "fieldname": "duration",
+   "fieldtype": "Duration",
+   "label": "Duration"
   },
-
   {
-   "fieldname":"response_time",
-   "fieldtype":"Duration",
-   "label":"Response Time"
+   "fieldname": "response_time",
+   "fieldtype": "Duration",
+   "label": "Response Time"
   },
-
   {
-   "fieldname":"recording_file",
-   "fieldtype":"Attach",
-   "label":"Recording File"
+   "fieldname": "recording_file",
+   "fieldtype": "Attach",
+   "label": "Recording File"
   },
-
   {
-   "fieldname":"channel_id",
-   "fieldtype":"Data",
-   "label":"Channel ID"
+   "fieldname": "channel_id",
+   "fieldtype": "Data",
+   "label": "Channel ID"
   },
-
   {
-   "fieldname":"converted",
-   "fieldtype":"Check",
-   "label":"Converted"
+   "fieldname": "converted",
+   "fieldtype": "Check",
+   "label": "Converted"
   },
-
   {
-   "fieldname":"conversion_value",
-   "fieldtype":"Currency",
-   "label":"Conversion Value"
+   "fieldname": "conversion_value",
+   "fieldtype": "Currency",
+   "label": "Conversion Value"
   },
-
   {
-   "fieldname":"lost_reason",
-   "fieldtype":"Small Text",
-   "label":"Lost Reason"
+   "fieldname": "lost_reason",
+   "fieldtype": "Small Text",
+   "label": "Lost Reason"
   },
-
   {
-   "fieldname":"coaching_suggestion",
-   "fieldtype":"Long Text",
-   "label":"Coaching Suggestion"
+   "fieldname": "coaching_suggestion",
+   "fieldtype": "Long Text",
+   "label": "Coaching Suggestion"
+  },
+  {
+   "fieldname": "source_channel",
+   "fieldtype": "Data",
+   "label": "Source Channel"
+  },
+  {
+   "fieldname": "event_id",
+   "fieldtype": "Data",
+   "label": "Event ID",
+   "unique": 1,
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "conversation_id",
+   "fieldtype": "Data",
+   "label": "Conversation ID",
+   "search_index": 1
+  },
+  {
+   "fieldname": "customer360",
+   "fieldtype": "Link",
+   "label": "Customer 360",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "visa_application",
+   "fieldtype": "Link",
+   "label": "Visa Application",
+   "options": "Visa Application"
+  },
+  {
+   "fieldname": "lead_intake_queue",
+   "fieldtype": "Link",
+   "label": "Lead Intake Queue",
+   "options": "Lead Intake Queue",
+   "search_index": 1
+  },
+  {
+   "fieldname": "followup_reference",
+   "fieldtype": "Link",
+   "label": "Follow-up Reference",
+   "options": "ToDo"
+  },
+  {
+   "fieldname": "meta_campaign_name",
+   "fieldtype": "Data",
+   "label": "Meta Campaign Name"
+  },
+  {
+   "fieldname": "meta_campaign_id",
+   "fieldtype": "Data",
+   "label": "Meta Campaign ID"
+  },
+  {
+   "fieldname": "meta_adset_name",
+   "fieldtype": "Data",
+   "label": "Meta Adset Name"
+  },
+  {
+   "fieldname": "meta_adset_id",
+   "fieldtype": "Data",
+   "label": "Meta Adset ID"
+  },
+  {
+   "fieldname": "meta_ad_name",
+   "fieldtype": "Data",
+   "label": "Meta Ad Name"
+  },
+  {
+   "fieldname": "meta_ad_id",
+   "fieldtype": "Data",
+   "label": "Meta Ad ID"
+  },
+  {
+   "fieldname": "facebook_page_id",
+   "fieldtype": "Data",
+   "label": "Facebook Page ID"
+  },
+  {
+   "fieldname": "facebook_form_id",
+   "fieldtype": "Data",
+   "label": "Facebook Form ID"
+  },
+  {
+   "fieldname": "facebook_lead_id",
+   "fieldtype": "Data",
+   "label": "Facebook Lead ID",
+   "search_index": 1
+  },
+  {
+   "fieldname": "original_normalized_payload",
+   "fieldtype": "Long Text",
+   "label": "Original Normalized Payload"
+  },
+  {
+   "fieldname": "meta_attribution_json",
+   "fieldtype": "Long Text",
+   "label": "Meta Attribution JSON"
+  },
+  {
+   "fieldname": "processing_timeline",
+   "fieldtype": "Long Text",
+   "label": "Processing Timeline"
   }
-
  ],
-
- "permissions":[
-
+ "permissions": [
   {
-   "role":"System Manager",
-   "read":1,
-   "write":1,
-   "create":1,
-   "delete":1
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
   },
-
   {
-   "role":"CRM Manager",
-   "read":1,
-   "write":1,
-   "create":1
+   "role": "CRM Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
   },
-
   {
-   "role":"CRM User",
-   "read":1,
-   "write":1,
-   "create":1
+   "role": "CRM User",
+   "read": 1,
+   "write": 1,
+   "create": 1
   }
-
  ]
-
 }

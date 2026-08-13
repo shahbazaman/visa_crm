@@ -38,7 +38,7 @@ class TestPipelineResume(FrappeTestCase):
         self.assertEqual(enqueue.call_count,1)
         self.assertEqual(frappe.db.count("CRM Lead",{"facebook_lead_id":self.source}),1)
         self.assertEqual(frappe.db.count("Visa Application",{"meta_intake_key":f"visa:{self.queue}"}),1)
-        self.assertEqual(frappe.db.count("Communication Event",{"event_id":f"meta:{self.source}"}),1)
+        self.assertEqual(frappe.db.count("Communication Event",{"event_id":["in",[f"meta:lead:{self.source}",f"meta:{self.source}"]]}),1)
         self.assertEqual(frappe.db.count("ToDo",{"meta_intake_key":f"followup:{self.queue}"}),1)
         self.assertEqual(frappe.db.count("Lead Intake AI Job",{"queue":self.queue}),1)
 
@@ -87,5 +87,5 @@ class TestPipelineResume(FrappeTestCase):
             self.assertTrue(retry_stage(self.queue,"COMMUNICATION_EVENT"))
             recovered=intake_processor.process_queue(self.queue)
         self.assertTrue(recovered["ok"])
-        self.assertEqual(frappe.db.count("Communication Event",{"event_id":f"meta:{self.source}"}),1)
+        self.assertEqual(frappe.db.count("Communication Event",{"event_id":["in",[f"meta:lead:{self.source}",f"meta:{self.source}"]]}),1)
         self.assertEqual(frappe.db.count("CRM Lead",{"facebook_lead_id":self.source}),1)

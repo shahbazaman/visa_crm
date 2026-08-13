@@ -223,11 +223,19 @@ def visa_application(queue_name,claim=None):
 
 def communication_event(queue_name,claim=None):
     queue=_business_context(queue_name)
-    event_id=f"meta:{queue.data.get('source_lead_id')}"
-    attribution={"campaign_id":queue.data.get("campaign_id"),"campaign_name":queue.data.get("campaign_name"),"adset_id":queue.data.get("adset_id"),"adset_name":queue.data.get("adset_name"),"ad_id":queue.data.get("ad_id"),"ad_name":queue.data.get("ad_name"),"page_id":queue.data.get("page_id"),"form_id":queue.data.get("form_id"),"lead_id":queue.data.get("source_lead_id")}
+    lead_id=queue.data.get("source_lead_id") or queue.queue.get("source_lead_id")
+    if not lead_id or str(lead_id).strip().lower() in ("none","null",""):
+        raise ValueError(f"Cannot generate Communication Event idempotency key: invalid source_lead_id in queue '{queue_name}'")
+    event_id=f"meta:lead:{lead_id}"
+    legacy_event_id=f"meta:{lead_id}"
+    attribution={"campaign_id":queue.data.get("campaign_id"),"campaign_name":queue.data.get("campaign_name"),"adset_id":queue.data.get("adset_id"),"adset_name":queue.data.get("adset_name"),"ad_id":queue.data.get("ad_id"),"ad_name":queue.data.get("ad_name"),"page_id":queue.data.get("page_id"),"form_id":queue.data.get("form_id"),"lead_id":lead_id}
     timeline={"webhook":str(queue.queue.creation),"graph":str(queue.queue.get("processing_started_at") or ""),"communication":now()}
-    values={"event_id":event_id,"source":"Meta Form","source_channel":"Meta Lead Ads","event_type":"Lead","direction":"Inbound","customer":queue.customer,"customer360":queue.customer,"lead":queue.lead,"visa_application":queue.visa,"phone":queue.data.get("phone"),"email":queue.data.get("email"),"content":safe_json_dumps(queue.data.get("custom_answers")),"summary":f"Meta Lead Ads intake for {queue.data.get('customer_name') or queue.data.get('phone') or queue.data.get('email')}","event_datetime":now(),"channel_id":queue_name,"conversation_id":event_id,"lead_intake_queue":queue_name,"meta_campaign_name":queue.data.get("campaign_name"),"meta_campaign_id":queue.data.get("campaign_id"),"meta_adset_name":queue.data.get("adset_name"),"meta_adset_id":queue.data.get("adset_id"),"meta_ad_name":queue.data.get("ad_name"),"meta_ad_id":queue.data.get("ad_id"),"facebook_page_id":queue.data.get("page_id"),"facebook_form_id":queue.data.get("form_id"),"facebook_lead_id":queue.data.get("source_lead_id"),"original_normalized_payload":queue.queue.get("normalized_payload"),"meta_attribution_json":safe_json_dumps(attribution),"processing_timeline":safe_json_dumps(timeline)}
-    existing=frappe.db.get_value("Communication Event",{"event_id":event_id},"name")
+    values={"event_id":event_id,"source":"Meta Form","source_channel":"Meta Lead Ads","event_type":"Lead","direction":"Inbound","customer":queue.customer,"customer360":queue.customer,"lead":queue.lead,"visa_application":queue.visa,"phone":queue.data.get("phone"),"email":queue.data.get("email"),"content":safe_json_dumps(queue.data.get("custom_answers")),"summary":f"Meta Lead Ads intake for {queue.data.get('customer_name') or queue.data.get('phone') or queue.data.get('email')}","event_datetime":now(),"channel_id":queue_name,"conversation_id":event_id,"lead_intake_queue":queue_name,"meta_campaign_name":queue.data.get("campaign_name"),"meta_campaign_id":queue.data.get("campaign_id"),"meta_adset_name":queue.data.get("adset_name"),"meta_adset_id":queue.data.get("adset_id"),"meta_ad_name":queue.data.get("ad_name"),"meta_ad_id":queue.data.get("ad_id"),"facebook_page_id":queue.data.get("page_id"),"facebook_form_id":queue.data.get("form_id"),"facebook_lead_id":lead_id,"original_normalized_payload":queue.queue.get("normalized_payload"),"meta_attribution_json":safe_json_dumps(attribution),"processing_timeline":safe_json_dumps(timeline)}
+    existing=(
+        frappe.db.get_value("Communication Event",{"event_id":event_id},"name")
+        or frappe.db.get_value("Communication Event",{"event_id":legacy_event_id},"name")
+        or (has_field("Communication Event","facebook_lead_id") and lead_id and frappe.db.get_value("Communication Event",{"facebook_lead_id":lead_id},"name"))
+    )
     if existing:
         event=existing
         current=frappe.db.get_value("Communication Event",event,[field for field in values if has_field("Communication Event",field)],as_dict=True) or {}
@@ -243,7 +251,10 @@ def communication_event(queue_name,claim=None):
             doc.insert(ignore_permissions=True)
             event=doc.name
         except frappe.DuplicateEntryError:
-            event=frappe.db.get_value("Communication Event",{"event_id":event_id},"name")
+            event=(
+                frappe.db.get_value("Communication Event",{"event_id":event_id},"name")
+                or frappe.db.get_value("Communication Event",{"event_id":legacy_event_id},"name")
+            )
             if not event:
                 raise
     set_values("Lead Intake Queue",queue_name,{"communication_event":event})

@@ -69,7 +69,6 @@ class TestDocumentReuseIdempotency(FrappeTestCase):
             patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()),
             patch("visa_crm.api.pipeline_stage_services.fetch_lead", return_value=graph),
             patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"),
-            patch("visa_crm.api.lead_assignment._is_working", return_value=True),
         ):
             intake_processor.process_queue(qname)
 
@@ -101,7 +100,6 @@ class TestDocumentReuseIdempotency(FrappeTestCase):
             patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()),
             patch("visa_crm.api.pipeline_stage_services.fetch_lead", return_value=graph),
             patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"),
-            patch("visa_crm.api.lead_assignment._is_working", return_value=True),
         ):
             intake_processor.process_queue(qname)
 
@@ -121,7 +119,6 @@ class TestDocumentReuseIdempotency(FrappeTestCase):
             patch("visa_crm.api.pipeline_stage_services.get_meta_settings", return_value=frappe._dict()),
             patch("visa_crm.api.pipeline_stage_services.fetch_lead", return_value=graph),
             patch("visa_crm.api.pipeline_stage_services.frappe.enqueue"),
-            patch("visa_crm.api.lead_assignment._is_working", return_value=True),
         ):
             res1 = intake_processor.process_queue(qname)
             res2 = intake_processor.process_queue(qname)
