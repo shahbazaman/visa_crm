@@ -144,3 +144,19 @@ class TestMetaPipelineHardening(unittest.TestCase):
 
         # Cleanup
         frappe.db.rollback()
+
+    def test_classification_blocked_when_normalize_is_skipped(self):
+        test_lead_id = f"996{int(time.time())}123"
+        queue = frappe.get_doc({
+            "doctype": "Lead Intake Queue",
+            "source_lead_id": test_lead_id,
+            "status": "Failed"
+        }).insert(ignore_permissions=True)
+
+        pipeline_engine.ensure_stage_ledger(queue.name)
+        frappe.db.set_value("Lead Intake Stage", f"{queue.name}:NORMALIZE", {"state": "SKIPPED"})
+
+        pipeline_engine.rollup_queue(queue.name)
+        class_stage = pipeline_engine._stage_row(queue.name, "CLASSIFICATION")
+        self.assertEqual(class_stage.state, "BLOCKED", "CLASSIFICATION stage must remain BLOCKED when NORMALIZE is SKIPPED")
+        frappe.db.rollback()
