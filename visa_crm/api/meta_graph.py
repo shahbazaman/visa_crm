@@ -110,6 +110,8 @@ def _get(path, params):
         err_subcode = error.get("error_subcode") or error.get("subcode")
         if "Object with ID" in raw_msg and "None" in raw_msg:
             message = f"Meta Graph API Permission Error ({raw_msg}): Page Access Token lacks 'leads_retrieval' permission or leadgen ID {path} belongs to a different Page/App."
+        elif err_code == 100 and "nonexisting field" in raw_msg:
+            message = f"Meta Graph API Permission Error ({raw_msg}): Page Access Token lacks 'leads_retrieval' permission."
         else:
             message = raw_msg
         meta_debug_log("meta_graph_error", path=path, status_code=response.status_code, error=message, graph_request=request, graph_response=data)
@@ -117,6 +119,7 @@ def _get(path, params):
         # 100/33: object does not exist; 190: invalid/expired token; 4: rate limit (retryable)
         is_permanent = (
             (err_code == 100 and err_subcode in (33, 100)) or  # object not found / nonexistent field
+            (err_code == 100 and "nonexisting field" in raw_msg) or
             err_code == 190 or  # invalid/expired OAuth token
             response.status_code == 400 and err_subcode == 33  # explicit object-not-found
         )

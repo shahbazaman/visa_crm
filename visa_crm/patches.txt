@@ -37,3 +37,4 @@ visa_crm.patches.remove_employee_dashboard_workspace_v2
 visa_crm.patches.setup_employee_performance_dashboard_page
 visa_crm.patches.v1_counselor_round_robin
 visa_crm.patches.v1_email_lead_fields
+visa_crm.patches.fix_meta_access_token_length

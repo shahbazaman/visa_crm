@@ -6,7 +6,7 @@ STAGES=(
     {"stage":"GRAPH_DOWNLOAD","sequence":20,"requirement_class":"Core","max_attempts":5,"dependencies":("WEBHOOK",)},
     {"stage":"NORMALIZE","sequence":30,"requirement_class":"Core","max_attempts":5,"dependencies":("GRAPH_DOWNLOAD",)},
     {"stage":"CLASSIFICATION","sequence":35,"requirement_class":"Core","max_attempts":5,"dependencies":("NORMALIZE",)},
-    {"stage":"CUSTOMER360","sequence":40,"requirement_class":"Core","max_attempts":5,"dependencies":("CLASSIFICATION",)},
+    {"stage":"CUSTOMER360","sequence":40,"requirement_class":"Core","max_attempts":5,"dependencies":("CLASSIFICATION","NORMALIZE")},
     {"stage":"CRM_LEAD","sequence":50,"requirement_class":"Core","max_attempts":5,"dependencies":("CLASSIFICATION","CUSTOMER360")},
     {"stage":"LEAD_WORKFLOW","sequence":55,"requirement_class":"Required Downstream","max_attempts":5,"dependencies":("CRM_LEAD",)},
     {"stage":"VISA_APPLICATION","sequence":60,"requirement_class":"Required Downstream","max_attempts":5,"dependencies":("CRM_LEAD",)},

@@ -16633,7 +16633,7 @@
     "in_standard_filter": 0,
     "is_virtual": 0,
     "label": "Access Token",
-    "length": 0,
+    "length": 1000,
     "link_filters": null,
     "make_attachment_public": 0,
     "mandatory_depends_on": null,
