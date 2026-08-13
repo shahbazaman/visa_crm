@@ -48,8 +48,10 @@ class TestCounselorRoundRobin(unittest.TestCase):
         for dept in ("Holidays", "Global Visa", "Reservation"):
             if not frappe.db.exists("Department", dept):
                 d = frappe.new_doc("Department")
+                d.name = dept
                 d.department_name = dept
                 d.parent_department = "All Departments"
+                d.flags.ignore_mandatory = True
                 d.insert(ignore_permissions=True, ignore_if_duplicate=True)
 
         # Create test users for employees
@@ -65,11 +67,12 @@ class TestCounselorRoundRobin(unittest.TestCase):
         # Create test employees for Holidays
         for i in range(1, 4):
             emp_id = f"TEST-HOLIDAYS-{i:03d}"
-            if not frappe.db.exists("Employee", emp_id):
+            if not frappe.db.exists("Employee", {"user_id": f"test_holidays_counselor_{i}@test.local"}):
                 e = frappe.new_doc("Employee")
                 e.name = emp_id
                 e.employee_name = f"Test Holidays Counselor {i}"
-                e.department = "Holidays"
+                e.first_name = f"Test Holidays Counselor {i}"
+                e.department = frappe.db.get_value("Department", {"department_name": "Holidays"}, "name") or "Holidays"
                 e.status = "Active"
                 e.user_id = f"test_holidays_counselor_{i}@test.local"
                 e.date_of_birth = "1990-01-01"
@@ -88,11 +91,12 @@ class TestCounselorRoundRobin(unittest.TestCase):
             u.insert(ignore_permissions=True)
 
         gv_emp = "TEST-GLOBALVISA-001"
-        if not frappe.db.exists("Employee", gv_emp):
+        if not frappe.db.exists("Employee", {"user_id": gv_user}):
             e = frappe.new_doc("Employee")
             e.name = gv_emp
             e.employee_name = "Test Global Visa Counselor 1"
-            e.department = "Global Visa"
+            e.first_name = "Test Global Visa Counselor 1"
+            e.department = frappe.db.get_value("Department", {"department_name": "Global Visa"}, "name") or "Global Visa"
             e.status = "Active"
             e.user_id = gv_user
             e.date_of_birth = "1990-01-01"
@@ -237,6 +241,7 @@ class TestCounselorRoundRobin(unittest.TestCase):
             doc.priority = "Medium"
             if doc.meta.has_field("meta_intake_key"):
                 doc.meta_intake_key = f"assignment:{queue_name}"
+            doc.flags.ignore_links = True
             doc.insert(ignore_permissions=True)
 
         # Second call: should reuse the existing assignment

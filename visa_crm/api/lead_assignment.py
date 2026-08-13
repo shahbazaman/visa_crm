@@ -38,7 +38,8 @@ from visa_crm.api.meta_utils import (
 #: Department name prefixes that receive automatic round-robin assignment in V1.
 #: Any Frappe department whose name starts with one of these prefixes is eligible.
 #: This handles company-suffix variants like "Holidays - HNC" or "Global Visa - Client".
-SUPPORTED_DEPARTMENT_PREFIXES = ("Holidays", "Global Visa")
+SUPPORTED_DEPARTMENT_PREFIXES = {"Holidays", "Global Visa"}
+SUPPORTED_DEPARTMENTS = SUPPORTED_DEPARTMENT_PREFIXES
 
 
 def is_supported_department(department):
@@ -418,7 +419,7 @@ def _eligible_employees_for_department(department):
 
     Employees must be:
     - Status = Active
-    - Assigned to the department (if department is specified)
+    - Assigned to the department (prefix matching handles company suffixes like 'Holidays - HNC')
     - Have a valid user_id (required for CRM access)
 
     Returns list sorted by ``name`` asc for determinism.
@@ -426,17 +427,18 @@ def _eligible_employees_for_department(department):
     if not has_doctype("Employee"):
         return []
 
-    filters = {"status": "Active"}
+    filters = [["Employee", "status", "=", "Active"]]
     if department:
-        filters["department"] = department
+        filters.append(["Employee", "department", "like", f"{department}%"])
 
     employees = frappe.get_all("Employee", filters=filters, fields=["name", "user_id"], order_by="name asc")
 
-    # Only include employees with valid Frappe User accounts
     valid = []
     for emp in employees:
         if emp.user_id and frappe.db.exists("User", emp.user_id):
             valid.append(emp.name)
+
+
 
     return valid
 
@@ -613,9 +615,8 @@ def _existing_assignment(queue_name):
 
 def _check_override_permission():
     """Verify caller has System Manager or CRM Manager role."""
-    if not (
-        frappe.has_role("System Manager") or frappe.has_role("CRM Manager")
-    ):
+    roles = set(frappe.get_roles())
+    if not ("System Manager" in roles or "CRM Manager" in roles):
         frappe.throw(
             "Only System Manager or CRM Manager can manually override counselor assignment.",
             frappe.PermissionError,
