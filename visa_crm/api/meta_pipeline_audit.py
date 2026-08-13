@@ -270,6 +270,8 @@ def _latest_value(doctype, filters, field):
     return rows[0].get(field) if rows else None
 
 def _permission_failures():
+    if not has_field("Lead Intake Queue", "graph_error_message"):
+        return 0
     rows = frappe.get_all("Lead Intake Queue", fields=["name", "graph_error_message"], filters={"graph_error_message": ["is", "set"]}, limit=500)
     return len([row for row in rows if "permission" in str(row.get("graph_error_message") or "").lower() or "oauth" in str(row.get("graph_error_message") or "").lower()])
 

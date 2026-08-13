@@ -295,7 +295,12 @@ def _retry_due(row,at):
     return not row.next_retry_at or get_datetime(row.next_retry_at)<=at
 
 def _attempts_available(row):
-    return not cint(row.max_attempts) or cint(row.attempt_count)<cint(row.max_attempts)
+    max_att = cint(row.max_attempts) if getattr(row, "max_attempts", None) is not None else STAGE_BY_NAME.get(row.stage, {}).get("max_attempts", 5)
+    if max_att == 0 and STAGE_BY_NAME.get(row.stage, {}).get("max_attempts"):
+        max_att = STAGE_BY_NAME[row.stage]["max_attempts"]
+    if max_att <= 0:
+        return True
+    return cint(row.attempt_count) < max_att
 
 def _validate_claim(claim):
     if not claim or not getattr(claim,"name",None) or not getattr(claim,"lease_token",None):
