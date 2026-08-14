@@ -281,8 +281,7 @@ def counselor_assignment(queue_name,claim=None):
     except NotApplicable as exc:
         # Unsupported department: mark stage SKIPPED, do NOT fail pipeline
         record(queue=queue_name,stage="COUNSELOR_ASSIGNMENT",execution_type="Stage",result="SKIPPED",details={"reason":str(exc)})
-        if has_field("CRM Lead","assignment_status"):
-            frappe.db.set_value("CRM Lead",queue.lead,"assignment_status","Not Applicable",update_modified=False)
+        _set_assignment_status(queue.lead, "Needs Assignment")
         return {"employee":None,"assignment_type":"NOT_APPLICABLE","result_doctype":None,"result_name":None,"output_hash":_hash({"not_applicable":str(exc)})}
     if not employee:
         raise NoEligibleCounselor("No eligible counselor found for the department")
@@ -555,9 +554,11 @@ def _business_context(queue_name):
     visa=queue.get("visa_application")
     return frappe._dict({"queue":queue,"data":data,"lead":lead,"customer":customer,"visa":visa})
 
-def _set_assignment_status(lead,status):
-    if has_field("CRM Lead","assignment_status"):
-        frappe.db.set_value("CRM Lead",lead,"assignment_status",status,update_modified=False)
+def _set_assignment_status(lead, status):
+    if has_field("CRM Lead", "assignment_status") and lead:
+        valid = ("Unassigned", "Assigned", "Needs Assignment")
+        val = status if status in valid else "Needs Assignment"
+        frappe.db.set_value("CRM Lead", lead, "assignment_status", val, update_modified=False)
 
 def _cascade_permanent_graph_failure_if_no_evidence(queue_name,queue,error_message):
     """Skip NORMALIZE (and thereby all dependent stages) when GRAPH_DOWNLOAD has

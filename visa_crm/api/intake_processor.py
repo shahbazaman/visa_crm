@@ -105,8 +105,8 @@ def _ignore_non_leadgen(queue_name):
     if not event_type:
         payload=load_json(frappe.db.get_value("Lead Intake Queue",queue_name,"raw_payload"),{})
         event_type=(payload.get("change") or {}).get("field")
-    if event_type and event_type!="leadgen":
-        _ignore_queue(queue_name,f"Ignored Meta event field {event_type}; only leadgen events are processed")
+    if event_type and event_type not in ("leadgen", "leadgen_update"):
+        _ignore_queue(queue_name, f"Ignored Meta event field {event_type}; only leadgen events are processed")
         return True
     return False
 
