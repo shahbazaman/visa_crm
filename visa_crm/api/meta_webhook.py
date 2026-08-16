@@ -80,17 +80,23 @@ def receive():
 
     frappe.db.commit()
 
-    # Asynchronously enqueue processing for immediate real-time execution
+    # Process immediately and synchronously, with background enqueue fallback
     for qname in new_queues:
         try:
-            frappe.enqueue(
-                "visa_crm.api.intake_processor.process_queue",
-                queue="default",
-                docname=qname,
-                enqueue_after_commit=False
-            )
+            from visa_crm.api.intake_processor import process_queue
+            process_queue(qname)
+            frappe.db.commit()
         except Exception as exc:
-            log_info("meta_webhook_enqueue_failed", queue=qname, error=str(exc))
+            log_info("meta_webhook_immediate_process_failed", queue=qname, error=str(exc))
+            try:
+                frappe.enqueue(
+                    "visa_crm.api.intake_processor.process_queue",
+                    queue="default",
+                    docname=qname,
+                    enqueue_after_commit=True
+                )
+            except Exception:
+                pass
 
     frappe.response["http_status_code"] = 200
     log_info("meta_webhook_received", stored=stored, updates=updates, duplicates=duplicates)

@@ -66,7 +66,7 @@ def process_queue(docname,stage_budget=20):
 def _pending_rows(limit):
     limit=max(int(limit or 100),1)
     names=[]
-    initial=frappe.get_all("Lead Intake Queue",filters={"status":["in",["Lead Received","Fetching Meta Lead","Failed","Action Required","Needs Retry"]]},fields=["name"],order_by="creation asc",limit_page_length=limit)
+    initial=frappe.get_all("Lead Intake Queue",filters={"status":["in",["Lead Received","Pending Processing","Fetching Meta Lead","Failed","Action Required","Needs Retry"]]},fields=["name"],order_by="creation asc",limit_page_length=limit)
     names.extend(row.name for row in initial)
     remaining=max(limit-len(names),0)
     if remaining and frappe.db.exists("DocType","Lead Intake Stage"):

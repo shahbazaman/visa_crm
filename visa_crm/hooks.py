@@ -71,6 +71,9 @@ doctype_js = {
 }
 doctype_list_js = {"CRM Lead": "public/js/crm_lead_list.js"}
 scheduler_events = {
+    "all": [
+        "visa_crm.api.intake_processor.process_pending"
+    ],
     "cron": {
         "* * * * *": [
             "visa_crm.api.gemini_service.process_unprocessed_audio_files",
