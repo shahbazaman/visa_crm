@@ -72,7 +72,8 @@ doctype_js = {
 doctype_list_js = {"CRM Lead": "public/js/crm_lead_list.js"}
 scheduler_events = {
     "all": [
-        "visa_crm.api.intake_processor.process_pending"
+        "visa_crm.api.intake_processor.process_pending",
+        "visa_crm.api.meta_poller.poll_meta_leads_cron"
     ],
     "cron": {
         "* * * * *": [
@@ -80,6 +81,7 @@ scheduler_events = {
             "visa_crm.api.android_metadata.process_pending_metadata_pairs",
             "visa_crm.api.gemini_service.retry_failed_calls",
             "visa_crm.api.intake_processor.process_pending",
+            "visa_crm.api.meta_poller.poll_meta_leads_cron",
             "visa_crm.api.email_intake.process_pending_email_communications"
         ],
         "0 * * * *": ["visa_crm.api.crm_lifecycle.process_overdue_followups"]
