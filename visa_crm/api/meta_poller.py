@@ -10,22 +10,15 @@ from visa_crm.api.meta_utils import (
     safe_json_dumps,
     redact_meta_tokens
 )
-from visa_crm.api.meta_graph import MetaGraphError
+from visa_crm.api.meta_graph import _access_token, _page_access_token, MetaGraphError
 
 
 def get_configured_access_token():
-    """Retrieve the decrypted Meta System User access token from Meta Settings."""
+    """Retrieve the decrypted Meta System User / Page access token from Meta Settings."""
     settings = get_meta_settings()
     if not settings:
         return None, None
-    token = None
-    if hasattr(settings, "get_password"):
-        try:
-            token = settings.get_password("meta_access_token", raise_exception=False)
-        except Exception:
-            token = None
-    if not token:
-        token = getattr(settings, "meta_access_token", None)
+    token = _page_access_token(settings) or _access_token(settings)
     page_id = getattr(settings, "page_id", None)
     return token, page_id
 
