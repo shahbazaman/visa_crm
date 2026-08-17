@@ -163,7 +163,7 @@ def sync_all_meta_leads(limit_per_form=50):
             if not lead_id or lead_id.lower() in ("none", "null", ""):
                 continue
 
-            existing_queue = frappe.db.exists("Lead Intake Queue", {"source_lead_id": lead_id})
+            existing_queue = frappe.db.exists("Lead Intake Queue", {"source_lead_id": lead_id}) or frappe.db.get_value("Lead Intake Queue", {"source_lead_id": str(lead_id).strip()}, "name")
             if existing_queue:
                 already_existing += 1
                 q_status = frappe.db.get_value("Lead Intake Queue", existing_queue, "status")

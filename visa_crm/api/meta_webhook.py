@@ -181,12 +181,17 @@ def _insert_queue(item,event_log=None):
         set_if_has(doc,field,value)
     try:
         doc.insert(ignore_permissions=True)
-        return doc.name,True
-    except frappe.DuplicateEntryError:
-        canonical=_queue_exists(item["source_lead_id"])
-        if not canonical:
-            raise
-        return canonical,False
+        return doc.name, True
+    except (frappe.DuplicateEntryError, frappe.UniqueValidationError, Exception) as exc:
+        canonical = _queue_exists(item["source_lead_id"])
+        if canonical:
+            return canonical, False
+        # If DB unique constraint error occurred on source_lead_id
+        if "uniq_meta_source_lead_id" in str(exc) or "Duplicate entry" in str(exc):
+            existing = frappe.db.get_value("Lead Intake Queue", {"source_lead_id": str(item["source_lead_id"]).strip()}, "name")
+            if existing:
+                return existing, False
+        raise
 
 def _lead_source():
     settings = get_meta_settings()
