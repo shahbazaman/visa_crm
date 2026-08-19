@@ -192,6 +192,7 @@ def _password_or_value(settings, fieldname):
 def _secret(settings):
     return _password_or_value(settings, "meta_app_secret") or frappe.conf.get("meta_app_secret")
 
+@frappe.whitelist()
 def check_page_subscription(settings=None):
     settings = settings or get_meta_settings()
     page_id = getattr(settings, "page_id", None) if settings else None
@@ -247,6 +248,7 @@ def _page_access_token(settings=None):
         pass
     return token
 
+@frappe.whitelist()
 def subscribe_page_leadgen(settings=None):
     settings = settings or get_meta_settings()
     page_id = getattr(settings, "page_id", None) if settings else None
@@ -262,4 +264,27 @@ def subscribe_page_leadgen(settings=None):
         return {"ok": is_ok, "response": data, "status_code": resp.status_code}
     except Exception as exc:
         log_info("subscribe_page_leadgen_failed", page_id=page_id, error=str(exc))
+        return {"ok": False, "error": str(exc)}
+
+
+@frappe.whitelist()
+def debug_meta_token():
+    """Debugs the current token against Meta Graph API /debug_token to inspect scopes and expiry."""
+    settings = get_meta_settings()
+    token = _access_token(settings)
+    app_id = getattr(settings, "meta_app_id", None) if settings else None
+    app_secret = _secret(settings)
+    if not token:
+        return {"ok": False, "error": "No access token configured"}
+
+    app_token = f"{app_id}|{app_secret}" if app_id and app_secret else token
+    url = f"https://graph.facebook.com/{GRAPH_VERSION}/debug_token"
+    params = {
+        "input_token": token,
+        "access_token": app_token
+    }
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        return {"ok": resp.status_code == 200, "status_code": resp.status_code, "data": resp.json().get("data", resp.json())}
+    except Exception as exc:
         return {"ok": False, "error": str(exc)}
