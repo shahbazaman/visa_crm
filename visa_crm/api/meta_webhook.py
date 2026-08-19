@@ -104,8 +104,15 @@ def receive():
     log_info("meta_webhook_received", stored=stored, updates=updates, duplicates=duplicates)
     return {"ok": True}
 
+@frappe.whitelist()
 def replay_payload(payload):
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except Exception:
+            payload = {}
     stored = updates = duplicates = 0
+    new_queues = []
     for item in _webhook_events(payload):
         event_log = _log_webhook_event(item, payload)
         if item.get("event_type") not in ("leadgen", "leadgen_update", "leads", "lead"):
@@ -120,10 +127,20 @@ def replay_payload(payload):
         _link_event(event_log, queue_name, frappe.db.get_value("Lead Intake Queue", queue_name, "status"))
         if created:
             stored += 1
+            new_queues.append(queue_name)
         else:
             duplicates += 1
     frappe.db.commit()
-    return {"ok": True, "stored": stored, "updates": updates, "duplicates": duplicates}
+
+    for qname in new_queues:
+        try:
+            from visa_crm.api.intake_processor import process_queue
+            process_queue(qname)
+            frappe.db.commit()
+        except Exception:
+            pass
+
+    return {"ok": True, "stored": stored, "updates": updates, "duplicates": duplicates, "new_queues": new_queues}
 
 def _valid_signature(raw):
     settings = get_meta_settings()
