@@ -56,9 +56,10 @@ def subscribe_page_webhooks():
 
 
 @frappe.whitelist()
-def get_page_lead_forms():
+def get_page_lead_forms(active_only=False):
     """
-    Fetches all Lead Forms associated with the configured Facebook Page with pagination.
+    Fetches Lead Forms associated with the configured Facebook Page.
+    If active_only=True, filters out archived/inactive forms to speed up polling.
     """
     token, page_id = get_configured_access_token()
     if not token or not page_id:
@@ -80,21 +81,23 @@ def get_page_lead_forms():
 
     try:
         while url:
-            response = requests.get(url, params=params, timeout=15)
+            response = requests.get(url, params=params, timeout=12)
             if response.status_code != 200:
                 break
             res_data = response.json()
             for f in res_data.get("data", []):
+                status = f.get("status")
+                if active_only and status != "ACTIVE":
+                    continue
                 forms.append({
                     "id": f.get("id"),
                     "name": f.get("name"),
-                    "status": f.get("status"),
+                    "status": status,
                     "leads_count": f.get("leads_count")
                 })
-            # Check for next page
             paging = res_data.get("paging", {})
             url = paging.get("next")
-            params = None  # URL already includes query params
+            params = None
     except Exception as exc:
         log_info("meta_fetch_forms_error", error=redact_meta_tokens(str(exc)))
 
@@ -107,7 +110,7 @@ def get_page_lead_forms():
 
 
 @frappe.whitelist()
-def fetch_form_leads(form_id, limit=200):
+def fetch_form_leads(form_id, limit=100):
     """
     Fetches all leads directly from a specific Meta Lead Form via Graph API with pagination support.
     """
@@ -120,13 +123,13 @@ def fetch_form_leads(form_id, limit=200):
     params = {
         "access_token": token,
         "fields": "id,created_time,field_data,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id",
-        "limit": min(int(limit or 200), 100)
+        "limit": min(int(limit or 100), 100)
     }
-    max_total = int(limit or 200)
+    max_total = int(limit or 100)
 
     try:
         while url and len(all_leads) < max_total:
-            response = requests.get(url, params=params, timeout=15)
+            response = requests.get(url, params=params, timeout=12)
             if response.status_code != 200:
                 log_info("meta_fetch_leads_failed", form_id=form_id, status=response.status_code, error=redact_meta_tokens(response.text))
                 break
@@ -145,24 +148,29 @@ def fetch_form_leads(form_id, limit=200):
 
 
 @frappe.whitelist()
-def sync_all_meta_leads(limit_per_form=200):
+def sync_all_meta_leads(limit_per_form=100, active_only=True):
     """
     Main active synchronization method:
-    1. Scans all active Lead Forms on the Facebook Page.
+    1. Scans active Lead Forms on the Facebook Page (and all configured IDs in Meta Settings).
     2. Fetches all leads directly via Graph API (following all pagination pages).
     3. Detects any leads not yet in Lead Intake Queue.
-    4. Automatically ingests, downloads, normalizes, and processes them through the full pipeline.
+    4. Automatically creates Meta Webhook Event and Lead Intake Queue records.
+    5. Immediately converts them through the 12-stage pipeline into CRM Lead & Customer.
     """
     token, page_id = get_configured_access_token()
     if not token:
         return {"ok": False, "error": "Meta access token not configured"}
 
-    forms = get_page_lead_forms()
+    forms = get_page_lead_forms(active_only=active_only)
     if not forms:
-        return {"ok": False, "message": "No active lead forms found on Meta Page"}
+        # Fallback to all forms if active filter returned none
+        forms = get_page_lead_forms(active_only=False)
+
+    if not forms:
+        return {"ok": False, "message": "No lead forms found on Meta Page"}
 
     from visa_crm.api.intake_processor import process_queue
-    from visa_crm.api.meta_webhook import _insert_queue, _lead_source
+    from visa_crm.api.meta_webhook import _insert_queue, _log_webhook_event
 
     total_synced = 0
     newly_created = []
@@ -201,7 +209,14 @@ def sync_all_meta_leads(limit_per_form=200):
                 "graph_lead_data": lead_item
             }
 
-            queue_name, created = _insert_queue(item_payload, event_log=None)
+            # Create Meta Webhook Event record for UI visibility
+            event_log = None
+            try:
+                event_log = _log_webhook_event(item_payload, {"entry": [{"id": page_id, "changes": [{"field": "leadgen", "value": {"leadgen_id": lead_id, "form_id": form_id, "page_id": page_id}}]}]})
+            except Exception:
+                pass
+
+            queue_name, created = _insert_queue(item_payload, event_log=event_log)
             frappe.db.commit()
 
             if created:
@@ -229,7 +244,7 @@ def poll_meta_leads_cron():
     are retrieved and processed even if webhooks are delayed.
     """
     try:
-        return sync_all_meta_leads(limit_per_form=200)
+        return sync_all_meta_leads(limit_per_form=50, active_only=True)
     except Exception as exc:
         log_info("meta_poll_cron_error", error=redact_meta_tokens(str(exc)))
         return {"ok": False, "error": redact_meta_tokens(str(exc))}

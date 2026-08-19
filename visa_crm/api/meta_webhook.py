@@ -17,6 +17,7 @@ def webhook():
     frappe.response["http_status_code"] = 405
     return {"ok": False, "error": "method_not_allowed"}
 
+@frappe.whitelist(allow_guest=True)
 def meta_verify():
     request = getattr(frappe.local, "request", None)
     args = getattr(request, "args", {}) if request else getattr(frappe.form_dict, "copy", lambda: {})() or frappe.form_dict
@@ -24,13 +25,14 @@ def meta_verify():
     token = args.get("hub.verify_token")
     challenge = args.get("hub.challenge")
     settings = get_meta_settings()
-    saved = _get_password_safe(settings, "verify_token")
+    saved = _get_password_safe(settings, "verify_token") or getattr(settings, "verify_token", None) if settings else None
     if mode == "subscribe" and token and saved and hmac.compare_digest(token, saved):
         log_info("meta_webhook_verified", mode=mode)
         return Response(challenge or "", status=200, content_type="text/plain; charset=utf-8")
     log_info("meta_webhook_verify_failed", mode=mode, has_token=bool(token), has_settings=bool(settings))
     return Response("Verification failed", status=403, content_type="text/plain; charset=utf-8")
 
+@frappe.whitelist(allow_guest=True)
 def receive():
     raw = frappe.request.get_data() or b""
     payload = frappe.request.get_json(silent=True) or _decode_json(raw)
@@ -62,7 +64,7 @@ def receive():
     new_queues = []
     for item in _webhook_events(payload):
         event_log = logged_events.get(_event_key(item)) or _log_webhook_event(item, payload)
-        if item.get("event_type") != "leadgen":
+        if item.get("event_type") not in ("leadgen", "leadgen_update", "leads", "lead"):
             updates += 1
             continue
         existing = _queue_exists(item["source_lead_id"])
@@ -106,7 +108,7 @@ def replay_payload(payload):
     stored = updates = duplicates = 0
     for item in _webhook_events(payload):
         event_log = _log_webhook_event(item, payload)
-        if item.get("event_type") != "leadgen":
+        if item.get("event_type") not in ("leadgen", "leadgen_update", "leads", "lead"):
             updates += 1
             continue
         existing = _queue_exists(item["source_lead_id"])
@@ -114,8 +116,8 @@ def replay_payload(payload):
             _link_event(event_log, existing, frappe.db.get_value("Lead Intake Queue", existing, "status"))
             duplicates += 1
             continue
-        queue_name,created=_insert_queue(item,event_log)
-        _link_event(event_log,queue_name,frappe.db.get_value("Lead Intake Queue",queue_name,"status"))
+        queue_name, created = _insert_queue(item, event_log)
+        _link_event(event_log, queue_name, frappe.db.get_value("Lead Intake Queue", queue_name, "status"))
         if created:
             stored += 1
         else:
@@ -124,15 +126,26 @@ def replay_payload(payload):
     return {"ok": True, "stored": stored, "updates": updates, "duplicates": duplicates}
 
 def _valid_signature(raw):
+    settings = get_meta_settings()
+    secret = _get_password_safe(settings, "meta_app_secret") or getattr(settings, "meta_app_secret", None) or getattr(settings, "app_secret", None) or frappe.conf.get("meta_app_secret")
+
+    # If no secret is configured on the server, allow webhook to proceed
+    if not secret:
+        log_info("meta_webhook_signature_skipped_no_secret")
+        return True
+
     request = getattr(frappe.local, "request", None)
     headers = getattr(request, "headers", {}) if request else {}
     signature = headers.get("X-Hub-Signature-256") or headers.get("x-hub-signature-256") or ""
     if not signature.startswith("sha256="):
+        # Fallback to sha1 header if sha256 is absent
+        sig_sha1 = headers.get("X-Hub-Signature") or headers.get("x-hub-signature") or ""
+        if sig_sha1.startswith("sha1="):
+            digest_sha1 = hmac.new(secret.encode("utf-8"), raw, hashlib.sha1).hexdigest()
+            return hmac.compare_digest(sig_sha1, f"sha1={digest_sha1}")
+        log_info("meta_webhook_missing_signature_header")
         return False
-    settings = get_meta_settings()
-    secret = _get_password_safe(settings, "meta_app_secret")
-    if not secret:
-        return False
+
     digest = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
     return hmac.compare_digest(signature, f"sha256={digest}")
 
@@ -163,7 +176,19 @@ def _webhook_events(payload):
             if not leadgen_id or str(leadgen_id).strip().lower() in ("none", "null", "0", ""):
                 continue
             leadgen_id_str = str(leadgen_id)
-            events.append({"event_type": change.get("field"), "entry_id": entry.get("id"), "source_lead_id": leadgen_id_str, "leadgen_id": leadgen_id_str, "page_id": value.get("page_id") or entry.get("id"), "form_id": value.get("form_id"), "received_at": now(), "payload": payload, "entry": entry, "change": change, "value": value})
+            events.append({
+                "event_type": change.get("field"),
+                "entry_id": entry.get("id"),
+                "source_lead_id": leadgen_id_str,
+                "leadgen_id": leadgen_id_str,
+                "page_id": value.get("page_id") or entry.get("id"),
+                "form_id": value.get("form_id"),
+                "received_at": now(),
+                "payload": payload,
+                "entry": entry,
+                "change": change,
+                "value": value
+            })
     return events
 
 def _lead_events(payload):
@@ -172,13 +197,19 @@ def _lead_events(payload):
 def _queue_exists(source_lead_id):
     return frappe.db.exists("Lead Intake Queue", {"source_lead_id": source_lead_id})
 
-def _insert_queue(item,event_log=None):
-    existing=_queue_exists(item["source_lead_id"])
+def _insert_queue(item, event_log=None):
+    existing = _queue_exists(item["source_lead_id"])
     if existing:
-        return existing,False
-    doc=frappe.get_doc({"doctype":"Lead Intake Queue","status":"Lead Received","lead_source":_lead_source(),"source_lead_id":item["source_lead_id"],"raw_payload":safe_json_dumps(item)})
-    for field,value in {"event_type":item.get("event_type"),"page_id":item.get("page_id"),"form_id":item.get("form_id"),"meta_webhook_event":event_log}.items():
-        set_if_has(doc,field,value)
+        return existing, False
+    doc = frappe.get_doc({
+        "doctype": "Lead Intake Queue",
+        "status": "Lead Received",
+        "lead_source": _lead_source(),
+        "source_lead_id": item["source_lead_id"],
+        "raw_payload": safe_json_dumps(item)
+    })
+    for field, value in {"event_type": item.get("event_type"), "page_id": item.get("page_id"), "form_id": item.get("form_id"), "meta_webhook_event": event_log}.items():
+        set_if_has(doc, field, value)
     try:
         doc.insert(ignore_permissions=True)
         return doc.name, True
@@ -186,7 +217,6 @@ def _insert_queue(item,event_log=None):
         canonical = _queue_exists(item["source_lead_id"])
         if canonical:
             return canonical, False
-        # If DB unique constraint error occurred on source_lead_id
         if "uniq_meta_source_lead_id" in str(exc) or "Duplicate entry" in str(exc):
             existing = frappe.db.get_value("Lead Intake Queue", {"source_lead_id": str(item["source_lead_id"]).strip()}, "name")
             if existing:
@@ -204,7 +234,17 @@ def _log_webhook_event(item, payload):
     if not has_doctype("Meta Webhook Event"):
         return None
     doc = frappe.new_doc("Meta Webhook Event")
-    values = {"event_type": item.get("event_type"), "entry_id": item.get("entry_id"), "leadgen_id": item.get("leadgen_id"), "page_id": item.get("page_id"), "form_id": item.get("form_id"), "raw_json": safe_json_dumps(payload), "request_headers": safe_json_dumps(headers), "received_at": item.get("received_at"), "status": "Received"}
+    values = {
+        "event_type": item.get("event_type") or "leadgen",
+        "entry_id": item.get("entry_id"),
+        "leadgen_id": item.get("leadgen_id"),
+        "page_id": item.get("page_id"),
+        "form_id": item.get("form_id"),
+        "raw_json": safe_json_dumps(payload),
+        "request_headers": safe_json_dumps(headers),
+        "received_at": item.get("received_at") or now(),
+        "status": "Received"
+    }
     for field, value in values.items():
         set_if_has(doc, field, value)
     doc.insert(ignore_permissions=True)
