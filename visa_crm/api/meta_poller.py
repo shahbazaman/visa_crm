@@ -58,8 +58,7 @@ def subscribe_page_webhooks():
 @frappe.whitelist()
 def get_page_lead_forms():
     """
-    Fetches all Lead Forms associated with the configured Facebook Page.
-    Returns list of dicts with 'id', 'name', 'status'.
+    Fetches all Lead Forms associated with the configured Facebook Page with pagination.
     """
     token, page_id = get_configured_access_token()
     if not token or not page_id:
@@ -71,25 +70,31 @@ def get_page_lead_forms():
         raw_ids = str(settings.lead_form_ids).replace(",", "\n").splitlines()
         configured_form_ids = [fid.strip() for fid in raw_ids if fid.strip()]
 
+    forms = []
     url = f"https://graph.facebook.com/v21.0/{page_id}/leadgen_forms"
     params = {
         "access_token": token,
         "fields": "id,name,status,leads_count,created_time",
-        "limit": 50
+        "limit": 100
     }
 
-    forms = []
     try:
-        response = requests.get(url, params=params, timeout=10)
-        if response.status_code == 200:
-            data = response.json().get("data", [])
-            for f in data:
+        while url:
+            response = requests.get(url, params=params, timeout=15)
+            if response.status_code != 200:
+                break
+            res_data = response.json()
+            for f in res_data.get("data", []):
                 forms.append({
                     "id": f.get("id"),
                     "name": f.get("name"),
                     "status": f.get("status"),
                     "leads_count": f.get("leads_count")
                 })
+            # Check for next page
+            paging = res_data.get("paging", {})
+            url = paging.get("next")
+            params = None  # URL already includes query params
     except Exception as exc:
         log_info("meta_fetch_forms_error", error=redact_meta_tokens(str(exc)))
 
@@ -102,39 +107,49 @@ def get_page_lead_forms():
 
 
 @frappe.whitelist()
-def fetch_form_leads(form_id, limit=50):
+def fetch_form_leads(form_id, limit=200):
     """
-    Fetches the latest leads directly from a specific Meta Lead Form via Graph API.
+    Fetches all leads directly from a specific Meta Lead Form via Graph API with pagination support.
     """
     token, _ = get_configured_access_token()
     if not token or not form_id:
         return []
 
+    all_leads = []
     url = f"https://graph.facebook.com/v21.0/{form_id}/leads"
     params = {
         "access_token": token,
         "fields": "id,created_time,field_data,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id",
-        "limit": int(limit or 50)
+        "limit": min(int(limit or 200), 100)
     }
+    max_total = int(limit or 200)
 
     try:
-        response = requests.get(url, params=params, timeout=12)
-        if response.status_code == 200:
-            return response.json().get("data", [])
-        else:
-            log_info("meta_fetch_leads_failed", form_id=form_id, status=response.status_code, error=redact_meta_tokens(response.text))
-            return []
+        while url and len(all_leads) < max_total:
+            response = requests.get(url, params=params, timeout=15)
+            if response.status_code != 200:
+                log_info("meta_fetch_leads_failed", form_id=form_id, status=response.status_code, error=redact_meta_tokens(response.text))
+                break
+            res_data = response.json()
+            data = res_data.get("data", [])
+            if not data:
+                break
+            all_leads.extend(data)
+            paging = res_data.get("paging", {})
+            url = paging.get("next")
+            params = None
     except Exception as exc:
         log_info("meta_fetch_leads_exception", form_id=form_id, error=redact_meta_tokens(str(exc)))
-        return []
+
+    return all_leads
 
 
 @frappe.whitelist()
-def sync_all_meta_leads(limit_per_form=50):
+def sync_all_meta_leads(limit_per_form=200):
     """
     Main active synchronization method:
     1. Scans all active Lead Forms on the Facebook Page.
-    2. Fetches latest leads directly via Graph API.
+    2. Fetches all leads directly via Graph API (following all pagination pages).
     3. Detects any leads not yet in Lead Intake Queue.
     4. Automatically ingests, downloads, normalizes, and processes them through the full pipeline.
     """
@@ -214,7 +229,7 @@ def poll_meta_leads_cron():
     are retrieved and processed even if webhooks are delayed.
     """
     try:
-        return sync_all_meta_leads(limit_per_form=25)
+        return sync_all_meta_leads(limit_per_form=200)
     except Exception as exc:
         log_info("meta_poll_cron_error", error=redact_meta_tokens(str(exc)))
         return {"ok": False, "error": redact_meta_tokens(str(exc))}
