@@ -248,3 +248,75 @@ def poll_meta_leads_cron():
     except Exception as exc:
         log_info("meta_poll_cron_error", error=redact_meta_tokens(str(exc)))
         return {"ok": False, "error": redact_meta_tokens(str(exc))}
+
+
+@frappe.whitelist()
+def discover_all_meta_pages_and_forms():
+    """
+    Discovers all Facebook Pages, Ad Accounts, and Lead Forms accessible by the configured Meta token.
+    Returns full hierarchy of Pages -> Forms -> Recent Lead Counts.
+    """
+    token, default_page_id = get_configured_access_token()
+    if not token:
+        return {"ok": False, "error": "No access token configured"}
+
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 1. Fetch all Facebook Pages accessible by this token
+    pages_res = requests.get("https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,tasks", headers=headers, timeout=12)
+    all_pages = []
+    if pages_res.status_code == 200:
+        all_pages = pages_res.json().get("data", [])
+
+    # Ensure default page_id is in the list
+    known_page_ids = {p.get("id") for p in all_pages}
+    if default_page_id and default_page_id not in known_page_ids:
+        all_pages.append({"id": default_page_id, "name": f"Configured Page ({default_page_id})", "access_token": token})
+
+    results = []
+    total_active_forms = 0
+
+    for page in all_pages:
+        pid = page.get("id")
+        pname = page.get("name")
+        ptoken = page.get("access_token") or token
+
+        # Fetch forms for this page
+        forms_url = f"https://graph.facebook.com/v21.0/{pid}/leadgen_forms?fields=id,name,status,leads_count,created_time&limit=50"
+        forms_resp = requests.get(forms_url, params={"access_token": ptoken}, timeout=12)
+        forms_data = forms_resp.json().get("data", []) if forms_resp.status_code == 200 else []
+
+        page_entry = {
+            "page_id": pid,
+            "page_name": pname,
+            "is_default_page": bool(str(pid) == str(default_page_id)),
+            "total_forms": len(forms_data),
+            "forms": []
+        }
+
+        for f in forms_data:
+            fid = f.get("id")
+            fname = f.get("name")
+            fstatus = f.get("status")
+            leads_cnt = f.get("leads_count", 0)
+
+            if fstatus == "ACTIVE":
+                total_active_forms += 1
+
+            page_entry["forms"].append({
+                "form_id": fid,
+                "form_name": fname,
+                "status": fstatus,
+                "leads_count": leads_cnt,
+                "created_time": f.get("created_time")
+            })
+
+        results.append(page_entry)
+
+    return {
+        "ok": True,
+        "total_pages": len(results),
+        "total_active_forms": total_active_forms,
+        "default_page_id": default_page_id,
+        "pages": results
+    }
