@@ -5,16 +5,24 @@ app_description = "Visa CRM AI Integration"
 app_email = "shahbazaman2003@gmail.com"
 app_license = "mit"
 after_install = "visa_crm.install.after_install"
-app_include_css = ["/assets/visa_crm/css/visa_crm.css","/assets/visa_crm/css/visa_portal.css"]
+app_include_css = ["/assets/visa_crm/css/visa_crm.css", "/assets/visa_crm/css/visa_portal.css"]
 app_include_js = ["/assets/visa_crm/js/crm_spa_redirect.js"]
 after_migrate = [
     "visa_crm.patches.disable_builtin_crm_meta_sync.enforce_builtin_crm_meta_sync_disabled",
-    "visa_crm.patches.setup_sidepanel_campaign_name.execute"
+    "visa_crm.patches.setup_sidepanel_campaign_name.execute",
+    "visa_crm.patches.setup_suggestion_field.execute",
+    "visa_crm.api.call_log_hooks.setup_call_log_form_script"
 ]
-override_doctype_class = {"Lead Sync Source": "visa_crm.overrides.lead_sync_source.VisaCRMLeadSyncSource"}
-override_whitelisted_methods = {"crm.api.settings.create_email_account": "visa_crm.api.email_account.create_email_account"}
+override_doctype_class = {
+    "Lead Sync Source": "visa_crm.overrides.lead_sync_source.VisaCRMLeadSyncSource",
+    "Contact": "visa_crm.overrides.contact.VisaCRMContact"
+}
+override_whitelisted_methods = {
+    "crm.api.settings.create_email_account": "visa_crm.api.email_account.create_email_account",
+    "crm.api.doc.get_data": "visa_crm.api.doc_overrides.get_data"
+}
 doc_events = {
-    "File": {"after_insert": ["visa_crm.api.android_metadata.handle_file_upload","visa_crm.api.gemini_service.auto_create_call_intelligence"]},
+    "File": {"after_insert": ["visa_crm.api.android_metadata.handle_file_upload", "visa_crm.api.gemini_service.auto_create_call_intelligence"]},
     "Communication Event": {
         "before_insert": ["visa_crm.api.communication_event.auto_link"],
         "after_insert": ["visa_crm.api.communication_center.after_communication_insert"]
@@ -35,6 +43,13 @@ doc_events = {
         "before_save": ["visa_crm.api.crm_lifecycle.validate_lead_transition", "visa_crm.api.lead_creator.log_crm_lead_hook"],
         "after_insert": ["visa_crm.api.lead_creator.log_crm_lead_hook"],
         "after_save": ["visa_crm.api.crm_lifecycle.on_lead_update"]
+    },
+    "CRM Call Log": {
+        "before_insert": ["visa_crm.api.call_log_hooks.auto_populate_call_log_phone"],
+        "validate": ["visa_crm.api.call_log_hooks.auto_populate_call_log_phone"]
+    },
+    "CRM Task": {
+        "on_update": ["visa_crm.api.task_reminders.on_task_update"]
     },
     "Lead Sync Source": {"before_validate": ["visa_crm.patches.disable_builtin_crm_meta_sync.prevent_builtin_meta_sync_enable"]},
     "Email Account": {"before_validate": ["visa_crm.api.email_account.enforce_communication_only"]}
@@ -84,11 +99,15 @@ scheduler_events = {
             "visa_crm.api.meta_poller.poll_meta_leads_cron",
             "visa_crm.api.email_intake.process_pending_email_communications"
         ],
-        "0 * * * *": ["visa_crm.api.crm_lifecycle.process_overdue_followups"]
+        "0 * * * *": [
+            "visa_crm.api.crm_lifecycle.process_overdue_followups",
+            "visa_crm.api.task_reminders.send_task_due_reminders"
+        ]
     },
     "daily": [
         "visa_crm.api.gemini_service.send_followup_reminders",
-        "visa_crm.api.reminder_scheduler.create_reminders"
+        "visa_crm.api.reminder_scheduler.create_reminders",
+        "visa_crm.api.task_reminders.send_task_due_reminders"
     ]
 }
 fixtures = [
