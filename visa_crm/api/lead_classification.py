@@ -21,6 +21,31 @@ CLASSIFICATION_FIELDS = (
     "classified_by",
 )
 
+DESTINATION_KEYWORDS = [
+    (r"\bmalaysia\b", "Malaysia"),
+    (r"\b(thailand|thai|bangkok|pattaya|phuket)\b", "Thailand"),
+    (r"\bbali\b", "Bali"),
+    (r"\bandaman\b", "Andaman"),
+    (r"\bkashmir\b", "Kashmir"),
+    (r"\bcanton\b", "Canton Fair"),
+    (r"\b(uk|united kingdom|london|ireland)\b", "UK"),
+    (r"\bqatar\b", "Qatar"),
+    (r"\b(umrah|hajj|saudi)\b", "Umrah"),
+    (r"\b(dubai|uae|abu dhabi)\b", "Dubai"),
+    (r"\bvietnam\b", "Vietnam"),
+    (r"\b(almaty|kazakhstan)\b", "Almaty"),
+    (r"\bmaldives\b", "Maldives"),
+    (r"\b(couples|cple)\b", "Couples"),
+    (r"\bstamping\b", "Visa Stamping"),
+    (r"\b(sales hiring|hiring|recruitment|job)\b", "Sales Hiring"),
+    (r"\bticketing\b", "Ticketing"),
+    (r"\bsingapore\b", "Singapore"),
+    (r"\beurope\b", "Europe"),
+    (r"\bschengen\b", "Schengen"),
+    (r"\bgeorgia\b", "Georgia"),
+    (r"\bbaku\b", "Baku"),
+]
+
 
 def classify_queue(queue_name, claim=None):
     queue = frappe.get_doc("Lead Intake Queue", queue_name)
@@ -32,6 +57,10 @@ def classify_queue(queue_name, claim=None):
     payload = load_json(queue.get("normalized_payload"), {})
     _merge_queue_values(payload, queue)
     result = classify_payload(payload, queue.get("lead_source"))
+
+    # Ensure Lead Subcategory exists in database
+    ensure_lead_subcategory(result.get("lead_category"), result.get("lead_group"))
+
     _write_classification("Lead Intake Queue", queue.name, result, overwrite_automatic=True)
     sync_lead_classification(queue.get("matched_lead"), result, overwrite_automatic=False)
     return _stage_result(result, reused=False)
@@ -46,9 +75,10 @@ def classify_payload(payload, lead_source=None, rules=None):
     for rule in rules:
         if _rule_matches(rule, source, campaign):
             category = rule.get("category") or UNCATEGORIZED
+            group = derive_group(category, payload)
             return {
                 "lead_category": category,
-                "lead_group": derive_group(category, payload),
+                "lead_group": group,
                 "responsible_department": category_department(category),
                 "classification_source": "Automatic",
                 "classification_status": "Classified",
@@ -59,14 +89,47 @@ def classify_payload(payload, lead_source=None, rules=None):
                 "detected_source": source,
             }
 
+    # Dynamic Fallback Categorization based on keywords in campaign, form name, answers, etc.
+    combined_text = normalize_text(" ".join(filter(None, [
+        payload.get("campaign_name"),
+        payload.get("form_name"),
+        payload.get("ad_name"),
+        payload.get("adset_name"),
+        payload.get("country_interested"),
+        payload.get("visa_type"),
+        safe_json_dumps(payload.get("custom_answers"))
+    ])))
+
+    category = UNCATEGORIZED
+    reason = "Dynamic classification from lead content"
+
+    if any(k in combined_text for k in ["hiring", "job", "career", "sales hiring", "interview"]):
+        category = "Global Visa" if frappe.db.exists("Lead Category", "Global Visa") else "Reservation"
+        reason = "Matched recruitment/hiring keywords"
+    elif any(k in combined_text for k in ["package", "malaysia", "thailand", "thai", "bangkok", "pattaya", "bali", "andaman", "kashmir", "dubai", "vietnam", "almaty", "maldives", "couples", "cple", "holiday", "tour", "trip", "canton"]):
+        category = "Holidays"
+        reason = "Matched holiday destination/tour keywords"
+    elif any(k in combined_text for k in ["visa", "stamping", "qatar", "umrah", "uk", "schengen", "tourist visa", "work visa", "embassy", "global visa"]):
+        category = "Global Visa"
+        reason = "Matched visa keywords"
+    elif source == "WhatsApp":
+        category = "Reservation"
+        reason = "WhatsApp enquiry"
+    elif source == "Google Ads":
+        category = "Google Ads"
+        reason = "Google Ads source"
+
+    group = derive_group(category, payload)
+    status = "Classified" if category != UNCATEGORIZED else "Needs Review"
+
     return {
-        "lead_category": UNCATEGORIZED,
-        "lead_group": "Unspecified",
-        "responsible_department": category_department(UNCATEGORIZED),
+        "lead_category": category,
+        "lead_group": group,
+        "responsible_department": category_department(category),
         "classification_source": "Automatic",
-        "classification_status": "Needs Review",
+        "classification_status": status,
         "classification_rule": None,
-        "classification_reason": "No classification rule matched",
+        "classification_reason": reason,
         "classified_at": now_datetime(),
         "classified_by": "Administrator",
         "detected_source": source,
@@ -101,7 +164,6 @@ def detect_source(payload, lead_source=None):
         return "WhatsApp"
     if "google" in normalized and "ad" in normalized:
         return "Google Ads"
-    # Email source detection
     if lead_source == "Email" or "email" == normalize_text(lead_source or "") or any(
         normalize_text(value or "") == "email" for value in candidates if value
     ):
@@ -115,6 +177,20 @@ def derive_group(category, payload):
     explicit = _first(payload, "custom_destination", "destination", "visa_type", "custom_visa_type", "country_interested")
     if explicit:
         return display_group(explicit)
+
+    # Check text fields for known destinations
+    search_text = " ".join(filter(None, [
+        str(payload.get("campaign_name") or ""),
+        str(payload.get("form_name") or ""),
+        str(payload.get("ad_name") or ""),
+        str(payload.get("adset_name") or ""),
+        safe_json_dumps(payload.get("custom_answers") or {})
+    ]))
+
+    for pattern, group_name in DESTINATION_KEYWORDS:
+        if re.search(pattern, search_text, re.IGNORECASE):
+            return group_name
+
     campaign = str(payload.get("campaign_name") or "").strip()
     suffix = "package" if category == "Holidays" else "visa" if category == "Global Visa" else None
     if suffix and re.search(rf"\b{suffix}\s*$", normalize_text(campaign)):
@@ -146,6 +222,40 @@ def category_department(category):
     return frappe.db.get_value("Lead Category", category, "department")
 
 
+def ensure_lead_subcategory(category, group):
+    """
+    Ensures that a Lead Subcategory record exists in the database for the given category and group.
+    """
+    if not category or not group or group in ("Unspecified", "None", ""):
+        return None
+    if category == UNCATEGORIZED:
+        return None
+    if not frappe.db.exists("DocType", "Lead Subcategory"):
+        return None
+    if not frappe.db.exists("Lead Category", category):
+        return None
+
+    existing = frappe.db.exists("Lead Subcategory", {
+        "sub_category_name": group,
+        "parent_category": category
+    }) or frappe.db.get_value("Lead Subcategory", {"sub_category_name": group}, "name")
+
+    if not existing:
+        try:
+            doc = frappe.get_doc({
+                "doctype": "Lead Subcategory",
+                "sub_category_name": group,
+                "parent_category": category,
+                "is_active": 1,
+                "sort_order": 10
+            })
+            doc.insert(ignore_permissions=True)
+            return doc.name
+        except Exception:
+            pass
+    return existing
+
+
 def sync_lead_classification(lead_name, result, overwrite_automatic=False):
     if not lead_name or not frappe.db.exists("CRM Lead", lead_name):
         return
@@ -157,6 +267,13 @@ def sync_lead_classification(lead_name, result, overwrite_automatic=False):
         value = result.get(field)
         if has_field("CRM Lead", field) and value is not None and (overwrite_automatic or not current.get(field) or current.get("classification_source") != "Manual"):
             values[field] = value
+
+    # Also ensure Lead Subcategory link if field exists
+    if has_field("CRM Lead", "lead_subcategory") and result.get("lead_group"):
+        subcat_name = ensure_lead_subcategory(result.get("lead_category"), result.get("lead_group"))
+        if subcat_name:
+            values["lead_subcategory"] = subcat_name
+
     if values:
         frappe.db.set_value("CRM Lead", lead_name, values, update_modified=False)
 
@@ -175,9 +292,13 @@ def apply_manual_classification(lead_name, category, group=None, reason=None):
         frappe.throw("Not permitted for this lead category", frappe.PermissionError)
     current = frappe.db.get_value("CRM Lead", lead_name, list(CLASSIFICATION_FIELDS), as_dict=True) or {}
     queue_name = frappe.db.get_value("Lead Intake Queue", {"matched_lead": lead_name}, "name", order_by="creation desc")
+
+    group_name = display_group(group) if group else "Unspecified"
+    ensure_lead_subcategory(category, group_name)
+
     result = {
         "lead_category": category,
-        "lead_group": display_group(group) if group else "Unspecified",
+        "lead_group": group_name,
         "responsible_department": category_department(category),
         "classification_source": "Manual",
         "classification_status": "Classified",
@@ -277,3 +398,44 @@ def _first(payload, *fields):
         if payload.get(field):
             return payload.get(field)
     return None
+
+
+@frappe.whitelist()
+def reclassify_all_leads():
+    """
+    Whitelisted maintenance endpoint to backfill / reclassify any Uncategorized or Unspecified leads.
+    """
+    updated_count = 0
+    subcats_created = 0
+
+    queues = frappe.get_all(
+        "Lead Intake Queue",
+        filters={"status": ["in", ["Processed", "Lead Created"]]},
+        fields=["name", "matched_lead", "normalized_payload", "lead_source", "campaign_name", "custom_answers", "country_interested", "visa_type", "lead_category", "lead_group"]
+    )
+
+    for q in queues:
+        payload = load_json(q.normalized_payload, {})
+        _merge_queue_values(payload, q)
+        result = classify_payload(payload, q.lead_source)
+
+        cat = result.get("lead_category")
+        grp = result.get("lead_group")
+
+        if cat != UNCATEGORIZED or grp != "Unspecified":
+            sub_created = ensure_lead_subcategory(cat, grp)
+            if sub_created:
+                subcats_created += 1
+
+            _write_classification("Lead Intake Queue", q.name, result, overwrite_automatic=True)
+            if q.matched_lead:
+                sync_lead_classification(q.matched_lead, result, overwrite_automatic=True)
+            updated_count += 1
+
+    frappe.db.commit()
+    return {
+        "ok": True,
+        "total_checked": len(queues),
+        "total_updated": updated_count,
+        "subcategories_created": subcats_created
+    }
