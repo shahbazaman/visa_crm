@@ -62,7 +62,12 @@ permission_query_conditions = {
     "Communication Event": "visa_crm.api.lead_permissions.communication_event_query",
     "ToDo": "visa_crm.api.lead_permissions.todo_query",
     "Email Account": "visa_crm.api.lead_permissions.email_account_query",
-    "Communication": "visa_crm.api.lead_permissions.communication_query"
+    "Communication": "visa_crm.api.lead_permissions.communication_query",
+    "Contact": "visa_crm.api.lead_permissions.contact_query",
+    "CRM Organization": "visa_crm.api.lead_permissions.crm_organization_query",
+    "FCRM Note": "visa_crm.api.lead_permissions.fcrm_note_query",
+    "CRM Task": "visa_crm.api.lead_permissions.crm_task_query",
+    "CRM Call Log": "visa_crm.api.lead_permissions.crm_call_log_query"
 }
 has_permission = {
     "CRM Lead": "visa_crm.api.lead_permissions.crm_lead_permission",
@@ -72,7 +77,12 @@ has_permission = {
     "Communication Event": "visa_crm.api.lead_permissions.communication_event_permission",
     "ToDo": "visa_crm.api.lead_permissions.todo_permission",
     "Email Account": "visa_crm.api.lead_permissions.email_account_permission",
-    "Communication": "visa_crm.api.lead_permissions.communication_permission"
+    "Communication": "visa_crm.api.lead_permissions.communication_permission",
+    "Contact": "visa_crm.api.lead_permissions.contact_permission",
+    "CRM Organization": "visa_crm.api.lead_permissions.crm_organization_permission",
+    "FCRM Note": "visa_crm.api.lead_permissions.fcrm_note_permission",
+    "CRM Task": "visa_crm.api.lead_permissions.crm_task_permission",
+    "CRM Call Log": "visa_crm.api.lead_permissions.crm_call_log_permission"
 }
 doctype_js = {
     "Call Intelligence": "public/js/call_intelligence.js",

@@ -2,20 +2,38 @@ import frappe
 from frappe.utils import cint
 
 
-DEFAULT_MANAGEMENT_ROLES = {"System Manager", "Sales Manager", "General Manager", "Managing Director", "MD", "CRM Manager"}
+DEFAULT_MANAGEMENT_ROLES = {
+    "System Manager",
+    "Administrator",
+    "Sales Manager",
+    "General Manager",
+    "Managing Director",
+    "MD",
+    "CRM Manager",
+    "HR Manager",
+    "HR User",
+    "HR",
+}
 DEFAULT_OPERATIONAL_ROLES = {"Sales User", "Counselor", "Visa Processing", "Lead Team", "Inbox User"}
 
 
 def management_roles():
-    configured = frappe.conf.get("visa_crm_management_roles") or []
+    try:
+        conf = getattr(frappe, "conf", None)
+        configured = (conf.get("visa_crm_management_roles") if conf else None) or []
+    except Exception:
+        configured = []
     if isinstance(configured, str):
         configured = [role.strip() for role in configured.split(",") if role.strip()]
-    return DEFAULT_MANAGEMENT_ROLES | set(configured)
+    return DEFAULT_MANAGEMENT_ROLES | set(configured or [])
 
 
 def is_management(user=None):
     user = user or frappe.session.user
-    return user == "Administrator" or bool(management_roles() & set(frappe.get_roles(user)))
+    if user == "Administrator":
+        return True
+    roles = set(frappe.get_roles(user))
+    return bool(management_roles() & roles)
 
 
 def require_management():
@@ -186,6 +204,93 @@ def communication_permission(doc, ptype=None, user=None):
         return _linked_lead_permission(lead, user)
     return False
 
+
+# --- Feature 6: Role-Based CRM Sidebar Visibility (Contacts, Organizations, Notes, Tasks, Call Logs) ---
+
+def contact_query(user=None):
+    """Normal employees see only Contacts they created/own. Management and HR see all."""
+    user = user or frappe.session.user
+    if is_management(user):
+        return ""
+    return f"`tabContact`.`owner` = {frappe.db.escape(user)}"
+
+
+def contact_permission(doc, ptype=None, user=None):
+    user = user or frappe.session.user
+    if is_management(user):
+        return True
+    return doc.get("owner") == user
+
+
+def crm_organization_query(user=None):
+    """Normal employees see only CRM Organizations they created/own. Management and HR see all."""
+    user = user or frappe.session.user
+    if is_management(user):
+        return ""
+    return f"`tabCRM Organization`.`owner` = {frappe.db.escape(user)}"
+
+
+def crm_organization_permission(doc, ptype=None, user=None):
+    user = user or frappe.session.user
+    if is_management(user):
+        return True
+    return doc.get("owner") == user
+
+
+def fcrm_note_query(user=None):
+    """Normal employees see only Notes they created/own. Management and HR see all."""
+    user = user or frappe.session.user
+    if is_management(user):
+        return ""
+    return f"`tabFCRM Note`.`owner` = {frappe.db.escape(user)}"
+
+
+def fcrm_note_permission(doc, ptype=None, user=None):
+    user = user or frappe.session.user
+    if is_management(user):
+        return True
+    return doc.get("owner") == user
+
+
+def crm_task_query(user=None):
+    """Normal employees see only Tasks assigned to them or created by them. Management and HR see all."""
+    user = user or frappe.session.user
+    if is_management(user):
+        return ""
+    user_esc = frappe.db.escape(user)
+    assign_pat = frappe.db.escape(f"%{user}%")
+    return f"(`tabCRM Task`.`assigned_to` = {user_esc} or `tabCRM Task`.`owner` = {user_esc} or `tabCRM Task`.`_assign` like {assign_pat})"
+
+
+def crm_task_permission(doc, ptype=None, user=None):
+    user = user or frappe.session.user
+    if is_management(user):
+        return True
+    if doc.get("assigned_to") == user or doc.get("owner") == user:
+        return True
+    assign = doc.get("_assign")
+    if assign and user in str(assign):
+        return True
+    return False
+
+
+def crm_call_log_query(user=None):
+    """Normal employees see only Call Logs created by them or where they are caller/receiver. Management and HR see all."""
+    user = user or frappe.session.user
+    if is_management(user):
+        return ""
+    user_esc = frappe.db.escape(user)
+    return f"(`tabCRM Call Log`.`owner` = {user_esc} or `tabCRM Call Log`.`caller` = {user_esc} or `tabCRM Call Log`.`receiver` = {user_esc})"
+
+
+def crm_call_log_permission(doc, ptype=None, user=None):
+    user = user or frappe.session.user
+    if is_management(user):
+        return True
+    return doc.get("owner") == user or doc.get("caller") == user or doc.get("receiver") == user
+
+
+# --- Helper Methods ---
 
 def _category_query(doctype, user=None):
     user = user or frappe.session.user
