@@ -58,12 +58,10 @@ class VisaCRMContact(Contact):
 				"width": "8rem",
 			},
 		]
+		# rows must only contain fields that exist on tabContact in MySQL
 		rows = [
 			"name",
 			"full_name",
-			"customer_name",
-			"lead_category",
-			"lead_group",
 			"company_name",
 			"email_id",
 			"mobile_no",
@@ -77,7 +75,7 @@ class VisaCRMContact(Contact):
 		if not data:
 			return data
 
-		contact_names = [d.get("name") for d in data if d.get("name")]
+		contact_names = [d.get("name") for d in data if isinstance(d, dict) and d.get("name")]
 		if not contact_names:
 			return data
 
@@ -98,70 +96,54 @@ class VisaCRMContact(Contact):
 			elif link.link_doctype == "Customer" and link.parent not in customer_map:
 				customer_map[link.parent] = link.link_name
 
-		# For contacts without direct dynamic link, match by email or mobile
-		contacts_missing_lead = [d for d in data if d.get("name") not in lead_map]
-		if contacts_missing_lead:
-			emails = [d.get("email_id") for d in contacts_missing_lead if d.get("email_id")]
-			phones = [d.get("mobile_no") for d in contacts_missing_lead if d.get("mobile_no")]
-
-			if emails or phones:
-				lead_matches = frappe.db.sql("""
-					SELECT name, email, mobile_no, lead_name, first_name, lead_category, lead_group
-					FROM `tabCRM Lead`
-					WHERE (email IS NOT NULL AND email != '' AND email IN %(emails)s)
-					   OR (mobile_no IS NOT NULL AND mobile_no != '' AND mobile_no IN %(phones)s)
-				""", {"emails": emails or ["-none-"], "phones": phones or ["-none-"]}, as_dict=True)
-
-				email_to_lead = {l.email: l for l in lead_matches if l.email}
-				phone_to_lead = {l.mobile_no: l for l in lead_matches if l.mobile_no}
-
-				for d in contacts_missing_lead:
-					c_name = d.get("name")
-					if d.get("email_id") in email_to_lead:
-						lead_map[c_name] = email_to_lead[d["email_id"]].name
-					elif d.get("mobile_no") in phone_to_lead:
-						lead_map[c_name] = phone_to_lead[d["mobile_no"]].name
-
-		# Batch fetch CRM Lead details
 		lead_details = {}
-		unique_lead_names = list(set(lead_map.values()))
-		if unique_lead_names:
-			leads = frappe.db.sql("""
-				SELECT name, lead_name, first_name, lead_category, lead_group
+		if lead_map:
+			lead_records = frappe.db.sql("""
+				SELECT name, lead_name, first_name, last_name, lead_category, lead_group
 				FROM `tabCRM Lead`
 				WHERE name IN %(lead_names)s
-			""", {"lead_names": unique_lead_names}, as_dict=True)
-			lead_details = {l.name: l for l in leads}
+			""", {"lead_names": list(lead_map.values())}, as_dict=True)
 
-		# Batch fetch Customer details
+			for l in lead_records:
+				name_val = l.lead_name or " ".join(filter(None, [l.first_name, l.last_name])) or l.name
+				lead_details[l.name] = {
+					"customer_name": name_val,
+					"lead_category": l.lead_category or "",
+					"lead_group": l.lead_group or "",
+				}
+
 		customer_details = {}
-		unique_cust_names = list(set(customer_map.values()))
-		if unique_cust_names:
-			customers = frappe.db.sql("""
+		if customer_map:
+			cust_records = frappe.db.sql("""
 				SELECT name, customer_name
 				FROM `tabCustomer`
 				WHERE name IN %(cust_names)s
-			""", {"cust_names": unique_cust_names}, as_dict=True)
-			customer_details = {c.name: c for c in customers}
+			""", {"cust_names": list(customer_map.values())}, as_dict=True)
 
-		for d in data:
-			c_name = d.get("name")
-			linked_lead_name = lead_map.get(c_name)
-			linked_cust_name = customer_map.get(c_name)
+			for c in cust_records:
+				customer_details[c.name] = {
+					"customer_name": c.customer_name or c.name,
+					"lead_category": "",
+					"lead_group": "",
+				}
 
-			lead_info = lead_details.get(linked_lead_name) if linked_lead_name else None
-			cust_info = customer_details.get(linked_cust_name) if linked_cust_name else None
-
-			# Customer Name: priority Customer.customer_name -> CRM Lead.lead_name -> Contact.full_name
-			if cust_info and cust_info.get("customer_name"):
-				d["customer_name"] = cust_info["customer_name"]
-			elif lead_info and (lead_info.get("lead_name") or lead_info.get("first_name")):
-				d["customer_name"] = lead_info.get("lead_name") or lead_info.get("first_name")
+		for item in data:
+			if not isinstance(item, dict):
+				continue
+			c_name = item.get("name")
+			if c_name in lead_map and lead_map[c_name] in lead_details:
+				det = lead_details[lead_map[c_name]]
+				item["customer_name"] = det["customer_name"]
+				item["lead_category"] = det["lead_category"]
+				item["lead_group"] = det["lead_group"]
+			elif c_name in customer_map and customer_map[c_name] in customer_details:
+				det = customer_details[customer_map[c_name]]
+				item["customer_name"] = det["customer_name"]
+				item["lead_category"] = ""
+				item["lead_group"] = ""
 			else:
-				d["customer_name"] = d.get("full_name") or ""
-
-			# Category and Subcategory from CRM Lead
-			d["lead_category"] = (lead_info.get("lead_category") if lead_info else "") or ""
-			d["lead_group"] = (lead_info.get("lead_group") if lead_info else "") or ""
+				item["customer_name"] = item.get("full_name") or ""
+				item["lead_category"] = ""
+				item["lead_group"] = ""
 
 		return data

@@ -4,6 +4,7 @@
 import json
 import frappe
 from crm.api.doc import get_data as base_get_data
+from visa_crm.overrides.contact import VisaCRMContact
 
 
 @frappe.whitelist()
@@ -23,9 +24,9 @@ def get_data(
 	default_filters: dict | str | None = None,
 ):
 	"""
-	Custom wrapper around crm.api.doc.get_data to fix LIKE and name filter
-	queries on CRM Lead so that filtering by 'Name' or 'Lead Name' accurately
-	matches the person/lead name, ID, or organization without returning 0 results.
+	Custom wrapper around crm.api.doc.get_data:
+	1. Normalizes LIKE and name filters on CRM Lead to match across lead name, ID, and org.
+	2. Sanitizes rows for Contact and enriches dynamic columns (customer_name, category, subcategory).
 	"""
 	if isinstance(filters, str):
 		try:
@@ -38,7 +39,18 @@ def get_data(
 	if doctype == "CRM Lead" and isinstance(filters, dict):
 		filters = normalize_crm_lead_filters(filters)
 
-	return base_get_data(
+	# If querying Contact, remove virtual fields from rows before calling base_get_data
+	if doctype == "Contact":
+		if isinstance(rows, str):
+			try:
+				rows = json.loads(rows)
+			except Exception:
+				rows = []
+		if isinstance(rows, list):
+			virtual_fields = {"customer_name", "lead_category", "lead_group"}
+			rows = [r for r in rows if r not in virtual_fields]
+
+	res = base_get_data(
 		doctype=doctype,
 		filters=filters,
 		order_by=order_by,
@@ -53,6 +65,12 @@ def get_data(
 		view=view,
 		default_filters=default_filters,
 	)
+
+	# Ensure Contact list is enriched
+	if doctype == "Contact" and isinstance(res, dict) and "data" in res:
+		res["data"] = VisaCRMContact.parse_list_data(res["data"])
+
+	return res
 
 
 def normalize_crm_lead_filters(filters: dict) -> dict:

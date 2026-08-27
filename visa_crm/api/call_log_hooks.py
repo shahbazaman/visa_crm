@@ -47,26 +47,25 @@ def auto_populate_call_log_phone(doc, method=None):
 
 def setup_call_log_form_script():
 	"""
-	Ensure a standard CRM Form Script exists for CRM Call Log so the Quick Entry
+	Ensure standard CRM Form Script exists for CRM Call Log so the Quick Entry
 	dialog in the CRM Vue SPA pre-fills customer phone from the Lead.
 	"""
-	script_code = """
-export default async function setupForm({ doc, call }) {
+	script_code = """async function setupForm({ doc, call }) {
   if (!doc.name && doc.reference_doctype === 'CRM Lead' && doc.reference_docname) {
-    if (!doc.to && !doc.from) {
+    let phone = doc.reference_doc?.mobile_no || doc.reference_doc?.phone;
+    if (!phone) {
       let r = await call('frappe.client.get_value', {
         doctype: 'CRM Lead',
         fieldname: ['mobile_no', 'phone'],
         filters: { name: doc.reference_docname }
       });
-      let lead = r?.message;
-      let phone = lead?.mobile_no || lead?.phone || '';
-      if (phone) {
-        if (doc.type === 'Incoming') {
-          if (!doc.from) doc.from = phone;
-        } else {
-          if (!doc.to) doc.to = phone;
-        }
+      phone = r?.message?.mobile_no || r?.message?.phone;
+    }
+    if (phone) {
+      if (doc.type === 'Incoming') {
+        if (!doc.from) doc.from = phone;
+      } else {
+        if (!doc.to) doc.to = phone;
       }
     }
   }
@@ -75,12 +74,12 @@ export default async function setupForm({ doc, call }) {
 	if frappe.db.exists("CRM Form Script", {"dt": "CRM Call Log", "view": "Form"}):
 		doc_name = frappe.db.get_value("CRM Form Script", {"dt": "CRM Call Log", "view": "Form"})
 		script_doc = frappe.get_doc("CRM Form Script", doc_name)
-		if script_code not in (script_doc.script or ""):
-			script_doc.script = script_code
-			script_doc.enabled = 1
-			script_doc.save(ignore_permissions=True)
+		script_doc.script = script_code
+		script_doc.enabled = 1
+		script_doc.save(ignore_permissions=True)
 	else:
 		script_doc = frappe.new_doc("CRM Form Script")
+		script_doc.name = "CRM Call Log - Form"
 		script_doc.dt = "CRM Call Log"
 		script_doc.view = "Form"
 		script_doc.enabled = 1
