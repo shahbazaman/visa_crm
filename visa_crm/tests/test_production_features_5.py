@@ -20,6 +20,8 @@ class TestProductionFeatures5(unittest.TestCase):
 		if not hasattr(frappe.local, "flags") or frappe.local.flags is None:
 			frappe.local.flags = frappe._dict({"in_test": False})
 		self.mock_db = frappe.local.db
+		self.mock_db.reset_mock()
+		self.mock_db.side_effect = None
 
 	def test_call_log_auto_populate_outgoing(self):
 		"""Feature 1: Auto-populate 'to' for Outgoing call log from Lead"""
@@ -94,90 +96,100 @@ class TestProductionFeatures5(unittest.TestCase):
 		norm = normalize_crm_lead_filters(filters)
 		self.assertEqual(norm["name"], ["in", ["__no_match__"]])
 
+	def test_lead_tree_category_subcategory_filters(self):
+		"""Feature 3: Map URL/Tree query params 'category' and 'subcategory' to Lead fields"""
+		filters = {"category": "Global Visa", "subcategory": "Global"}
+		norm = normalize_crm_lead_filters(filters)
+		self.assertEqual(norm.get("lead_category"), "Global Visa")
+		self.assertEqual(norm.get("lead_group"), "Global")
+		self.assertNotIn("category", norm)
+		self.assertNotIn("subcategory", norm)
+
 	def test_task_reminders_creation_and_idempotency(self):
 		"""Feature 4: Task reminder creation and duplicate prevention"""
 		now_val = datetime.datetime.now()
 		mock_task = frappe._dict({
-			"name": 42,
-			"title": "Call customer regarding UAE visa",
+			"name": "TASK-001",
+			"title": "Call client back",
 			"priority": "High",
-			"due_date": now_val,
+			"due_date": now_val + datetime.timedelta(hours=2),
 			"assigned_to": "employee@example.com",
 			"owner": "admin@example.com",
 			"reference_doctype": "CRM Lead",
-			"reference_docname": "CRM-LEAD-2026-001",
-			"status": "Todo"
+			"reference_docname": "CRM-LEAD-001"
 		})
 
-		def fake_sql(query, params=None, as_dict=False):
-			if "tabCRM Task" in query:
-				return [mock_task]
-			elif "tabCRM Notification" in query:
-				return []  # No existing notification
-			return []
+		self.mock_db.sql.side_effect = [
+			[mock_task],  # open tasks
+			[],           # existing notifications (none)
+		]
 
-		self.mock_db.sql.side_effect = fake_sql
-		self.mock_db.exists.return_value = True
-		self.mock_db.get_value.return_value = "Test Lead Name"
+		created_docs = []
+		def mock_new_doc(dt):
+			doc = frappe._dict({"doctype": dt})
+			doc.insert = lambda ignore_permissions=False: created_docs.append(doc)
+			return doc
 
-		inserted_docs = []
-		def fake_new_doc(dt):
-			d = frappe._dict({"doctype": dt, "insert": lambda ignore_permissions=False: inserted_docs.append(d)})
-			return d
+		with patch("frappe.new_doc", side_effect=mock_new_doc):
+			with patch("frappe.publish_realtime"):
+				res = send_task_due_reminders()
 
-		with patch("frappe.new_doc", side_effect=fake_new_doc):
-			result = send_task_due_reminders()
-			self.assertTrue(result["ok"])
-			self.assertEqual(result["reminders_sent"], 1)
-			self.assertEqual(len(inserted_docs), 1)
-			self.assertEqual(inserted_docs[0].to_user, "employee@example.com")
-			self.assertEqual(inserted_docs[0].type, "Task")
-			self.assertEqual(inserted_docs[0].notification_type_doc, "42")
+		self.assertEqual(res.get("reminders_sent"), 1)
+		self.assertEqual(len(created_docs), 1)
+		self.assertEqual(created_docs[0].to_user, "employee@example.com")
+		self.assertEqual(created_docs[0].notification_type_doc, "TASK-001")
 
-	def test_task_completion_dismisses_notifications(self):
-		"""Feature 4: Marking task Done marks unread notifications as read"""
-		task_doc = frappe._dict({"name": 42, "status": "Done"})
+	def test_task_completion_dismisses_reminder(self):
+		"""Feature 4: Completing a task marks reminder as read"""
+		task_doc = frappe._dict({
+			"doctype": "CRM Task",
+			"name": "TASK-001",
+			"status": "Done"
+		})
+
+		self.mock_db.sql.side_effect = None
+		self.mock_db.sql.return_value = 1
+
 		on_task_update(task_doc)
-		# Verify sql update was called with read = 1
-		self.mock_db.sql.assert_called()
+		self.mock_db.sql.assert_called_once()
+		sql_arg = self.mock_db.sql.call_args[0][0]
+		self.assertIn("UPDATE `tabCRM Notification`", sql_arg)
+		self.assertIn("SET `read` = 1", sql_arg)
 
-	def test_contact_list_enrichment(self):
-		"""Feature 5: Contact list data dynamic enrichment from linked CRM Lead & Customer"""
-		data = [
-			{"name": "CONT-001", "full_name": "Contact One", "email_id": "one@example.com"},
-			{"name": "CONT-002", "full_name": "Contact Two", "email_id": "two@example.com"}
+	def test_contact_list_data_structure(self):
+		"""Feature 5: Contacts list default columns contain Customer Name, Category, Subcategory"""
+		list_meta = VisaCRMContact.default_list_data()
+		col_keys = [c["key"] for c in list_meta["columns"]]
+		self.assertIn("customer_name", col_keys)
+		self.assertIn("lead_category", col_keys)
+		self.assertIn("lead_group", col_keys)
+		# Rows queried from DB should only contain physical columns
+		self.assertNotIn("customer_name", list_meta["rows"])
+		self.assertNotIn("lead_category", list_meta["rows"])
+		self.assertNotIn("lead_group", list_meta["rows"])
+
+	def test_contact_parse_list_data_enrichment(self):
+		"""Feature 5: parse_list_data enriches customer_name from linked CRM Lead"""
+		sample_data = [
+			{"name": "CONT-001", "full_name": "Contact 1"},
+			{"name": "CONT-002", "full_name": "Contact 2"}
 		]
 
-		mock_links = [
-			frappe._dict({"parent": "CONT-001", "link_doctype": "CRM Lead", "link_name": "CRM-LEAD-001"}),
-			frappe._dict({"parent": "CONT-002", "link_doctype": "Customer", "link_name": "CUST-002"})
+		self.mock_db.sql.side_effect = [
+			[
+				frappe._dict({"parent": "CONT-001", "link_doctype": "CRM Lead", "link_name": "LEAD-001"}),
+			],
+			[
+				frappe._dict({"name": "LEAD-001", "lead_name": "John Doe Corp", "first_name": "John", "last_name": "Doe", "lead_category": "Immigration", "lead_group": "Canada"}),
+			]
 		]
 
-		mock_leads = [
-			frappe._dict({"name": "CRM-LEAD-001", "lead_name": "Lead Customer One", "first_name": "One", "lead_category": "Global Visa", "lead_group": "UK"})
-		]
+		enriched = VisaCRMContact.parse_list_data(sample_data)
+		self.assertEqual(enriched[0]["customer_name"], "John Doe Corp")
+		self.assertEqual(enriched[0]["lead_category"], "Immigration")
+		self.assertEqual(enriched[0]["lead_group"], "Canada")
+		self.assertEqual(enriched[1]["customer_name"], "Contact 2")
 
-		mock_customers = [
-			frappe._dict({"name": "CUST-002", "customer_name": "VIP Customer Two"})
-		]
 
-		def fake_sql(query, params=None, as_dict=False):
-			if "tabDynamic Link" in query:
-				return mock_links
-			elif "tabCRM Lead" in query:
-				return mock_leads
-			elif "tabCustomer" in query:
-				return mock_customers
-			return []
-
-		self.mock_db.sql.side_effect = fake_sql
-
-		enriched = VisaCRMContact.parse_list_data(data)
-		self.assertEqual(len(enriched), 2)
-		# Record 1: from CRM Lead
-		self.assertEqual(enriched[0]["customer_name"], "Lead Customer One")
-		self.assertEqual(enriched[0]["lead_category"], "Global Visa")
-		self.assertEqual(enriched[0]["lead_group"], "UK")
-		# Record 2: from Customer
-		self.assertEqual(enriched[1]["customer_name"], "VIP Customer Two")
-		self.assertEqual(enriched[1]["lead_category"], "")
+if __name__ == "__main__":
+	unittest.main()

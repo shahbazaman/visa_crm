@@ -47,25 +47,47 @@ def auto_populate_call_log_phone(doc, method=None):
 
 def setup_call_log_form_script():
 	"""
-	Ensure standard CRM Form Script exists for CRM Call Log so the Quick Entry
-	dialog in the CRM Vue SPA pre-fills customer phone from the Lead.
+	Ensure standard CRM Form Script exists for CRM Call Log using the native
+	FCRM class CRMCallLog controller architecture.
 	"""
-	script_code = """async function setupForm({ doc, call }) {
-  if (!doc.name && doc.reference_doctype === 'CRM Lead' && doc.reference_docname) {
-    let phone = doc.reference_doc?.mobile_no || doc.reference_doc?.phone;
-    if (!phone) {
-      let r = await call('frappe.client.get_value', {
-        doctype: 'CRM Lead',
-        fieldname: ['mobile_no', 'phone'],
-        filters: { name: doc.reference_docname }
-      });
-      phone = r?.message?.mobile_no || r?.message?.phone;
-    }
-    if (phone) {
-      if (doc.type === 'Incoming') {
-        if (!doc.from) doc.from = phone;
-      } else {
-        if (!doc.to) doc.to = phone;
+	script_code = """class CRMCallLog {
+  async onLoad() {
+    await this.autoPopulatePhone();
+  }
+
+  async onRender() {
+    await this.autoPopulatePhone();
+  }
+
+  async type() {
+    await this.autoPopulatePhone();
+  }
+
+  async reference_docname() {
+    await this.autoPopulatePhone();
+  }
+
+  async autoPopulatePhone() {
+    if (this.doc.reference_doctype === 'CRM Lead' && this.doc.reference_docname) {
+      let phone = this.doc.reference_doc?.mobile_no || this.doc.reference_doc?.phone;
+      if (!phone) {
+        try {
+          let r = await this.call('frappe.client.get_value', {
+            doctype: 'CRM Lead',
+            fieldname: ['mobile_no', 'phone'],
+            filters: { name: this.doc.reference_docname }
+          });
+          phone = r?.message?.mobile_no || r?.message?.phone;
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      if (phone) {
+        if (this.doc.type === 'Incoming') {
+          if (!this.doc.from) this.doc.from = phone;
+        } else {
+          if (!this.doc.to) this.doc.to = phone;
+        }
       }
     }
   }

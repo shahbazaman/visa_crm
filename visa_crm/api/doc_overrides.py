@@ -3,6 +3,7 @@
 
 import json
 import frappe
+from frappe import _
 from crm.api.doc import get_data as base_get_data
 from visa_crm.overrides.contact import VisaCRMContact
 
@@ -25,8 +26,9 @@ def get_data(
 ):
 	"""
 	Custom wrapper around crm.api.doc.get_data:
-	1. Normalizes LIKE and name filters on CRM Lead to match across lead name, ID, and org.
-	2. Sanitizes rows for Contact and enriches dynamic columns (customer_name, category, subcategory).
+	1. Normalizes Lead filters (category -> lead_category, subcategory -> lead_group, Like queries).
+	2. Sanitizes query rows and enriches virtual columns (Contacts: customer_name, category, subcat).
+	3. Ensures all sidebar lists (Leads, Contacts, Notes, Call Logs) and Tree view filters work seamlessly.
 	"""
 	if isinstance(filters, str):
 		try:
@@ -36,10 +38,19 @@ def get_data(
 	elif filters is None:
 		filters = {}
 
-	if doctype == "CRM Lead" and isinstance(filters, dict):
-		filters = normalize_crm_lead_filters(filters)
+	if isinstance(default_filters, str):
+		try:
+			default_filters = json.loads(default_filters)
+		except Exception:
+			default_filters = {}
 
-	# If querying Contact, remove virtual fields from rows before calling base_get_data
+	if doctype == "CRM Lead":
+		if isinstance(filters, dict):
+			filters = normalize_crm_lead_filters(filters)
+		if isinstance(default_filters, dict):
+			default_filters = normalize_crm_lead_filters(default_filters)
+
+	# For Contact, sanitize custom columns so MySQL get_list doesn't fail
 	if doctype == "Contact":
 		if isinstance(rows, str):
 			try:
@@ -50,6 +61,7 @@ def get_data(
 			virtual_fields = {"customer_name", "lead_category", "lead_group"}
 			rows = [r for r in rows if r not in virtual_fields]
 
+	# Execute base get_data
 	res = base_get_data(
 		doctype=doctype,
 		filters=filters,
@@ -66,7 +78,7 @@ def get_data(
 		default_filters=default_filters,
 	)
 
-	# Ensure Contact list is enriched
+	# Ensure Contact list has dynamic columns enriched
 	if doctype == "Contact" and isinstance(res, dict) and "data" in res:
 		res["data"] = VisaCRMContact.parse_list_data(res["data"])
 
@@ -75,12 +87,29 @@ def get_data(
 
 def normalize_crm_lead_filters(filters: dict) -> dict:
 	"""
-	Normalize search queries on CRM Lead:
-	If searching by 'name' or 'lead_name' with 'like', 'LIKE', '=', or 'equals':
-	Finds all matching lead IDs across name, lead_name, first_name, last_name, and organization.
+	Normalize search and URL query filters on CRM Lead:
+	- category -> lead_category
+	- subcategory -> lead_group
+	- LIKE / = on name or lead_name -> search across name, lead_name, first_name, last_name, organization
 	"""
+	if not filters or not isinstance(filters, dict):
+		return filters or {}
+
 	new_filters = dict(filters)
 
+	# Map URL param 'category' to 'lead_category'
+	if "category" in new_filters:
+		val = new_filters.pop("category")
+		if val and val != "All":
+			new_filters["lead_category"] = val
+
+	# Map URL param 'subcategory' to 'lead_group'
+	if "subcategory" in new_filters:
+		val = new_filters.pop("subcategory")
+		if val and val != "All":
+			new_filters["lead_group"] = val
+
+	# Normalize search on name or lead_name
 	for target_field in ["name", "lead_name"]:
 		if target_field not in new_filters:
 			continue
@@ -98,7 +127,7 @@ def normalize_crm_lead_filters(filters: dict) -> dict:
 		if not search_term:
 			continue
 
-		# If searching on 'name' and it already looks like exact series ID (e.g. CRM-LEAD-2026-00001)
+		# If searching on 'name' and it's already an exact series ID (e.g. CRM-LEAD-2026-00001)
 		if target_field == "name" and operator in ("=", "equals") and search_term.startswith("CRM-LEAD-"):
 			continue
 
