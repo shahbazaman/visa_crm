@@ -715,11 +715,20 @@ def get_default_whatsapp_account(auto_create: bool = True) -> str:
 def is_whatsapp_enabled() -> bool:
 	"""
 	Universal fault-tolerant WhatsApp enabled checker for Frappe CRM v1.82.
+	Auto-initializes and commits the active WhatsApp Account on first check.
 	"""
 	if not frappe.db.exists("DocType", "WhatsApp Settings") or not frappe.db.exists("DocType", "WhatsApp Account"):
 		return False
 
-	acc = get_default_whatsapp_account(auto_create=False)
+	acc = get_default_whatsapp_account(auto_create=True)
+	if acc:
+		try:
+			# Ensure tabSingles has both default_account and default_outgoing_account
+			frappe.db.set_value("WhatsApp Settings", "WhatsApp Settings", "default_account", acc)
+			frappe.db.set_value("WhatsApp Settings", "WhatsApp Settings", "default_outgoing_account", acc)
+			frappe.db.commit()
+		except Exception:
+			pass
 	return bool(acc)
 
 @frappe.whitelist(allow_guest=True)
