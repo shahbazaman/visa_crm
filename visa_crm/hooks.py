@@ -20,7 +20,9 @@ override_doctype_class = {
 override_whitelisted_methods = {
     "crm.api.settings.create_email_account": "visa_crm.api.email_account.create_email_account",
     "crm.api.doc.get_data": "visa_crm.api.doc_overrides.get_data",
-    "crm.api.whatsapp.validate_access": "visa_crm.api.whatsapp_integration.validate_access"
+    "crm.api.whatsapp.validate_access": "visa_crm.api.whatsapp_integration.validate_access",
+    "crm.api.whatsapp.is_whatsapp_enabled": "visa_crm.api.whatsapp_integration.is_whatsapp_enabled",
+    "crm.api.whatsapp.is_whatsapp_installed": "visa_crm.api.whatsapp_integration.is_whatsapp_installed"
 }
 doc_events = {
     "File": {"after_insert": ["visa_crm.api.android_metadata.handle_file_upload", "visa_crm.api.gemini_service.auto_create_call_intelligence"]},

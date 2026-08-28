@@ -124,3 +124,22 @@ class TestWhatsAppIntegration(unittest.TestCase):
 				)
 				mock_notif.insert.assert_called_once()
 				self.assertEqual(mock_notif.to_user, "counselor@test.com")
+
+	def test_is_whatsapp_enabled_with_active_account(self):
+		from visa_crm.api.whatsapp_integration import is_whatsapp_enabled
+		self.mock_db.exists.return_value = True
+		self.mock_db.get_single_value.side_effect = lambda dt, field: "WABA-001" if field == "default_account" else None
+		self.mock_db.get_value.return_value = "Active"
+		self.assertTrue(is_whatsapp_enabled())
+
+	def test_is_whatsapp_enabled_with_no_account(self):
+		from visa_crm.api.whatsapp_integration import is_whatsapp_enabled
+		self.mock_db.exists.return_value = True
+		self.mock_db.get_single_value.return_value = None
+		with patch("frappe.get_all", return_value=[]):
+			self.assertFalse(is_whatsapp_enabled())
+
+	def test_is_whatsapp_installed(self):
+		from visa_crm.api.whatsapp_integration import is_whatsapp_installed
+		self.mock_db.exists.return_value = True
+		self.assertTrue(is_whatsapp_installed())

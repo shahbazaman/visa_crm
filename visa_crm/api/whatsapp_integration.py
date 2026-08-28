@@ -357,3 +357,43 @@ def on_whatsapp_message_update(doc, method=None):
 				"name": doc.name,
 			},
 		)
+
+@frappe.whitelist()
+def is_whatsapp_enabled() -> bool:
+	"""
+	Universal fault-tolerant WhatsApp enabled checker for Frappe CRM v1.82.
+	Checks both 'default_account' (frappe/whatsapp) and 'default_outgoing_account' (frappe/crm),
+	and verifies if an Active WhatsApp Account exists.
+	"""
+	if not frappe.db.exists("DocType", "WhatsApp Settings") or not frappe.db.exists("DocType", "WhatsApp Account"):
+		return False
+
+	# 1. Check default_account (frappe/whatsapp official standard)
+	try:
+		default_acc = frappe.db.get_single_value("WhatsApp Settings", "default_account")
+		if not default_acc:
+			default_acc = frappe.db.get_single_value("WhatsApp Settings", "default_outgoing_account")
+		if default_acc:
+			status = frappe.db.get_value("WhatsApp Account", default_acc, "status")
+			if status == "Active":
+				return True
+	except Exception:
+		pass
+
+	# 2. Fallback: check if any active WhatsApp Account exists in the system
+	try:
+		active_accounts = frappe.get_all("WhatsApp Account", filters={"status": "Active"}, limit=1)
+		return bool(active_accounts)
+	except Exception:
+		return False
+
+
+@frappe.whitelist()
+def is_whatsapp_installed() -> bool:
+	"""
+	Universal WhatsApp installed checker for Frappe CRM.
+	"""
+	return bool(
+		frappe.db.exists("DocType", "WhatsApp Settings")
+		and frappe.db.exists("DocType", "WhatsApp Message")
+	)
