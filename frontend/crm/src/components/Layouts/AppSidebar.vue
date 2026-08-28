@@ -264,9 +264,7 @@ const links = [
   {
     label: 'WhatsApp',
     icon: WhatsAppIcon,
-    onClick: () => {
-      window.open('https://web.whatsapp.com/', '_blank', 'noopener,noreferrer')
-    },
+    to: 'WhatsApp',
   },
 ]
 

@@ -150,10 +150,7 @@ const links = [
   {
     label: 'WhatsApp',
     icon: WhatsAppIcon,
-    onClick: () => {
-      sidebarOpened.value = false
-      window.open('https://web.whatsapp.com/', '_blank', 'noopener,noreferrer')
-    },
+    to: 'WhatsApp',
   },
 ]
 

@@ -69,11 +69,21 @@
       </div>
     `;
 
-    // Click behavior: Open real WhatsApp Web in new browser tab
+    // Click behavior: Navigate to /crm/whatsapp
     waBtn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
-      window.open('https://web.whatsapp.com/', '_blank', 'noopener,noreferrer');
+      if (window.location.pathname !== '/crm/whatsapp') {
+        try {
+          // Use Vue router if available
+          const appElement = document.querySelector('#app');
+          if (appElement && appElement.__vue_app__ && appElement.__vue_app__.config.globalProperties.$router) {
+            appElement.__vue_app__.config.globalProperties.$router.push({ name: 'WhatsApp' });
+            return;
+          }
+        } catch (err) {}
+        window.location.href = '/crm/whatsapp';
+      }
     });
 
     // Insert right after Call Logs
