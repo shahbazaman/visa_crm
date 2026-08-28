@@ -707,7 +707,7 @@ def get_default_whatsapp_account(auto_create: bool = True) -> str:
 		return "Primary WhatsApp"
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=True)
 def is_whatsapp_enabled() -> bool:
 	"""
 	Universal fault-tolerant WhatsApp enabled checker for Frappe CRM v1.82.
@@ -718,7 +718,7 @@ def is_whatsapp_enabled() -> bool:
 	acc = get_default_whatsapp_account(auto_create=False)
 	return bool(acc)
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=True)
 def is_whatsapp_installed() -> bool:
 	"""
 	Universal WhatsApp installed checker for Frappe CRM.
