@@ -19,7 +19,8 @@ override_doctype_class = {
 }
 override_whitelisted_methods = {
     "crm.api.settings.create_email_account": "visa_crm.api.email_account.create_email_account",
-    "crm.api.doc.get_data": "visa_crm.api.doc_overrides.get_data"
+    "crm.api.doc.get_data": "visa_crm.api.doc_overrides.get_data",
+    "crm.api.whatsapp.validate_access": "visa_crm.api.whatsapp_integration.validate_access"
 }
 doc_events = {
     "File": {"after_insert": ["visa_crm.api.android_metadata.handle_file_upload", "visa_crm.api.gemini_service.auto_create_call_intelligence"]},
@@ -51,6 +52,11 @@ doc_events = {
     "CRM Task": {
         "on_update": ["visa_crm.api.task_reminders.on_task_update"]
     },
+    "WhatsApp Message": {
+        "validate": ["visa_crm.api.whatsapp_integration.on_whatsapp_message_validate"],
+        "after_insert": ["visa_crm.api.whatsapp_integration.on_whatsapp_message_after_insert"],
+        "on_update": ["visa_crm.api.whatsapp_integration.on_whatsapp_message_update"]
+    },
     "Lead Sync Source": {"before_validate": ["visa_crm.patches.disable_builtin_crm_meta_sync.prevent_builtin_meta_sync_enable"]},
     "Email Account": {"before_validate": ["visa_crm.api.email_account.enforce_communication_only"]}
 }
@@ -67,7 +73,8 @@ permission_query_conditions = {
     "CRM Organization": "visa_crm.api.lead_permissions.crm_organization_query",
     "FCRM Note": "visa_crm.api.lead_permissions.fcrm_note_query",
     "CRM Task": "visa_crm.api.lead_permissions.crm_task_query",
-    "CRM Call Log": "visa_crm.api.lead_permissions.crm_call_log_query"
+    "CRM Call Log": "visa_crm.api.lead_permissions.crm_call_log_query",
+    "WhatsApp Message": "visa_crm.api.lead_permissions.whatsapp_message_query"
 }
 has_permission = {
     "CRM Lead": "visa_crm.api.lead_permissions.crm_lead_permission",
@@ -82,8 +89,10 @@ has_permission = {
     "CRM Organization": "visa_crm.api.lead_permissions.crm_organization_permission",
     "FCRM Note": "visa_crm.api.lead_permissions.fcrm_note_permission",
     "CRM Task": "visa_crm.api.lead_permissions.crm_task_permission",
-    "CRM Call Log": "visa_crm.api.lead_permissions.crm_call_log_permission"
+    "CRM Call Log": "visa_crm.api.lead_permissions.crm_call_log_permission",
+    "WhatsApp Message": "visa_crm.api.lead_permissions.whatsapp_message_permission"
 }
+whatsapp_access_guard = ["visa_crm.api.whatsapp_integration.whatsapp_access_guard"]
 doctype_js = {
     "Call Intelligence": "public/js/call_intelligence.js",
     "Customer": "public/js/customer.js",

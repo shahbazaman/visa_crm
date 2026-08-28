@@ -104,32 +104,11 @@ def visa_permission(doc, ptype=None, user=None):
     return _linked_lead_permission(doc.get("lead"), user)
 
 
-def customer_query(user=None):
-    return _linked_lead_query("Customer", "crm_lead", user)
-
-
-def customer_permission(doc, ptype=None, user=None):
-    return _linked_lead_permission(doc.get("crm_lead"), user)
-
-
 def communication_event_query(user=None):
-    user = user or frappe.session.user
-    if is_management(user):
-        return ""
-    if not is_operational(user):
-        return ""
-    lead_condition = _linked_lead_sql("tabCommunication Event", "lead", user)
-    return f"({lead_condition} or `tabCommunication Event`.`assigned_user`={frappe.db.escape(user)} or `tabCommunication Event`.`owner`={frappe.db.escape(user)})"
+    return _linked_lead_query("Communication Event", "lead", user)
 
 
 def communication_event_permission(doc, ptype=None, user=None):
-    user = user or frappe.session.user
-    if is_management(user):
-        return True
-    if not is_operational(user):
-        return None
-    if doc.get("assigned_user") == user or doc.get("owner") == user:
-        return True
     return _linked_lead_permission(doc.get("lead"), user)
 
 
@@ -137,97 +116,90 @@ def todo_query(user=None):
     user = user or frappe.session.user
     if is_management(user):
         return ""
-    if not is_operational(user):
-        return ""
-    lead_condition = _linked_lead_sql("tabToDo", "reference_name", user, reference_type="CRM Lead")
-    return f"(`tabToDo`.`allocated_to`={frappe.db.escape(user)} or `tabToDo`.`assigned_by`={frappe.db.escape(user)} or {lead_condition})"
+    escaped_user = frappe.db.escape(user)
+    return f"(`tabToDo`.`allocated_to`={escaped_user} or `tabToDo`.`owner`={escaped_user})"
 
 
 def todo_permission(doc, ptype=None, user=None):
     user = user or frappe.session.user
     if is_management(user):
         return True
-    if not is_operational(user):
-        return None
-    if doc.get("allocated_to") == user or doc.get("assigned_by") == user:
-        return True
-    if doc.get("reference_type") == "CRM Lead":
-        return _linked_lead_permission(doc.get("reference_name"), user)
-    return None
+    return doc.get("allocated_to") == user or doc.get("owner") == user
 
 
 def email_account_query(user=None):
     user = user or frappe.session.user
     if is_management(user):
         return ""
-    if not is_operational(user):
-        return ""
-    allowed = _user_email_accounts(user)
-    conditions = [f"`tabEmail Account`.`owner`={frappe.db.escape(user)}", f"`tabEmail Account`.`connected_user`={frappe.db.escape(user)}"]
-    if allowed:
-        conditions.append("`tabEmail Account`.`name` in ({})".format(",".join(frappe.db.escape(value) for value in allowed)))
-    return "(" + " or ".join(conditions) + ")"
+    return _email_account_condition("tabEmail Account", user)
 
 
 def email_account_permission(doc, ptype=None, user=None):
     user = user or frappe.session.user
     if is_management(user):
         return True
-    if not is_operational(user):
-        return None
-    return doc.get("owner") == user or doc.get("connected_user") == user or doc.name in _user_email_accounts(user)
+    return doc.get("name") in _user_email_accounts(user)
 
 
 def communication_query(user=None):
     user = user or frappe.session.user
     if is_management(user):
         return ""
-    if not is_operational(user):
-        return ""
-    account_condition = _email_account_condition("tabCommunication", user)
-    lead_condition = _communication_lead_condition(user)
-    return f"(`tabCommunication`.`owner`={frappe.db.escape(user)} or {account_condition} or {lead_condition})"
+    user_cond = f"`tabCommunication`.`owner`={frappe.db.escape(user)}"
+    email_cond = _email_account_condition("tabCommunication", user)
+    lead_cond = _communication_lead_condition(user)
+    return f"({user_cond} or {email_cond} or {lead_cond})"
 
 
 def communication_permission(doc, ptype=None, user=None):
     user = user or frappe.session.user
     if is_management(user):
         return True
-    if not is_operational(user):
-        return None
-    if doc.get("owner") == user or doc.get("email_account") in _user_email_accounts(user):
+    if doc.get("owner") == user:
         return True
-    if doc.get("reference_doctype") == "CRM Lead":
+    if doc.get("email_account") and doc.get("email_account") in _user_email_accounts(user):
+        return True
+    if doc.get("reference_doctype") == "CRM Lead" and doc.get("reference_name"):
         return _linked_lead_permission(doc.get("reference_name"), user)
-    if doc.get("reference_doctype") == "CRM Deal":
+    if doc.get("reference_doctype") == "CRM Deal" and doc.get("reference_name"):
         lead = frappe.db.get_value("CRM Deal", doc.get("reference_name"), "lead")
         return _linked_lead_permission(lead, user)
     return False
 
 
-# --- Feature 6: Role-Based CRM Sidebar Visibility (Contacts, Organizations, Notes, Tasks, Call Logs) ---
-
 def contact_query(user=None):
-    """Normal employees see only Contacts they created/own. Management and HR see all."""
     user = user or frappe.session.user
     if is_management(user):
         return ""
-    return f"`tabContact`.`owner` = {frappe.db.escape(user)}"
+    escaped_user = frappe.db.escape(user)
+    categories = accessible_categories(user)
+    if not categories:
+        return f"(`tabContact`.`owner`={escaped_user})"
+    category_sql = ",".join(frappe.db.escape(value) for value in categories)
+    lead_link = f"(`tabContact`.`name` in (select `parent` from `tabDynamic Link` where `parenttype`='Contact' and `link_doctype`='CRM Lead' and `link_name` in (select `name` from `tabCRM Lead` where `lead_category` in ({category_sql}))))"
+    return f"(`tabContact`.`owner`={escaped_user} or {lead_link})"
 
 
 def contact_permission(doc, ptype=None, user=None):
     user = user or frappe.session.user
     if is_management(user):
         return True
-    return doc.get("owner") == user
+    if doc.get("owner") == user:
+        return True
+    if hasattr(doc, "links") and doc.links:
+        for link in doc.links:
+            if link.link_doctype == "CRM Lead" and link.link_name:
+                if _linked_lead_permission(link.link_name, user):
+                    return True
+    return False
 
 
 def crm_organization_query(user=None):
-    """Normal employees see only CRM Organizations they created/own. Management and HR see all."""
     user = user or frappe.session.user
     if is_management(user):
         return ""
-    return f"`tabCRM Organization`.`owner` = {frappe.db.escape(user)}"
+    escaped_user = frappe.db.escape(user)
+    return f"(`tabCRM Organization`.`owner`={escaped_user})"
 
 
 def crm_organization_permission(doc, ptype=None, user=None):
@@ -238,61 +210,129 @@ def crm_organization_permission(doc, ptype=None, user=None):
 
 
 def fcrm_note_query(user=None):
-    """Normal employees see only Notes they created/own. Management and HR see all."""
     user = user or frappe.session.user
     if is_management(user):
         return ""
-    return f"`tabFCRM Note`.`owner` = {frappe.db.escape(user)}"
+    escaped_user = frappe.db.escape(user)
+    categories = accessible_categories(user)
+    if not categories:
+        return f"(`tabFCRM Note`.`owner`={escaped_user})"
+    category_sql = ",".join(frappe.db.escape(value) for value in categories)
+    lead_ref = f"(`tabFCRM Note`.`reference_doctype`='CRM Lead' and `tabFCRM Note`.`reference_docname` in (select `name` from `tabCRM Lead` where `lead_category` in ({category_sql})))"
+    return f"(`tabFCRM Note`.`owner`={escaped_user} or {lead_ref})"
 
 
 def fcrm_note_permission(doc, ptype=None, user=None):
     user = user or frappe.session.user
     if is_management(user):
         return True
-    return doc.get("owner") == user
+    if doc.get("owner") == user:
+        return True
+    if doc.get("reference_doctype") == "CRM Lead" and doc.get("reference_docname"):
+        return _linked_lead_permission(doc.get("reference_docname"), user)
+    return False
 
 
 def crm_task_query(user=None):
-    """Normal employees see only Tasks assigned to them or created by them. Management and HR see all."""
     user = user or frappe.session.user
     if is_management(user):
         return ""
-    user_esc = frappe.db.escape(user)
-    assign_pat = frappe.db.escape(f"%{user}%")
-    return f"(`tabCRM Task`.`assigned_to` = {user_esc} or `tabCRM Task`.`owner` = {user_esc} or `tabCRM Task`.`_assign` like {assign_pat})"
+    escaped_user = frappe.db.escape(user)
+    categories = accessible_categories(user)
+    if not categories:
+        return f"(`tabCRM Task`.`owner`={escaped_user} or `tabCRM Task`.`assigned_to`={escaped_user})"
+    category_sql = ",".join(frappe.db.escape(value) for value in categories)
+    lead_ref = f"(`tabCRM Task`.`reference_doctype`='CRM Lead' and `tabCRM Task`.`reference_docname` in (select `name` from `tabCRM Lead` where `lead_category` in ({category_sql})))"
+    return f"(`tabCRM Task`.`owner`={escaped_user} or `tabCRM Task`.`assigned_to`={escaped_user} or {lead_ref})"
 
 
 def crm_task_permission(doc, ptype=None, user=None):
     user = user or frappe.session.user
     if is_management(user):
         return True
-    if doc.get("assigned_to") == user or doc.get("owner") == user:
+    if doc.get("owner") == user or doc.get("assigned_to") == user:
         return True
-    assign = doc.get("_assign")
-    if assign and user in str(assign):
-        return True
+    if doc.get("reference_doctype") == "CRM Lead" and doc.get("reference_docname"):
+        return _linked_lead_permission(doc.get("reference_docname"), user)
     return False
 
 
 def crm_call_log_query(user=None):
-    """Normal employees see only Call Logs created by them or where they are caller/receiver. Management and HR see all."""
     user = user or frappe.session.user
     if is_management(user):
         return ""
-    user_esc = frappe.db.escape(user)
-    return f"(`tabCRM Call Log`.`owner` = {user_esc} or `tabCRM Call Log`.`caller` = {user_esc} or `tabCRM Call Log`.`receiver` = {user_esc})"
+    escaped_user = frappe.db.escape(user)
+    categories = accessible_categories(user)
+    if not categories:
+        return f"(`tabCRM Call Log`.`owner`={escaped_user} or `tabCRM Call Log`.`caller`={escaped_user} or `tabCRM Call Log`.`receiver`={escaped_user})"
+    category_sql = ",".join(frappe.db.escape(value) for value in categories)
+    lead_ref = f"(`tabCRM Call Log`.`reference_doctype`='CRM Lead' and `tabCRM Call Log`.`reference_docname` in (select `name` from `tabCRM Lead` where `lead_category` in ({category_sql})))"
+    return f"(`tabCRM Call Log`.`owner`={escaped_user} or `tabCRM Call Log`.`caller`={escaped_user} or `tabCRM Call Log`.`receiver`={escaped_user} or {lead_ref})"
 
 
 def crm_call_log_permission(doc, ptype=None, user=None):
     user = user or frappe.session.user
     if is_management(user):
         return True
-    return doc.get("owner") == user or doc.get("caller") == user or doc.get("receiver") == user
+    if doc.get("owner") == user or doc.get("caller") == user or doc.get("receiver") == user:
+        return True
+    if doc.get("reference_doctype") == "CRM Lead" and doc.get("reference_docname"):
+        return _linked_lead_permission(doc.get("reference_docname"), user)
+    return False
 
 
-# --- Helper Methods ---
+def whatsapp_message_query(user=None):
+    """
+    SQL permission query for WhatsApp Message:
+    - Management / Admin: full visibility.
+    - Counselors: can see their own messages or messages attached to CRM Leads they have permission to access.
+    """
+    user = user or frappe.session.user
+    if is_management(user):
+        return ""
+    escaped_user = frappe.db.escape(user)
+    categories = accessible_categories(user)
+    if not categories:
+        return f"(`tabWhatsApp Message`.`owner`={escaped_user})"
+    category_sql = ",".join(frappe.db.escape(value) for value in categories)
+    lead_ref = f"(`tabWhatsApp Message`.`reference_doctype`='CRM Lead' and `tabWhatsApp Message`.`reference_docname` in (select `name` from `tabCRM Lead` where `lead_category` in ({category_sql})))"
+    return f"(`tabWhatsApp Message`.`owner`={escaped_user} or {lead_ref})"
 
-def _category_query(doctype, user=None):
+
+def whatsapp_message_permission(doc, ptype=None, user=None):
+    """
+    Document-level permission check for WhatsApp Message:
+    - Management / Admin: full access.
+    - Message owner: full access.
+    - Linked CRM Lead: scoped by lead permissions.
+    """
+    user = user or frappe.session.user
+    if is_management(user):
+        return True
+    if doc.get("owner") == user:
+        return True
+    if doc.get("reference_doctype") == "CRM Lead" and doc.get("reference_docname"):
+        return _linked_lead_permission(doc.get("reference_docname"), user)
+    if doc.get("reference_doctype") == "Customer" and doc.get("reference_docname"):
+        return True
+    return False
+
+
+def customer_query(user=None):
+    user = user or frappe.session.user
+    if is_management(user):
+        return ""
+    return ""
+
+
+def customer_permission(doc, ptype=None, user=None):
+    user = user or frappe.session.user
+    if is_management(user):
+        return True
+    return True
+
+
+def _category_query(doctype, user):
     user = user or frappe.session.user
     if is_management(user):
         return ""
@@ -304,7 +344,7 @@ def _category_query(doctype, user=None):
     return "`tab{}`.`lead_category` in ({})".format(doctype, ",".join(frappe.db.escape(value) for value in categories))
 
 
-def _category_permission(doc, user=None):
+def _category_permission(doc, user):
     user = user or frappe.session.user
     if is_management(user):
         return True
@@ -313,30 +353,26 @@ def _category_permission(doc, user=None):
     return doc.get("lead_category") in accessible_categories(user)
 
 
-def _linked_lead_query(doctype, field, user=None):
+def _linked_lead_query(table, field, user):
     user = user or frappe.session.user
     if is_management(user):
         return ""
     if not is_operational(user):
         return ""
-    return _linked_lead_sql(f"tab{doctype}", field, user)
-
-
-def _linked_lead_sql(table, field, user=None, reference_type=None):
-    user = user or frappe.session.user
     categories = accessible_categories(user)
     if not categories:
         return "1=0"
     category_sql = ",".join(frappe.db.escape(value) for value in categories)
-    reference = f" and `{table}`.`reference_type`='CRM Lead'" if reference_type else ""
-    return f"(`{table}`.`{field}` in (select `name` from `tabCRM Lead` where `lead_category` in ({category_sql})){reference})"
+    reference = f" or (`tab{table}`.`reference_doctype`='CRM Lead' and `tab{table}`.`reference_docname` in (select `name` from `tabCRM Lead` where `lead_category` in ({category_sql})))" if frappe.get_meta(table).has_field("reference_doctype") else ""
+    return f"(`tab{table}`.`{field}` in (select `name` from `tabCRM Lead` where `lead_category` in ({category_sql})){reference})"
 
 
-def _linked_lead_permission(lead, user=None):
-    if not is_operational(user):
-        return None
-    if not lead or not frappe.db.exists("CRM Lead", lead):
+def _linked_lead_permission(lead, user):
+    if not lead:
         return False
+    user = user or frappe.session.user
+    if is_management(user):
+        return True
     category = frappe.db.get_value("CRM Lead", lead, "lead_category")
     return is_management(user) or category in accessible_categories(user)
 
