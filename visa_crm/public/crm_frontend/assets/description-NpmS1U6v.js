@@ -1,0 +1,1 @@
+import{E as s,C as r,J as u}from"./index-BANnw0d1.js";let a=Symbol("DescriptionContext");function c({slot:i=r({}),name:l="Description",props:n={}}={}){let e=r([]);function p(t){return e.value.push(t),()=>{let o=e.value.indexOf(t);o!==-1&&e.value.splice(o,1)}}return u(a,{register:p,slot:i,name:l,props:n}),s(()=>e.value.length>0?e.value.join(" "):void 0)}export{c as k};
