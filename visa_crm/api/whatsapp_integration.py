@@ -358,47 +358,6 @@ def on_whatsapp_message_update(doc, method=None):
 			},
 		)
 
-@frappe.whitelist()
-def is_whatsapp_enabled() -> bool:
-	"""
-	Universal fault-tolerant WhatsApp enabled checker for Frappe CRM v1.82.
-	Checks both 'default_account' (frappe/whatsapp) and 'default_outgoing_account' (frappe/crm),
-	and verifies if an Active WhatsApp Account exists.
-	"""
-	if not frappe.db.exists("DocType", "WhatsApp Settings") or not frappe.db.exists("DocType", "WhatsApp Account"):
-		return False
-
-	# 1. Check default_account (frappe/whatsapp official standard)
-	try:
-		default_acc = frappe.db.get_single_value("WhatsApp Settings", "default_account")
-		if not default_acc:
-			default_acc = frappe.db.get_single_value("WhatsApp Settings", "default_outgoing_account")
-		if default_acc:
-			status = frappe.db.get_value("WhatsApp Account", default_acc, "status")
-			if status == "Active":
-				return True
-	except Exception:
-		pass
-
-	# 2. Fallback: check if any active WhatsApp Account exists in the system
-	try:
-		active_accounts = frappe.get_all("WhatsApp Account", filters={"status": "Active"}, limit=1)
-		return bool(active_accounts)
-	except Exception:
-		return False
-
-
-@frappe.whitelist()
-def is_whatsapp_installed() -> bool:
-	"""
-	Universal WhatsApp installed checker for Frappe CRM.
-	"""
-	return bool(
-		frappe.db.exists("DocType", "WhatsApp Settings")
-		and frappe.db.exists("DocType", "WhatsApp Message")
-	)
-
-
 def get_or_create_whatsapp_profile(phone: str, whatsapp_account: str, profile_name: str = None) -> str:
 	"""
 	Resolve or create a WhatsApp Profile for a given phone number.
@@ -552,22 +511,7 @@ def create_whatsapp_message(
 	"""
 	validate_access(reference_doctype, reference_name)
 
-	# Determine default account
-	default_account = None
-	try:
-		default_account = frappe.db.get_single_value("WhatsApp Settings", "default_account")
-		if not default_account:
-			default_account = frappe.db.get_single_value("WhatsApp Settings", "default_outgoing_account")
-	except Exception:
-		pass
-
-	if not default_account and frappe.db.exists("DocType", "WhatsApp Account"):
-		active_acc = frappe.get_all("WhatsApp Account", filters={"status": "Active"}, limit=1)
-		if active_acc:
-			default_account = active_acc[0].name
-
-	if not default_account:
-		frappe.throw(_("No active WhatsApp Account configured."), frappe.ValidationError)
+	default_account = get_default_whatsapp_account()
 
 	lead_title = reference_name
 	try:
@@ -608,7 +552,6 @@ def create_whatsapp_message(
 
 	return doc.name
 
-
 @frappe.whitelist()
 def send_whatsapp_template(reference_doctype: str, reference_name: str, template: str, to: str):
 	"""
@@ -616,18 +559,7 @@ def send_whatsapp_template(reference_doctype: str, reference_name: str, template
 	"""
 	validate_access(reference_doctype, reference_name)
 
-	default_account = None
-	try:
-		default_account = frappe.db.get_single_value("WhatsApp Settings", "default_account")
-		if not default_account:
-			default_account = frappe.db.get_single_value("WhatsApp Settings", "default_outgoing_account")
-	except Exception:
-		pass
-
-	if not default_account and frappe.db.exists("DocType", "WhatsApp Account"):
-		active_acc = frappe.get_all("WhatsApp Account", filters={"status": "Active"}, limit=1)
-		if active_acc:
-			default_account = active_acc[0].name
+	default_account = get_default_whatsapp_account()
 
 	lead_title = reference_name
 	try:
@@ -658,7 +590,6 @@ def send_whatsapp_template(reference_doctype: str, reference_name: str, template
 
 	return doc.name
 
-
 @frappe.whitelist()
 def react_on_whatsapp_message(emoji: str, reply_to_name: str):
 	"""
@@ -682,3 +613,74 @@ def react_on_whatsapp_message(emoji: str, reply_to_name: str):
 		},
 	)
 	return msg_doc.name
+
+
+def get_default_whatsapp_account(auto_create: bool = True) -> str:
+	"""
+	Safely retrieve or auto-initialize an active WhatsApp Account.
+	"""
+	# 1. Try single settings
+	for field in ("default_account", "default_outgoing_account"):
+		try:
+			acc = frappe.db.get_single_value("WhatsApp Settings", field)
+			if acc and frappe.db.exists("WhatsApp Account", acc):
+				return acc
+		except Exception:
+			pass
+
+	# 2. Try any active WhatsApp Account
+	try:
+		accounts = frappe.get_all("WhatsApp Account", filters={"status": "Active"}, limit=1)
+		if accounts:
+			return accounts[0].name
+	except Exception:
+		pass
+
+	# 3. Try any existing WhatsApp Account
+	try:
+		accounts = frappe.get_all("WhatsApp Account", limit=1)
+		if accounts:
+			acc_name = accounts[0].name
+			if auto_create:
+				try:
+					frappe.db.set_value("WhatsApp Account", acc_name, "status", "Active")
+				except Exception:
+					pass
+			return acc_name
+	except Exception:
+		pass
+
+	if not auto_create:
+		return ""
+
+	# 4. Auto-create 'Primary WhatsApp' account
+	try:
+		acc = frappe.new_doc("WhatsApp Account")
+		acc.account_name = "Primary WhatsApp"
+		acc.status = "Active"
+		acc.insert(ignore_permissions=True)
+		return acc.name
+	except Exception:
+		return "Primary WhatsApp"
+
+
+@frappe.whitelist()
+def is_whatsapp_enabled() -> bool:
+	"""
+	Universal fault-tolerant WhatsApp enabled checker for Frappe CRM v1.82.
+	"""
+	if not frappe.db.exists("DocType", "WhatsApp Settings") or not frappe.db.exists("DocType", "WhatsApp Account"):
+		return False
+
+	acc = get_default_whatsapp_account(auto_create=False)
+	return bool(acc)
+
+@frappe.whitelist()
+def is_whatsapp_installed() -> bool:
+	"""
+	Universal WhatsApp installed checker for Frappe CRM.
+	"""
+	return bool(
+		frappe.db.exists("DocType", "WhatsApp Settings")
+		and frappe.db.exists("DocType", "WhatsApp Message")
+	)
