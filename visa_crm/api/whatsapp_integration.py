@@ -658,38 +658,41 @@ def react_on_whatsapp_message(emoji: str, reply_to_name: str):
 	return msg_doc.name
 
 
+
 def get_default_whatsapp_account(auto_create: bool = True) -> str:
 	"""
 	Safely retrieve or auto-initialize an active WhatsApp Account.
 	"""
-	# 1. Try single settings
-	for field in ("default_account", "default_outgoing_account"):
-		try:
-			acc = frappe.db.get_single_value("WhatsApp Settings", field)
+	# 1. Try single settings 'default_account' safely
+	try:
+		if frappe.db.exists("DocType", "WhatsApp Settings"):
+			acc = frappe.db.get_value("WhatsApp Settings", "WhatsApp Settings", "default_account")
 			if acc and frappe.db.exists("WhatsApp Account", acc):
 				return acc
-		except Exception:
-			pass
+	except Exception:
+		pass
 
 	# 2. Try any active WhatsApp Account
 	try:
-		accounts = frappe.get_all("WhatsApp Account", filters={"status": "Active"}, limit=1)
-		if accounts:
-			return accounts[0].name
+		if frappe.db.exists("DocType", "WhatsApp Account"):
+			accounts = frappe.get_all("WhatsApp Account", filters={"status": "Active"}, limit=1)
+			if accounts:
+				return accounts[0].name
 	except Exception:
 		pass
 
 	# 3. Try any existing WhatsApp Account
 	try:
-		accounts = frappe.get_all("WhatsApp Account", limit=1)
-		if accounts:
-			acc_name = accounts[0].name
-			if auto_create:
-				try:
-					frappe.db.set_value("WhatsApp Account", acc_name, "status", "Active")
-				except Exception:
-					pass
-			return acc_name
+		if frappe.db.exists("DocType", "WhatsApp Account"):
+			accounts = frappe.get_all("WhatsApp Account", limit=1)
+			if accounts:
+				acc_name = accounts[0].name
+				if auto_create:
+					try:
+						frappe.db.set_value("WhatsApp Account", acc_name, "status", "Active")
+					except Exception:
+						pass
+				return acc_name
 	except Exception:
 		pass
 
@@ -698,11 +701,12 @@ def get_default_whatsapp_account(auto_create: bool = True) -> str:
 
 	# 4. Auto-create 'Primary WhatsApp' account
 	try:
-		acc = frappe.new_doc("WhatsApp Account")
-		acc.account_name = "Primary WhatsApp"
-		acc.status = "Active"
-		acc.insert(ignore_permissions=True)
-		return acc.name
+		if frappe.db.exists("DocType", "WhatsApp Account"):
+			acc = frappe.new_doc("WhatsApp Account")
+			acc.account_name = "Primary WhatsApp"
+			acc.status = "Active"
+			acc.insert(ignore_permissions=True)
+			return acc.name
 	except Exception:
 		return "Primary WhatsApp"
 
