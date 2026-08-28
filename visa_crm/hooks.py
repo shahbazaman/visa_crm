@@ -22,7 +22,11 @@ override_whitelisted_methods = {
     "crm.api.doc.get_data": "visa_crm.api.doc_overrides.get_data",
     "crm.api.whatsapp.validate_access": "visa_crm.api.whatsapp_integration.validate_access",
     "crm.api.whatsapp.is_whatsapp_enabled": "visa_crm.api.whatsapp_integration.is_whatsapp_enabled",
-    "crm.api.whatsapp.is_whatsapp_installed": "visa_crm.api.whatsapp_integration.is_whatsapp_installed"
+    "crm.api.whatsapp.is_whatsapp_installed": "visa_crm.api.whatsapp_integration.is_whatsapp_installed",
+    "crm.api.whatsapp.get_whatsapp_messages": "visa_crm.api.whatsapp_integration.get_whatsapp_messages",
+    "crm.api.whatsapp.create_whatsapp_message": "visa_crm.api.whatsapp_integration.create_whatsapp_message",
+    "crm.api.whatsapp.send_whatsapp_template": "visa_crm.api.whatsapp_integration.send_whatsapp_template",
+    "crm.api.whatsapp.react_on_whatsapp_message": "visa_crm.api.whatsapp_integration.react_on_whatsapp_message"
 }
 doc_events = {
     "File": {"after_insert": ["visa_crm.api.android_metadata.handle_file_upload", "visa_crm.api.gemini_service.auto_create_call_intelligence"]},

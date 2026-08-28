@@ -397,3 +397,288 @@ def is_whatsapp_installed() -> bool:
 		frappe.db.exists("DocType", "WhatsApp Settings")
 		and frappe.db.exists("DocType", "WhatsApp Message")
 	)
+
+
+def get_or_create_whatsapp_profile(phone: str, whatsapp_account: str, profile_name: str = None) -> str:
+	"""
+	Resolve or create a WhatsApp Profile for a given phone number.
+	"""
+	normalized = normalize_phone_number(phone)
+	if not normalized:
+		normalized = str(phone).strip()
+
+	if not frappe.db.exists("DocType", "WhatsApp Profile"):
+		return normalized
+
+	# Check by phone_number and whatsapp_account
+	existing = frappe.db.get_value(
+		"WhatsApp Profile",
+		{"phone_number": normalized, "whatsapp_account": whatsapp_account},
+		"name",
+	)
+	if existing:
+		return existing
+
+	# Fallback: check by phone_number alone
+	existing = frappe.db.get_value("WhatsApp Profile", {"phone_number": normalized}, "name")
+	if existing:
+		return existing
+
+	# Create new WhatsApp Profile
+	try:
+		profile = frappe.new_doc("WhatsApp Profile")
+		profile.phone_number = normalized
+		profile.profile_name = profile_name or normalized
+		profile.whatsapp_account = whatsapp_account
+		profile.status = "Active"
+		profile.insert(ignore_permissions=True)
+		return profile.name
+	except Exception:
+		return normalized
+
+
+@frappe.whitelist()
+def get_whatsapp_messages(reference_doctype: str, reference_name: str):
+	"""
+	CRM API bridge: returns normalized conversation messages for the CRM Lead / Deal Vue SPA.
+	Handles both official frappe/whatsapp and native CRM schemas.
+	"""
+	validate_access(reference_doctype, reference_name)
+	if not frappe.db.exists("DocType", "WhatsApp Message"):
+		return []
+
+	# Check if reference doc is CRM Deal with linked lead
+	lead_name = None
+	if reference_doctype == "CRM Deal":
+		deal_doc = frappe.get_doc(reference_doctype, reference_name)
+		lead_name = deal_doc.get("lead")
+
+	# Fetch messages matching reference_doctype and reference_docname
+	or_filters = [
+		{"reference_doctype": reference_doctype, "reference_docname": reference_name}
+	]
+	if lead_name:
+		or_filters.append({"reference_doctype": "CRM Lead", "reference_docname": lead_name})
+
+	# Query WhatsApp Messages with safe field fallback
+	all_messages = []
+	for f in or_filters:
+		try:
+			msgs = frappe.get_all(
+				"WhatsApp Message",
+				filters=f,
+				fields=[
+					"name",
+					"direction",
+					"to",
+					"from",
+					"message",
+					"attach",
+					"status",
+					"message_id",
+					"context_message_id",
+					"reply_to_message",
+					"creation",
+					"reference_doctype",
+					"reference_docname",
+					"is_template",
+					"whatsapp_template",
+				],
+				order_by="creation asc",
+			)
+			all_messages.extend(msgs)
+		except Exception:
+			# In case table has legacy schema
+			try:
+				msgs = frappe.get_all("WhatsApp Message", filters=f, fields=["*"], order_by="creation asc")
+				all_messages.extend(msgs)
+			except Exception:
+				pass
+
+	# Format messages for Frappe CRM Frontend (Vue SPA)
+	formatted = []
+	ref_title = reference_name
+	try:
+		ref_doc = frappe.get_doc(reference_doctype, reference_name)
+		ref_title = ref_doc.get("lead_name") or ref_doc.get("customer_name") or reference_name
+	except Exception:
+		pass
+
+	for m in all_messages:
+		direction = m.get("direction") or m.get("type") or "Outgoing"
+		from_val = m.get("from")
+		to_val = m.get("to")
+		from_name = _("You") if direction == "Outgoing" else ref_title
+
+		formatted.append({
+			"name": m.get("name"),
+			"type": direction,  # Frontend checks msg.type == 'Outgoing' / 'Incoming'
+			"direction": direction,
+			"to": to_val,
+			"from": from_val,
+			"from_name": from_name,
+			"message": m.get("message") or "",
+			"status": m.get("status") or "Sent",
+			"creation": m.get("creation"),
+			"attach": m.get("attach") or "",
+			"content_type": "text" if not m.get("attach") else "document",
+			"message_id": m.get("message_id") or "",
+			"is_reply": bool(m.get("context_message_id") or m.get("reply_to_message")),
+			"reply_to_message_id": m.get("context_message_id") or "",
+			"reply_to": m.get("reply_to_message") or "",
+			"reply_to_type": "Incoming" if direction == "Outgoing" else "Outgoing",
+			"reply_to_from": ref_title if direction == "Outgoing" else _("You"),
+			"reply_message": "",
+			"reaction": m.get("reaction") or "",
+			"reference_doctype": m.get("reference_doctype"),
+			"reference_name": m.get("reference_docname") or m.get("reference_name"),
+		})
+
+	return formatted
+
+
+@frappe.whitelist()
+def create_whatsapp_message(
+	reference_doctype: str,
+	reference_name: str,
+	message: str,
+	to: str,
+	attach: str = "",
+	reply_to: str = "",
+	content_type: str = "text",
+):
+	"""
+	CRM API bridge: creates and dispatches an outgoing WhatsApp message.
+	"""
+	validate_access(reference_doctype, reference_name)
+
+	# Determine default account
+	default_account = None
+	try:
+		default_account = frappe.db.get_single_value("WhatsApp Settings", "default_account")
+		if not default_account:
+			default_account = frappe.db.get_single_value("WhatsApp Settings", "default_outgoing_account")
+	except Exception:
+		pass
+
+	if not default_account and frappe.db.exists("DocType", "WhatsApp Account"):
+		active_acc = frappe.get_all("WhatsApp Account", filters={"status": "Active"}, limit=1)
+		if active_acc:
+			default_account = active_acc[0].name
+
+	if not default_account:
+		frappe.throw(_("No active WhatsApp Account configured."), frappe.ValidationError)
+
+	lead_title = reference_name
+	try:
+		lead_doc = frappe.get_doc(reference_doctype, reference_name)
+		lead_title = lead_doc.get("lead_name") or lead_doc.get("customer_name") or to
+	except Exception:
+		pass
+
+	profile_name = get_or_create_whatsapp_profile(to, default_account, lead_title)
+
+	doc = frappe.new_doc("WhatsApp Message")
+	doc.whatsapp_account = default_account
+	doc.to = profile_name
+	doc.direction = "Outgoing"
+	doc.status = "Pending"
+	doc.message = message or attach or ""
+	doc.attach = attach or ""
+	doc.reference_doctype = reference_doctype
+	doc.reference_docname = reference_name
+
+	if reply_to and frappe.db.exists("WhatsApp Message", reply_to):
+		try:
+			reply_doc = frappe.get_doc("WhatsApp Message", reply_to)
+			doc.context_message_id = reply_doc.get("message_id")
+			doc.reply_to_message = reply_doc.name
+		except Exception:
+			pass
+
+	doc.insert(ignore_permissions=True)
+
+	# If WhatsApp Account has access_token and phone_id, attempt submission
+	try:
+		acc_token = frappe.db.get_value("WhatsApp Account", default_account, "access_token")
+		if hasattr(doc, "submit") and acc_token:
+			doc.submit()
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "CRM WhatsApp Outgoing Dispatch")
+
+	return doc.name
+
+
+@frappe.whitelist()
+def send_whatsapp_template(reference_doctype: str, reference_name: str, template: str, to: str):
+	"""
+	CRM API bridge: sends a WhatsApp template message.
+	"""
+	validate_access(reference_doctype, reference_name)
+
+	default_account = None
+	try:
+		default_account = frappe.db.get_single_value("WhatsApp Settings", "default_account")
+		if not default_account:
+			default_account = frappe.db.get_single_value("WhatsApp Settings", "default_outgoing_account")
+	except Exception:
+		pass
+
+	if not default_account and frappe.db.exists("DocType", "WhatsApp Account"):
+		active_acc = frappe.get_all("WhatsApp Account", filters={"status": "Active"}, limit=1)
+		if active_acc:
+			default_account = active_acc[0].name
+
+	lead_title = reference_name
+	try:
+		lead_doc = frappe.get_doc(reference_doctype, reference_name)
+		lead_title = lead_doc.get("lead_name") or lead_doc.get("customer_name") or to
+	except Exception:
+		pass
+
+	profile_name = get_or_create_whatsapp_profile(to, default_account, lead_title)
+
+	doc = frappe.new_doc("WhatsApp Message")
+	doc.whatsapp_account = default_account
+	doc.to = profile_name
+	doc.direction = "Outgoing"
+	doc.status = "Pending"
+	doc.is_template = 1
+	doc.whatsapp_template = template
+	doc.reference_doctype = reference_doctype
+	doc.reference_docname = reference_name
+	doc.insert(ignore_permissions=True)
+
+	try:
+		acc_token = frappe.db.get_value("WhatsApp Account", default_account, "access_token")
+		if hasattr(doc, "submit") and acc_token:
+			doc.submit()
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "CRM WhatsApp Template Dispatch")
+
+	return doc.name
+
+
+@frappe.whitelist()
+def react_on_whatsapp_message(emoji: str, reply_to_name: str):
+	"""
+	CRM API bridge: reacts to a WhatsApp message with an emoji.
+	"""
+	validate_access()
+	if not frappe.db.exists("WhatsApp Message", reply_to_name):
+		frappe.throw(_("Referenced WhatsApp message does not exist."), frappe.DoesNotExistError)
+
+	msg_doc = frappe.get_doc("WhatsApp Message", reply_to_name)
+	msg_doc.reaction = emoji
+	msg_doc.save(ignore_permissions=True)
+
+	frappe.publish_realtime(
+		"whatsapp_message",
+		{
+			"reference_doctype": msg_doc.reference_doctype,
+			"reference_name": msg_doc.reference_docname,
+			"reaction": emoji,
+			"name": msg_doc.name,
+		},
+	)
+	return msg_doc.name
