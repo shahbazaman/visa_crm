@@ -56,10 +56,15 @@ const props = defineProps({
   icon: { type: [Object, String, Function], default: null },
   label: { type: String, default: '' },
   to: { type: [Object, String], default: null },
+  onClick: { type: Function, default: null },
   isCollapsed: { type: Boolean, default: false },
 })
 
-function handleClick() {
+function handleClick(e) {
+  if (props.onClick) {
+    props.onClick(e)
+    return
+  }
   if (!props.to) return
   if (typeof props.to === 'object') {
     router.push(props.to)
@@ -72,6 +77,7 @@ function handleClick() {
 }
 
 let isActive = computed(() => {
+  if (!props.to) return false
   if (route.query.view) {
     return route.query.view == props.to?.query?.view
   }

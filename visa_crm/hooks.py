@@ -7,6 +7,7 @@ app_license = "mit"
 after_install = "visa_crm.install.after_install"
 app_include_css = ["/assets/visa_crm/css/visa_crm.css", "/assets/visa_crm/css/visa_portal.css"]
 app_include_js = ["/assets/visa_crm/js/crm_spa_redirect.js"]
+web_include_js = ["/assets/visa_crm/js/crm_spa_redirect.js"]
 after_migrate = [
     "visa_crm.patches.disable_builtin_crm_meta_sync.enforce_builtin_crm_meta_sync_disabled",
     "visa_crm.patches.setup_sidepanel_campaign_name.execute",
@@ -20,8 +21,7 @@ override_doctype_class = {
 override_whitelisted_methods = {
     "crm.api.settings.create_email_account": "visa_crm.api.email_account.create_email_account",
     "crm.api.doc.get_data": "visa_crm.api.doc_overrides.get_data",
-    "crm.api.views.get_views": "visa_crm.api.whatsapp_integration.get_views",
-    "crm.api.whatsapp.validate_access": "visa_crm.api.whatsapp_integration.validate_access",
+        "crm.api.whatsapp.validate_access": "visa_crm.api.whatsapp_integration.validate_access",
     "crm.api.whatsapp.is_whatsapp_enabled": "visa_crm.api.whatsapp_integration.is_whatsapp_enabled",
     "crm.api.whatsapp.is_whatsapp_installed": "visa_crm.api.whatsapp_integration.is_whatsapp_installed",
     "crm.api.whatsapp.get_whatsapp_messages": "visa_crm.api.whatsapp_integration.get_whatsapp_messages",

@@ -744,23 +744,5 @@ def is_whatsapp_installed() -> bool:
 
 @frappe.whitelist()
 def get_views(doctype: str = None):
-	try:
-		from crm.api.views import get_views as orig_get_views
-		views = orig_get_views(doctype) or []
-	except Exception:
-		views = []
-
-	# Inject WhatsApp pinned view
-	whatsapp_view = {
-		"name": "whatsapp_web_launcher",
-		"label": "WhatsApp",
-		"route_name": "Call Logs",
-		"icon": "phone",
-		"public": 1,
-		"pinned": 1,
-		"dt": "CRM Lead",
-		"type": "list"
-	}
-	if not any(v.get("name") == "whatsapp_web_launcher" for v in views):
-		views.append(whatsapp_view)
-	return views
+	from crm.api.views import get_views as orig_get_views
+	return orig_get_views(doctype)

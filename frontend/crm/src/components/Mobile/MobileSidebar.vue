@@ -61,6 +61,7 @@
                     :icon="link.icon"
                     :label="__(link.label)"
                     :to="link.to"
+                    :onClick="link.onClick"
                     class="mx-2 my-0.5"
                   />
                 </nav>
@@ -100,6 +101,7 @@ import OrganizationsIcon from '@/components/Icons/OrganizationsIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import TaskIcon from '@/components/Icons/TaskIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
+import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
 import NotificationsIcon from '@/components/Icons/NotificationsIcon.vue'
 import SidebarLink from '@/components/SidebarLink.vue'
 import { viewsStore } from '@/stores/views'
@@ -144,6 +146,14 @@ const links = [
     label: 'Call Logs',
     icon: PhoneIcon,
     to: 'Call Logs',
+  },
+  {
+    label: 'WhatsApp',
+    icon: WhatsAppIcon,
+    onClick: () => {
+      sidebarOpened.value = false
+      window.open('https://web.whatsapp.com/', '_blank', 'noopener,noreferrer')
+    },
   },
 ]
 
@@ -204,6 +214,8 @@ function getIcon(routeName, icon) {
       return NoteIcon
     case 'Call Logs':
       return PhoneIcon
+    case 'WhatsApp':
+      return WhatsAppIcon
     default:
       return PinIcon
   }
