@@ -12,23 +12,23 @@
           <!-- View Mode Selector Tabs -->
           <div class="flex items-center bg-surface-gray-3 p-0.5 rounded-lg border border-surface-gray-4 text-xs font-medium">
             <button
-              class="px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5"
-              :class="activeMode === 'browser' ? 'bg-surface-white text-ink-gray-9 shadow-sm font-semibold' : 'text-ink-gray-6 hover:text-ink-gray-9'"
-              @click="activeMode = 'browser'"
-            >
-              <FeatherIcon name="globe" class="size-3.5 text-[#25D366]" />
-              <span>{{ __('WhatsApp Web Browser') }}</span>
-            </button>
-            <button
-              class="px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5"
+              class="px-3 py-1 rounded-md transition-all flex items-center gap-1.5"
               :class="activeMode === 'messenger' ? 'bg-surface-white text-ink-gray-9 shadow-sm font-semibold' : 'text-ink-gray-6 hover:text-ink-gray-9'"
               @click="activeMode = 'messenger'"
             >
-              <FeatherIcon name="message-square" class="size-3.5 text-ink-blue-3" />
-              <span>{{ __('CRM Live Messenger') }}</span>
+              <FeatherIcon name="message-square" class="size-3.5 text-[#25D366]" />
+              <span>{{ __('CRM WhatsApp Messenger') }}</span>
             </button>
             <button
-              class="px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5"
+              class="px-3 py-1 rounded-md transition-all flex items-center gap-1.5"
+              :class="activeMode === 'browser' ? 'bg-surface-white text-ink-gray-9 shadow-sm font-semibold' : 'text-ink-gray-6 hover:text-ink-gray-9'"
+              @click="activeMode = 'browser'"
+            >
+              <FeatherIcon name="globe" class="size-3.5 text-ink-blue-3" />
+              <span>{{ __('WhatsApp Web Hub') }}</span>
+            </button>
+            <button
+              class="px-3 py-1 rounded-md transition-all flex items-center gap-1.5"
               :class="activeMode === 'direct' ? 'bg-surface-white text-ink-gray-9 shadow-sm font-semibold' : 'text-ink-gray-6 hover:text-ink-gray-9'"
               @click="activeMode = 'direct'"
             >
@@ -41,14 +41,6 @@
 
       <template #right-header>
         <Button
-          v-if="activeMode === 'browser'"
-          :label="__('Reload Frame')"
-          iconLeft="refresh-cw"
-          variant="outline"
-          size="sm"
-          @click="reloadFrame"
-        />
-        <Button
           :label="__('App Window')"
           iconLeft="external-link"
           variant="outline"
@@ -56,7 +48,7 @@
           @click="openAppWindow"
         />
         <Button
-          :label="__('Open Tab')"
+          :label="__('Open Web Tab')"
           iconLeft="arrow-up-right"
           variant="subtle"
           size="sm"
@@ -68,99 +60,7 @@
     <!-- Main Workspace -->
     <div class="flex-1 p-2 sm:p-3 overflow-hidden flex flex-col">
 
-      <!-- MODE 1: In-Built WhatsApp Web Browser -->
-      <div
-        v-show="activeMode === 'browser'"
-        class="flex-1 flex flex-col rounded-lg border border-surface-gray-3 bg-surface-white shadow-sm overflow-hidden"
-      >
-        <!-- Browser Toolbar -->
-        <div class="flex items-center justify-between px-3 py-2 bg-surface-gray-2 border-b border-surface-gray-3 gap-3">
-          <div class="flex items-center gap-1">
-            <button
-              class="p-1.5 rounded hover:bg-surface-gray-3 text-ink-gray-6 transition-colors"
-              title="Reload Frame"
-              @click="reloadFrame"
-            >
-              <FeatherIcon name="rotate-cw" class="size-3.5" />
-            </button>
-            <button
-              class="p-1.5 rounded hover:bg-surface-gray-3 text-ink-gray-6 transition-colors"
-              title="Reset URL"
-              @click="resetUrl"
-            >
-              <FeatherIcon name="home" class="size-3.5" />
-            </button>
-          </div>
-
-          <!-- Address Bar -->
-          <div class="flex-1 max-w-2xl flex items-center gap-2 px-3 py-1 bg-surface-white rounded border border-surface-gray-3 shadow-inner text-xs text-ink-gray-7">
-            <FeatherIcon name="lock" class="size-3 text-emerald-600 flex-shrink-0" />
-            <span class="truncate select-all font-mono text-ink-gray-8">{{ currentUrl }}</span>
-            <span class="ml-auto text-3xs px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-sans font-medium">SSL Encrypted</span>
-          </div>
-
-          <div class="flex items-center gap-1.5">
-            <Button
-              size="sm"
-              variant="subtle"
-              :label="__('Fullscreen')"
-              iconLeft="maximize-2"
-              @click="toggleFullscreen"
-            />
-          </div>
-        </div>
-
-        <!-- Embedded Webview Container -->
-        <div class="relative flex-1 w-full h-full bg-[#111b21] overflow-hidden" ref="browserContainer">
-          <iframe
-            v-if="frameKey"
-            :key="frameKey"
-            id="whatsapp-web-inapp-frame"
-            :src="currentUrl"
-            class="w-full h-full border-0 bg-surface-white"
-            allow="camera; microphone; clipboard-read; clipboard-write; notifications; display-capture"
-            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-presentation allow-pointer-lock allow-top-navigation"
-          />
-
-          <!-- In-App Browser Assistant Panel (Floating Companion) -->
-          <div
-            v-if="showAssistant"
-            class="absolute bottom-4 right-4 max-w-md p-4 bg-surface-white border border-surface-gray-3 rounded-xl shadow-2xl flex flex-col gap-3 z-30 animate-in fade-in"
-          >
-            <div class="flex items-start justify-between">
-              <div class="flex items-center gap-2 font-semibold text-ink-gray-9 text-sm">
-                <WhatsAppIcon class="size-4 text-[#25D366]" />
-                <span>{{ __('WhatsApp In-App Companion') }}</span>
-              </div>
-              <button
-                class="text-ink-gray-4 hover:text-ink-gray-7 text-xs p-1"
-                @click="showAssistant = false"
-              >
-                ✕
-              </button>
-            </div>
-            <p class="text-xs text-ink-gray-6 leading-relaxed">
-              {{ __('WhatsApp Web is running inside this workspace. If your browser blocks embedding web.whatsapp.com due to security policy, use CRM Live Messenger tab or App Window.') }}
-            </p>
-            <div class="flex items-center gap-2 pt-1">
-              <Button
-                variant="solid"
-                size="sm"
-                :label="__('Switch to CRM Live Messenger')"
-                @click="activeMode = 'messenger'"
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                :label="__('Open App Window')"
-                @click="openAppWindow"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- MODE 2: CRM Live WhatsApp Messenger UI -->
+      <!-- MODE 1: CRM Live WhatsApp Messenger (Primary View) -->
       <div
         v-show="activeMode === 'messenger'"
         class="flex-1 flex rounded-lg border border-surface-gray-3 bg-surface-white shadow-sm overflow-hidden"
@@ -168,13 +68,13 @@
         <!-- Left Sidebar: Conversations & Contacts -->
         <div class="w-80 border-r border-surface-gray-3 flex flex-col bg-surface-gray-1">
           <!-- Search Header -->
-          <div class="p-3 border-b border-surface-gray-3 bg-surface-white">
+          <div class="p-3 border-b border-surface-gray-3 bg-surface-white flex flex-col gap-2">
             <div class="relative flex items-center">
               <FeatherIcon name="search" class="absolute left-3 size-3.5 text-ink-gray-4" />
               <input
                 v-model="searchQuery"
                 type="text"
-                :placeholder="__('Search leads or messages...')"
+                :placeholder="__('Search leads or phone...')"
                 class="w-full pl-9 pr-3 py-1.5 bg-surface-gray-2 border border-surface-gray-3 rounded-lg text-xs text-ink-gray-8 placeholder-ink-gray-4 focus:outline-none focus:ring-1 focus:ring-emerald-500"
               />
             </div>
@@ -219,21 +119,28 @@
                 {{ (selectedLead?.lead_name || 'W').charAt(0).toUpperCase() }}
               </div>
               <div>
-                <h3 class="text-sm font-semibold text-ink-gray-9">{{ selectedLead?.lead_name || 'Select a Lead to Chat' }}</h3>
+                <h3 class="text-sm font-semibold text-ink-gray-9">{{ selectedLead?.lead_name || 'Select a Lead' }}</h3>
                 <p class="text-xs text-ink-gray-5 flex items-center gap-1.5">
-                  <span>{{ selectedLead?.mobile_no || 'WhatsApp Connected' }}</span>
+                  <span>{{ selectedLead?.mobile_no || 'WhatsApp Live' }}</span>
                   <span class="size-1.5 rounded-full bg-emerald-500"></span>
-                  <span class="text-emerald-600 text-3xs font-medium">Online</span>
+                  <span class="text-emerald-600 text-3xs font-medium">Connected</span>
                 </p>
               </div>
             </div>
 
             <div v-if="selectedLead" class="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                :label="__('Quick Direct Chat')"
+                iconLeft="message-circle"
+                @click="openWhatsAppWebForLead"
+              />
               <router-link
                 :to="{ name: 'Lead', params: { leadId: selectedLead.name } }"
                 class="px-2.5 py-1 text-xs bg-surface-gray-2 hover:bg-surface-gray-3 text-ink-gray-7 rounded border border-surface-gray-3 font-medium transition-colors"
               >
-                {{ __('Open Lead Record') }}
+                {{ __('Open Lead') }}
               </router-link>
             </div>
           </div>
@@ -260,7 +167,7 @@
 
             <div v-if="!currentMessages.length" class="h-full flex flex-col items-center justify-center text-ink-gray-4 text-xs">
               <WhatsAppIcon class="size-12 text-[#25D366] opacity-40 mb-2" />
-              <p>{{ __('Send a message below to start communicating with this lead.') }}</p>
+              <p>{{ __('Select a lead to view messages or send a message below.') }}</p>
             </div>
           </div>
 
@@ -269,7 +176,7 @@
             <input
               v-model="newMessageText"
               type="text"
-              :placeholder="__('Type a message...')"
+              :placeholder="__('Type a WhatsApp message...')"
               class="flex-1 px-4 py-2 bg-surface-gray-2 border border-surface-gray-3 rounded-full text-xs text-ink-gray-9 placeholder-ink-gray-4 focus:outline-none focus:ring-1 focus:ring-emerald-500"
               @keydown.enter="sendChatMessage"
             />
@@ -280,6 +187,102 @@
               :disabled="!newMessageText.trim() || !selectedLead"
               @click="sendChatMessage"
             />
+          </div>
+        </div>
+      </div>
+
+      <!-- MODE 2: WhatsApp Web Hub & In-App Browser Station -->
+      <div
+        v-show="activeMode === 'browser'"
+        class="flex-1 flex flex-col rounded-lg border border-surface-gray-3 bg-surface-white shadow-sm overflow-hidden"
+      >
+        <!-- Browser Toolbar -->
+        <div class="flex items-center justify-between px-3 py-2 bg-surface-gray-2 border-b border-surface-gray-3 gap-3">
+          <div class="flex items-center gap-1.5 text-xs text-ink-gray-6">
+            <WhatsAppIcon class="size-4 text-[#25D366]" />
+            <span class="font-medium">WhatsApp Web Hub</span>
+          </div>
+
+          <!-- Address Bar -->
+          <div class="flex-1 max-w-xl flex items-center gap-2 px-3 py-1 bg-surface-white rounded border border-surface-gray-3 shadow-inner text-xs text-ink-gray-7">
+            <FeatherIcon name="lock" class="size-3 text-emerald-600 flex-shrink-0" />
+            <span class="truncate font-mono text-ink-gray-8">https://web.whatsapp.com</span>
+            <span class="ml-auto text-3xs px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium">SSL Encrypted</span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="solid"
+              class="!bg-[#25D366] hover:!bg-[#20bd5a] text-white"
+              :label="__('Launch WhatsApp Web App')"
+              iconRight="external-link"
+              @click="openAppWindow"
+            />
+          </div>
+        </div>
+
+        <!-- Web Hub Content Area -->
+        <div class="flex-1 p-6 flex items-center justify-center bg-surface-gray-1 overflow-y-auto">
+          <div class="max-w-2xl w-full bg-surface-white rounded-2xl border border-surface-gray-3 shadow-lg p-8 flex flex-col md:flex-row gap-8 items-center">
+            
+            <!-- Left Info -->
+            <div class="flex-1 flex flex-col gap-4">
+              <div class="flex items-center gap-3">
+                <WhatsAppIcon class="size-10 text-[#25D366]" />
+                <div>
+                  <h2 class="text-lg font-bold text-ink-gray-9">{{ __('Use WhatsApp Web on CRM') }}</h2>
+                  <p class="text-xs text-ink-gray-5">{{ __('Connect your WhatsApp account directly to your browser.') }}</p>
+                </div>
+              </div>
+
+              <div class="flex flex-col gap-2.5 text-xs text-ink-gray-7 pt-2">
+                <div class="flex items-start gap-2.5">
+                  <span class="size-5 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center flex-shrink-0 text-3xs">1</span>
+                  <span>Open WhatsApp on your phone</span>
+                </div>
+                <div class="flex items-start gap-2.5">
+                  <span class="size-5 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center flex-shrink-0 text-3xs">2</span>
+                  <span>Tap <b>Menu</b> (Android) or <b>Settings</b> (iPhone) and select <b>Linked Devices</b></span>
+                </div>
+                <div class="flex items-start gap-2.5">
+                  <span class="size-5 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center flex-shrink-0 text-3xs">3</span>
+                  <span>Click <b>Link a Device</b> and point your phone to the WhatsApp Web window</span>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap gap-2 pt-2">
+                <Button
+                  variant="solid"
+                  class="!bg-[#25D366] hover:!bg-[#20bd5a] text-white font-semibold"
+                  :label="__('Open WhatsApp Web App Window')"
+                  iconRight="external-link"
+                  @click="openAppWindow"
+                />
+                <Button
+                  variant="outline"
+                  :label="__('Use CRM Messenger Tab')"
+                  @click="activeMode = 'messenger'"
+                />
+              </div>
+            </div>
+
+            <!-- Right QR Simulation / Connect Box -->
+            <div class="w-56 p-4 bg-surface-gray-2 rounded-xl border border-surface-gray-3 flex flex-col items-center justify-center text-center gap-3">
+              <div class="size-36 bg-surface-white rounded-lg border border-surface-gray-3 p-2 flex flex-col items-center justify-center shadow-inner">
+                <WhatsAppIcon class="size-16 text-[#25D366] mb-1" />
+                <span class="text-3xs text-ink-gray-5 font-medium">WhatsApp Web Hub</span>
+              </div>
+              <Button
+                variant="subtle"
+                size="sm"
+                class="w-full text-xs"
+                :label="__('Open Web in Tab')"
+                iconRight="arrow-up-right"
+                @click="openNewTab"
+              />
+            </div>
+
           </div>
         </div>
       </div>
@@ -336,14 +339,9 @@
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
 import { FeatherIcon, Button, usePageMeta, createResource, toast } from 'frappe-ui'
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 
-const activeMode = ref('browser')
-const currentUrl = ref('https://web.whatsapp.com/')
-const frameKey = ref(1)
-const isFullscreen = ref(false)
-const showAssistant = ref(true)
-const browserContainer = ref(null)
+const activeMode = ref('messenger')
 
 const searchQuery = ref('')
 const selectedLead = ref(null)
@@ -383,7 +381,7 @@ const filteredConversations = computed(() => {
 })
 
 const currentMessages = ref([
-  { type: 'Incoming', message: 'Hello! I am inquiring about your visa services.', time: '10:30 AM' },
+  { type: 'Incoming', message: 'Hello! I am inquiring about your services.', time: '10:30 AM' },
   { type: 'Outgoing', message: 'Welcome to Middle East Holidays! How can we assist you today?', time: '10:31 AM' },
 ])
 
@@ -454,13 +452,13 @@ function scrollToBottom() {
   })
 }
 
-function reloadFrame() {
-  frameKey.value++
-}
-
-function resetUrl() {
-  currentUrl.value = 'https://web.whatsapp.com/'
-  frameKey.value++
+function openWhatsAppWebForLead() {
+  if (!selectedLead.value?.mobile_no) {
+    toast.error('No phone number found for this lead')
+    return
+  }
+  const cleanPhone = selectedLead.value.mobile_no.replace(/[^0-9]/g, '')
+  window.open(`https://web.whatsapp.com/send?phone=${cleanPhone}`, '_blank', 'noopener,noreferrer')
 }
 
 function openAppWindow() {
@@ -489,19 +487,6 @@ function launchDirectChat() {
   const text = encodeURIComponent(directMessage.value.trim())
   const url = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${text}`
   window.open(url, '_blank', 'noopener,noreferrer')
-}
-
-function toggleFullscreen() {
-  if (!browserContainer.value) return
-  if (!document.fullscreenElement) {
-    browserContainer.value.requestFullscreen().then(() => {
-      isFullscreen.value = true
-    }).catch(() => {})
-  } else {
-    document.exitFullscreen().then(() => {
-      isFullscreen.value = false
-    }).catch(() => {})
-  }
 }
 
 usePageMeta(() => {
