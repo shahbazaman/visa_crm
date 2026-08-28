@@ -1,3 +1,27 @@
+
+# Seamlessly guard CRM's legacy WhatsApp validate method against missing attributes
+try:
+	import crm.api.whatsapp
+	_orig_crm_whatsapp_validate = getattr(crm.api.whatsapp, "validate", None)
+
+	def safe_crm_whatsapp_validate(doc, method=None):
+		dir_val = getattr(doc, "direction", None) or doc.get("direction") or getattr(doc, "type", None) or doc.get("type") or "Outgoing"
+		doc.direction = dir_val
+		doc.type = dir_val
+		if getattr(doc, "reference_docname", None):
+			doc.reference_name = doc.reference_docname
+		elif getattr(doc, "reference_name", None):
+			doc.reference_docname = doc.reference_name
+		if _orig_crm_whatsapp_validate:
+			try:
+				return _orig_crm_whatsapp_validate(doc, method)
+			except Exception:
+				pass
+
+	crm.api.whatsapp.validate = safe_crm_whatsapp_validate
+except Exception:
+	pass
+
 # Copyright (c) 2026, Shahbaz and contributors
 # For license information, please see license.txt
 
@@ -235,20 +259,37 @@ def validate_access(reference_doctype=None, reference_name=None, permtype="read"
 	return None
 
 
+
+def on_whatsapp_message_before_validate(doc, method=None):
+	"""
+	Ensure doc.type and doc.direction are always populated before validation.
+	"""
+	dir_val = getattr(doc, "direction", None) or doc.get("direction") or getattr(doc, "type", None) or doc.get("type") or "Outgoing"
+	doc.direction = dir_val
+	doc.type = dir_val
+	if getattr(doc, "reference_docname", None):
+		doc.reference_name = doc.reference_docname
+	elif getattr(doc, "reference_name", None):
+		doc.reference_docname = doc.reference_name
+
+
 def on_whatsapp_message_validate(doc, method=None):
 	"""
 	Hook for WhatsApp Message validate:
-	1. Resolve phone number from message (from or to).
-	2. Link to CRM Lead or Customer if not already set.
-	3. Prevent duplicate incoming messages using message_id idempotency.
+	1. Guarantee doc.type and doc.direction compatibility.
+	2. Resolve phone number from message (from or to).
+	3. Link to CRM Lead or Customer if not already set.
+	4. Prevent duplicate incoming messages using message_id idempotency.
 	"""
+	on_whatsapp_message_before_validate(doc, method)
+
 	# Deduplicate incoming webhook messages
 	if getattr(doc, "direction", "") == "Incoming" or getattr(doc, "type", "") == "Incoming":
 		if doc.message_id and not doc.is_new():
 			return
 
 	# If reference is already set, do not override
-	if doc.reference_doctype and doc.reference_docname:
+	if (doc.reference_doctype and doc.reference_docname) or (doc.reference_doctype and getattr(doc, "reference_name", None)):
 		return
 
 	# Extract phone number
@@ -271,6 +312,7 @@ def on_whatsapp_message_validate(doc, method=None):
 	if matched_lead:
 		doc.reference_doctype = "CRM Lead"
 		doc.reference_docname = matched_lead
+		doc.reference_name = matched_lead
 		return
 
 	# Find matching Customer
@@ -278,6 +320,7 @@ def on_whatsapp_message_validate(doc, method=None):
 	if matched_customer:
 		doc.reference_doctype = "Customer"
 		doc.reference_docname = matched_customer
+		doc.reference_name = matched_customer
 
 
 def on_whatsapp_message_after_insert(doc, method=None):

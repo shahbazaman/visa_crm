@@ -59,6 +59,7 @@ doc_events = {
         "on_update": ["visa_crm.api.task_reminders.on_task_update"]
     },
     "WhatsApp Message": {
+        "before_validate": ["visa_crm.api.whatsapp_integration.on_whatsapp_message_before_validate"],
         "validate": ["visa_crm.api.whatsapp_integration.on_whatsapp_message_validate"],
         "after_insert": ["visa_crm.api.whatsapp_integration.on_whatsapp_message_after_insert"],
         "on_update": ["visa_crm.api.whatsapp_integration.on_whatsapp_message_update"]
