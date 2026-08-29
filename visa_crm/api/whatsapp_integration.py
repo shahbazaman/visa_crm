@@ -746,3 +746,53 @@ def is_whatsapp_installed() -> bool:
 def get_views(doctype: str = None):
 	from crm.api.views import get_views as orig_get_views
 	return orig_get_views(doctype)
+
+
+@frappe.whitelist()
+def get_all_whatsapp_conversations(search: str = None):
+	"""
+	Returns all WhatsApp conversations from Leads and Contacts with their latest message.
+	"""
+	filters = {}
+	if search:
+		filters = {"lead_name": ["like", f"%{search}%"]}
+	
+	leads = frappe.get_all(
+		"CRM Lead",
+		filters=filters,
+		fields=["name", "lead_name", "mobile_no", "email", "status", "modified", "creation"],
+		order_by="modified desc",
+		limit=100,
+	)
+
+	conversations = []
+	for l in leads:
+		last_msg = ""
+		last_time = "Today"
+		if frappe.db.exists("DocType", "WhatsApp Message"):
+			try:
+				msgs = frappe.get_all(
+					"WhatsApp Message",
+					filters={"reference_doctype": "CRM Lead", "reference_docname": l.name},
+					fields=["message", "creation", "direction", "status"],
+					order_by="creation desc",
+					limit=1,
+				)
+				if msgs:
+					last_msg = msgs[0].get("message") or ""
+					last_time = frappe.utils.format_datetime(msgs[0].creation, "hh:mm a") if msgs[0].get("creation") else "Today"
+			except Exception:
+				pass
+
+		conversations.append({
+			"name": l.name,
+			"doctype": "CRM Lead",
+			"lead_name": l.lead_name or l.name,
+			"mobile_no": l.mobile_no or "",
+			"email": l.email or "",
+			"status": l.status or "Lead",
+			"last_message": last_msg or "Click to chat on WhatsApp",
+			"time": last_time,
+		})
+
+	return conversations
