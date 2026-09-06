@@ -694,12 +694,36 @@ class FrappeClient:
         visas_res = await self.get_visa_applications(month_start, target_date)
         visas_list = visas_res.get("visa_applications", [])
 
+        # 2b. Counselor distribution & backlog rate
+        counselor_counts: Dict[str, int] = {}
+        for l in leads_list:
+            owner = l.get("lead_owner")
+            if owner:
+                counselor_counts[owner] = counselor_counts.get(owner, 0) + 1
+        backlog_rate = f"{(unassigned_count / total_leads * 100):.1f}%" if total_leads > 0 else "0.0%"
+
+        # 3b. Overdue follow-ups
+        overdue_followups = [f for f in open_followups if f.get("due_date") and f.get("due_date") < target_date]
+
+        # 3c. Tasks for management overview
+        tasks_res = await self.get_tasks()
+        tasks_list = tasks_res.get("tasks", [])
+        open_tasks = [t for t in tasks_list if t.get("status") == "Open"]
+
+        # 4b. Visa status breakdown
+        visa_status_counts: Dict[str, int] = {}
+        for v in visas_list:
+            st = v.get("status") or "Unspecified"
+            visa_status_counts[st] = visa_status_counts.get(st, 0) + 1
+
         # 5. Attention Required items
         attention = []
         if unassigned_count > 0:
-            attention.append(f"{unassigned_count} lead(s) created on {target_date} require counselor assignment.")
+            attention.append(f"{unassigned_count} lead(s) created on {target_date} require counselor assignment ({backlog_rate} unassigned backlog).")
+        if len(overdue_followups) > 0:
+            attention.append(f"{len(overdue_followups)} overdue follow-up task(s) require counselor attention.")
         if len(open_followups) > 0:
-            attention.append(f"{len(open_followups)} open follow-up task(s) active for {target_date}.")
+            attention.append(f"{len(open_followups)} open follow-up task(s) active in CRM.")
 
         return {
             "success": True,
@@ -714,15 +738,25 @@ class FrappeClient:
             "assignment": {
                 "assigned": assigned_count,
                 "unassigned": unassigned_count,
+                "backlog_rate": backlog_rate,
+                "counselor_distribution": counselor_counts,
                 "unassigned_lead_ids": [l.get("name") for l in unassigned_list[:10]],
             },
             "followups": {
                 "total": len(followups_list),
                 "open_count": len(open_followups),
+                "overdue_count": len(overdue_followups),
+                "backlog": len(open_followups),
                 "sample": followups_list[:5],
+            },
+            "tasks": {
+                "total": len(tasks_list),
+                "open_count": len(open_tasks),
+                "sample": tasks_list[:5],
             },
             "visa_applications": {
                 "month_to_date_total": len(visas_list),
+                "by_status": visa_status_counts,
                 "sample": visas_list[:5],
             },
             "attention_required": attention,

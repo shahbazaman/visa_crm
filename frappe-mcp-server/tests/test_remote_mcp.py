@@ -79,6 +79,19 @@ def run_remote_mcp_tests():
         print(f"[*] Sample Live Lead: {sample.get('name')} | Customer: {sample.get('customer_name')} | Dept: {sample.get('department')}")
 
     print("[RESULT] Test 3: Remote Tool Execution: PASS")
+
+    # 4. Test CORS Preflight Options Request
+    print("\n--- Test 4: CORS Preflight (OPTIONS) Support for Gemini Web ---")
+    preflight = client.options("/sse", headers={
+        "Origin": "https://gemini.google.com",
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "authorization, content-type",
+    })
+    assert preflight.status_code == 200, f"Expected 200 for preflight, got {preflight.status_code}"
+    assert preflight.headers.get("access-control-allow-origin") in ("*", "https://gemini.google.com")
+    print(f"[*] CORS Preflight for https://gemini.google.com successfully handled: HTTP {preflight.status_code}")
+    print("[RESULT] Test 4: CORS Support: PASS")
+
     print("\n=== All Remote MCP Server Tests PASSED Successfully ===\n")
 
 

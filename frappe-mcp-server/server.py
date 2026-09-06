@@ -11,6 +11,7 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.cors import CORSMiddleware
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -188,7 +189,7 @@ class MCPAuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request, call_next):
-        if request.url.path in ("/health", "/health/"):
+        if request.url.path in ("/health", "/health/") or request.method == "OPTIONS":
             return await call_next(request)
 
         expected_token = config.mcp_auth_token
@@ -237,11 +238,18 @@ async def health_check(request):
 
 
 def create_app() -> Starlette:
-    """Factory creating the ASGI Starlette app for remote SSE transport."""
+    """Factory creating the ASGI Starlette app for remote SSE transport with CORS."""
     sec = TransportSecuritySettings(enable_dns_rebinding_protection=False)
     app = mcp.sse_app(transport_security=sec)
     app.routes.insert(0, Route("/health", health_check, methods=["GET"]))
     app.add_middleware(MCPAuthMiddleware)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     return app
 
 

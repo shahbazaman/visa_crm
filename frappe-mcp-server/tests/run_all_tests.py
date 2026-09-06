@@ -17,6 +17,7 @@ TEST_FILES = [
     "test_remote_mcp.py",
     "test_7_8_gemini_nlp.py",
     "test_level3_gemini_client.py",
+    "test_public_endpoint_security.py",
 ]
 
 def main():
@@ -33,7 +34,7 @@ def main():
             sys.exit(res.returncode)
             
     print("\n" + "=" * 60)
-    print("ALL 10 TEST MODULES PASSED (100% SUCCESS)")
+    print("ALL 11 TEST MODULES PASSED (100% SUCCESS)")
     print("=" * 60)
 
 if __name__ == "__main__":

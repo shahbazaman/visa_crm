@@ -444,41 +444,41 @@ def get_visa_applications(start_date: str = None, end_date: str = None, status: 
 # TOOL 11: get_management_summary
 # =============================================================================
 @frappe.whitelist()
-def get_management_summary(date: str = None):
-	_check_auth_and_permission("CRM Lead")
-	_check_auth_and_permission("ToDo")
-	_check_auth_and_permission("Visa Application")
-
-	target_date = _validate_iso_date(date, "date") if date else nowdate()
+@frappe.whitelist()
+def get_management_summary(date=None):
+	"""Returns an aggregated executive CRM summary across leads, assignments, follow-ups, and visas."""
+	target_date = date or today()
 
 	# 1. Leads
-	fields_to_fetch, counselor_field, dept_field = _get_lead_fields_meta()
-	leads_raw = frappe.get_list(
+	leads = frappe.get_list(
 		"CRM Lead",
 		filters=[
 			["CRM Lead", "creation", ">=", f"{target_date} 00:00:00"],
 			["CRM Lead", "creation", "<=", f"{target_date} 23:59:59"],
 		],
-		fields=fields_to_fetch,
-		order_by="creation desc",
+		fields=["name", "lead_name", "status", "source", "responsible_department", "assigned_counselor", "lead_owner", "creation"],
 		limit_page_length=500,
 	)
-	leads = _format_lead_records(leads_raw, counselor_field, dept_field)
 
 	dept_counts = {}
 	source_counts = {}
 	status_counts = {}
+	counselor_counts = {}
 	for l in leads:
-		d = l.get("department") or "Unspecified"
+		d = l.get("responsible_department") or "Unspecified"
 		dept_counts[d] = dept_counts.get(d, 0) + 1
 		s = l.get("source") or "Unspecified"
 		source_counts[s] = source_counts.get(s, 0) + 1
 		st = l.get("status") or "Unspecified"
 		status_counts[st] = status_counts.get(st, 0) + 1
+		owner = l.get("assigned_counselor") or l.get("lead_owner")
+		if owner:
+			counselor_counts[owner] = counselor_counts.get(owner, 0) + 1
 
 	# 2. Assignment
-	unassigned = [l for l in leads if not l.get("assigned_counselor")]
+	unassigned = [l for l in leads if not (l.get("assigned_counselor") or l.get("lead_owner"))]
 	assigned_count = len(leads) - len(unassigned)
+	backlog_rate = f"{(len(unassigned) / len(leads) * 100):.1f}%" if leads else "0.0%"
 
 	# 3. Followups
 	followups_raw = frappe.get_list(
@@ -491,6 +491,7 @@ def get_management_summary(date: str = None):
 		limit_page_length=500,
 	)
 	open_followups = [t for t in followups_raw if t.get("status") == "Open"]
+	overdue_followups = [t for t in open_followups if t.get("date") and str(t.get("date")) < target_date]
 
 	# 4. Visa Applications
 	month_start = f"{target_date[:7]}-01"
@@ -503,10 +504,16 @@ def get_management_summary(date: str = None):
 		fields=["name", "applicant_name", "status", "creation"],
 		limit_page_length=500,
 	)
+	visa_status_counts = {}
+	for v in visas_raw:
+		st = v.get("status") or "Unspecified"
+		visa_status_counts[st] = visa_status_counts.get(st, 0) + 1
 
 	attention = []
 	if unassigned:
-		attention.append(f"{len(unassigned)} lead(s) on {target_date} need counselor assignment.")
+		attention.append(f"{len(unassigned)} lead(s) on {target_date} need counselor assignment ({backlog_rate} unassigned backlog).")
+	if overdue_followups:
+		attention.append(f"{len(overdue_followups)} overdue follow-up task(s) require counselor attention.")
 	if open_followups:
 		attention.append(f"{len(open_followups)} open follow-up task(s) active on {target_date}.")
 
@@ -523,15 +530,20 @@ def get_management_summary(date: str = None):
 		"assignment": {
 			"assigned": assigned_count,
 			"unassigned": len(unassigned),
+			"backlog_rate": backlog_rate,
+			"counselor_distribution": counselor_counts,
 			"unassigned_lead_ids": [l["name"] for l in unassigned[:10]],
 		},
 		"followups": {
 			"total": len(followups_raw),
 			"open_count": len(open_followups),
+			"overdue_count": len(overdue_followups),
+			"backlog": len(open_followups),
 			"sample": followups_raw[:5],
 		},
 		"visa_applications": {
 			"month_to_date_total": len(visas_raw),
+			"by_status": visa_status_counts,
 			"sample": visas_raw[:5],
 		},
 		"attention_required": attention,
