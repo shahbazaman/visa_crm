@@ -649,5 +649,84 @@ class FrappeClient:
             "visa_applications": visas,
         }
 
+    # =========================================================================
+    # TOOL 11: get_management_summary (Executive BI Dashboard)
+    # =========================================================================
+    async def get_management_summary(self, date: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Generates an aggregated executive management summary across leads, assignments,
+        follow-ups, and visa applications for a specific date (defaults to today).
+        """
+        if date:
+            target_date = validate_iso_date(date, "date")
+        else:
+            target_date = datetime.now().strftime("%Y-%m-%d")
+
+        # 1. Leads on target date
+        leads_res = await self.get_leads_by_date(target_date)
+        leads_list = leads_res.get("leads", [])
+        total_leads = len(leads_list)
+
+        dept_counts: Dict[str, int] = {}
+        source_counts: Dict[str, int] = {}
+        status_counts: Dict[str, int] = {}
+        for l in leads_list:
+            d = l.get("department") or "Unspecified"
+            dept_counts[d] = dept_counts.get(d, 0) + 1
+            s = l.get("source") or "Unspecified"
+            source_counts[s] = source_counts.get(s, 0) + 1
+            st = l.get("status") or "Unspecified"
+            status_counts[st] = status_counts.get(st, 0) + 1
+
+        # 2. Assignment status on target date
+        unassigned_res = await self.get_unassigned_leads(target_date, target_date)
+        unassigned_list = unassigned_res.get("unassigned_leads", [])
+        unassigned_count = len(unassigned_list)
+        assigned_count = total_leads - unassigned_count
+
+        # 3. Followups on target date
+        followups_res = await self.get_followups(target_date, target_date)
+        followups_list = followups_res.get("followups", [])
+        open_followups = [f for f in followups_list if f.get("status") == "Open"]
+
+        # 4. Visa Applications created in the month of target date
+        month_start = f"{target_date[:7]}-01"
+        visas_res = await self.get_visa_applications(month_start, target_date)
+        visas_list = visas_res.get("visa_applications", [])
+
+        # 5. Attention Required items
+        attention = []
+        if unassigned_count > 0:
+            attention.append(f"{unassigned_count} lead(s) created on {target_date} require counselor assignment.")
+        if len(open_followups) > 0:
+            attention.append(f"{len(open_followups)} open follow-up task(s) active for {target_date}.")
+
+        return {
+            "success": True,
+            "date": target_date,
+            "summary_title": f"Executive CRM Management Summary for {target_date}",
+            "leads": {
+                "total": total_leads,
+                "by_department": dept_counts,
+                "by_source": source_counts,
+                "by_status": status_counts,
+            },
+            "assignment": {
+                "assigned": assigned_count,
+                "unassigned": unassigned_count,
+                "unassigned_lead_ids": [l.get("name") for l in unassigned_list[:10]],
+            },
+            "followups": {
+                "total": len(followups_list),
+                "open_count": len(open_followups),
+                "sample": followups_list[:5],
+            },
+            "visa_applications": {
+                "month_to_date_total": len(visas_list),
+                "sample": visas_list[:5],
+            },
+            "attention_required": attention,
+        }
+
 
 frappe_client = FrappeClient()

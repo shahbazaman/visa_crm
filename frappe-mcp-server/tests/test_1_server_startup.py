@@ -1,5 +1,5 @@
 ﻿"""
-Test 1: Verify MCP Server Starts & Initializes All 10 Tools Cleanly.
+Test 1: Verify MCP Server Starts & Initializes All 11 Tools Cleanly.
 """
 
 import sys
@@ -22,6 +22,7 @@ EXPECTED_TOOLS = [
     "get_followups",
     "get_tasks",
     "get_visa_applications",
+    "get_management_summary",
 ]
 
 
@@ -42,7 +43,7 @@ async def main():
         assert tool_def.description, f"Tool '{exp}' lacks a description!"
         print(f"    [+] {exp}: OK (Description verified)")
     
-    print("\n[RESULT] Test 1: MCP Server Startup & All 10 Tools Registered: PASS\n")
+    print(f"\n[RESULT] Test 1: MCP Server Startup & All {len(EXPECTED_TOOLS)} Tools Registered: PASS\n")
 
 
 if __name__ == "__main__":

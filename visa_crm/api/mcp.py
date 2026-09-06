@@ -1,4 +1,4 @@
-﻿"""
+"""
 Controlled MCP (Model Context Protocol) API for Frappe CRM.
 Phase 3: Controlled Read-Only Reporting API Suite.
 
@@ -439,3 +439,100 @@ def get_visa_applications(start_date: str = None, end_date: str = None, status: 
 		})
 
 	return {"success": True, "start_date": valid_start, "end_date": valid_end, "status": status, "total": len(visas), "visa_applications": visas}
+
+# =============================================================================
+# TOOL 11: get_management_summary
+# =============================================================================
+@frappe.whitelist()
+def get_management_summary(date: str = None):
+	_check_auth_and_permission("CRM Lead")
+	_check_auth_and_permission("ToDo")
+	_check_auth_and_permission("Visa Application")
+
+	target_date = _validate_iso_date(date, "date") if date else nowdate()
+
+	# 1. Leads
+	fields_to_fetch, counselor_field, dept_field = _get_lead_fields_meta()
+	leads_raw = frappe.get_list(
+		"CRM Lead",
+		filters=[
+			["CRM Lead", "creation", ">=", f"{target_date} 00:00:00"],
+			["CRM Lead", "creation", "<=", f"{target_date} 23:59:59"],
+		],
+		fields=fields_to_fetch,
+		order_by="creation desc",
+		limit_page_length=500,
+	)
+	leads = _format_lead_records(leads_raw, counselor_field, dept_field)
+
+	dept_counts = {}
+	source_counts = {}
+	status_counts = {}
+	for l in leads:
+		d = l.get("department") or "Unspecified"
+		dept_counts[d] = dept_counts.get(d, 0) + 1
+		s = l.get("source") or "Unspecified"
+		source_counts[s] = source_counts.get(s, 0) + 1
+		st = l.get("status") or "Unspecified"
+		status_counts[st] = status_counts.get(st, 0) + 1
+
+	# 2. Assignment
+	unassigned = [l for l in leads if not l.get("assigned_counselor")]
+	assigned_count = len(leads) - len(unassigned)
+
+	# 3. Followups
+	followups_raw = frappe.get_list(
+		"ToDo",
+		filters=[
+			["ToDo", "creation", ">=", f"{target_date} 00:00:00"],
+			["ToDo", "creation", "<=", f"{target_date} 23:59:59"],
+		],
+		fields=["name", "description", "status", "priority", "date", "allocated_to", "reference_type", "reference_name"],
+		limit_page_length=500,
+	)
+	open_followups = [t for t in followups_raw if t.get("status") == "Open"]
+
+	# 4. Visa Applications
+	month_start = f"{target_date[:7]}-01"
+	visas_raw = frappe.get_list(
+		"Visa Application",
+		filters=[
+			["Visa Application", "creation", ">=", f"{month_start} 00:00:00"],
+			["Visa Application", "creation", "<=", f"{target_date} 23:59:59"],
+		],
+		fields=["name", "applicant_name", "status", "creation"],
+		limit_page_length=500,
+	)
+
+	attention = []
+	if unassigned:
+		attention.append(f"{len(unassigned)} lead(s) on {target_date} need counselor assignment.")
+	if open_followups:
+		attention.append(f"{len(open_followups)} open follow-up task(s) active on {target_date}.")
+
+	return {
+		"success": True,
+		"date": target_date,
+		"summary_title": f"Executive CRM Management Summary for {target_date}",
+		"leads": {
+			"total": len(leads),
+			"by_department": dept_counts,
+			"by_source": source_counts,
+			"by_status": status_counts,
+		},
+		"assignment": {
+			"assigned": assigned_count,
+			"unassigned": len(unassigned),
+			"unassigned_lead_ids": [l["name"] for l in unassigned[:10]],
+		},
+		"followups": {
+			"total": len(followups_raw),
+			"open_count": len(open_followups),
+			"sample": followups_raw[:5],
+		},
+		"visa_applications": {
+			"month_to_date_total": len(visas_raw),
+			"sample": visas_raw[:5],
+		},
+		"attention_required": attention,
+	}

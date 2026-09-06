@@ -35,6 +35,7 @@ from tools.reporting import (
     get_followups,
     get_tasks,
     get_visa_applications,
+    get_management_summary,
 )
 
 
@@ -121,7 +122,14 @@ def run_gemini_tests():
     assert counselor_res.get("success") is True
     print(f"[*] Tool selected: get_leads_by_counselor -> Leads for Administrator: {counselor_res.get('total')}")
 
-    print("\n[RESULT] Phase 3 Gemini NLP Workflow & All 13 Tool Contracts: PASS\n")
+    # 12. Management Summary
+    print("\n--- Prompt 14: \"Give me a management summary for today.\" ---")
+    mgmt_res = asyncio.run(get_management_summary("2026-09-06"))
+    assert mgmt_res.get("success") is True
+    print(f"[*] Tool selected: get_management_summary -> Leads today: {mgmt_res.get('leads', {}).get('total')}, Unassigned: {mgmt_res.get('assignment', {}).get('unassigned')}")
+    assert mgmt_res.get("leads", {}).get("total") == 8
+
+    print("\n[RESULT] Phase 3 & 4 Gemini NLP Workflow & All 14 Tool Contracts: PASS\n")
 
 
 if __name__ == "__main__":

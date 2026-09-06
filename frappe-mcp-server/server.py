@@ -26,6 +26,7 @@ from tools.reporting import (
     get_followups as fetch_followups,
     get_tasks as fetch_tasks,
     get_visa_applications as fetch_visa_applications,
+    get_management_summary as fetch_management_summary,
 )
 
 
@@ -35,19 +36,20 @@ mcp = MCPServer(
     instructions=(
         "You are an assistant connected to the Visa CRM Frappe production system. "
         "Use the provided read-only reporting tools to query real-time CRM leads, departments, "
-        "counselors, sources, reports, follow-ups, tasks, and visa applications. "
-        "Always present accurate live data and do not fabricate information."
+        "counselors, sources, reports, follow-ups, tasks, visa applications, and management briefings. "
+        "Always present accurate live data and do not fabricate information. "
+        "Interprets natural-language date questions into explicit YYYY-MM-DD format using Frappe server timezone."
     ),
 )
 
 
 # =============================================================================
-# STAGE A REPORTING TOOLS (LEADS)
+# 1. LEAD TOOLS
 # =============================================================================
 
 @mcp.tool(
     name="get_today_leads",
-    description="Returns today's CRM Lead records from the production Visa CRM Frappe instance. Read-only.",
+    description="Returns today's CRM Lead records from production Frappe CRM. Use when the user specifically asks for leads received today.",
 )
 async def get_today_leads() -> dict:
     """Returns today's CRM Lead records from the production Visa CRM Frappe instance."""
@@ -56,7 +58,7 @@ async def get_today_leads() -> dict:
 
 @mcp.tool(
     name="get_leads_by_date",
-    description="Returns CRM leads created on a specific calendar date (date in YYYY-MM-DD format). Read-only.",
+    description="Returns CRM leads created on a specific calendar date (date in YYYY-MM-DD format). Use for single-day queries such as 'yesterday', 'leads on September 5'.",
 )
 async def get_leads_by_date(date: str) -> dict:
     """Returns CRM leads created on a specific date (YYYY-MM-DD)."""
@@ -68,7 +70,7 @@ async def get_leads_by_date(date: str) -> dict:
     description=(
         "Returns an aggregated CRM lead report for a date range (start_date and end_date in YYYY-MM-DD format). "
         "Includes total leads, breakdown by department, breakdown by source, breakdown by status, "
-        "and assigned vs unassigned distribution."
+        "and assigned vs unassigned distribution. Ideal for weekly/monthly sales reports."
     ),
 )
 async def get_lead_report(start_date: str, end_date: str) -> dict:
@@ -87,7 +89,7 @@ async def get_leads_by_department(department: str) -> dict:
 
 @mcp.tool(
     name="get_leads_by_counselor",
-    description="Returns CRM leads assigned to a specific counselor or user identifier.",
+    description="Returns CRM leads assigned to a specific counselor or user identifier (e.g. 'Administrator', 'admin@middleeast.com').",
 )
 async def get_leads_by_counselor(counselor: str) -> dict:
     """Returns CRM leads assigned to a specific counselor."""
@@ -117,12 +119,12 @@ async def get_unassigned_leads(
 
 
 # =============================================================================
-# STAGE B REPORTING TOOLS (OPERATIONS, TASKS & VISAS)
+# 2. OPERATIONAL TOOLS (FOLLOWUPS, TASKS & VISAS)
 # =============================================================================
 
 @mcp.tool(
     name="get_followups",
-    description="Returns controlled follow-up and reminder records linked to CRM leads for an optional date range (YYYY-MM-DD).",
+    description="Returns controlled follow-up and reminder records linked to CRM leads for an optional date range (YYYY-MM-DD). Use for questions about follow-up calls and pending reminders.",
 )
 async def get_followups(
     start_date: Optional[str] = None, end_date: Optional[str] = None
@@ -155,6 +157,23 @@ async def get_visa_applications(
 ) -> dict:
     """Returns controlled Visa Application reporting data."""
     return await fetch_visa_applications(start_date, end_date, status)
+
+
+# =============================================================================
+# 3. EXECUTIVE BI DASHBOARD TOOL
+# =============================================================================
+
+@mcp.tool(
+    name="get_management_summary",
+    description=(
+        "Returns a comprehensive executive management briefing combining lead volumes, department breakdowns, "
+        "source distributions, counselor assignment backlog, active follow-ups, visa conversions, "
+        "and items requiring managerial attention. Ideal for 'Give me today's management summary' or 'What needs attention today?'."
+    ),
+)
+async def get_management_summary(date: Optional[str] = None) -> dict:
+    """Returns a comprehensive executive management briefing."""
+    return await fetch_management_summary(date)
 
 
 # =============================================================================
@@ -199,7 +218,7 @@ async def health_check(request):
             "status": "ok",
             "service": "frappe-crm-mcp",
             "transport": "sse",
-            "stage": "B",
+            "tools_count": 11,
             "tools": [
                 "get_today_leads",
                 "get_leads_by_date",
@@ -211,6 +230,7 @@ async def health_check(request):
                 "get_followups",
                 "get_tasks",
                 "get_visa_applications",
+                "get_management_summary",
             ],
         }
     )

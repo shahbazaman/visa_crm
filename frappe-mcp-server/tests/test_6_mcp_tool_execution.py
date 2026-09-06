@@ -26,6 +26,7 @@ EXPECTED_TOOLS = [
     "get_followups",
     "get_tasks",
     "get_visa_applications",
+    "get_management_summary",
 ]
 
 
@@ -117,6 +118,13 @@ async def main():
             data = json.loads(res.content[0].text)
             assert data.get("success") is True
             print(f"    -> Success! Draft Visas: {data.get('total')}")
+
+            # 12. Test get_management_summary
+            print("[*] Calling tool 'get_management_summary'...")
+            res = await session.call_tool("get_management_summary", arguments={})
+            data = json.loads(res.content[0].text)
+            assert data.get("success") is True
+            print(f"    -> Success! Management summary leads: {data.get('leads', {}).get('total')}")
 
             print("\n[RESULT] Test 6: All MCP Tools Executed Successfully via Stdio Protocol: PASS\n")
 

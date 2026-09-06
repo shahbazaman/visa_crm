@@ -16,11 +16,12 @@ TEST_FILES = [
     "test_6_mcp_tool_execution.py",
     "test_remote_mcp.py",
     "test_7_8_gemini_nlp.py",
+    "test_level3_gemini_client.py",
 ]
 
 def main():
     print("=" * 60)
-    print("STARTING COMPLETE PHASE 3 FRAPPE CRM MCP TEST SUITE")
+    print("STARTING COMPLETE PHASE 3 & 4 FRAPPE CRM MCP & LEVEL 3 GEMINI TEST SUITE")
     print("=" * 60)
     
     for test_file in TEST_FILES:
@@ -32,7 +33,7 @@ def main():
             sys.exit(res.returncode)
             
     print("\n" + "=" * 60)
-    print("ALL 9 TEST MODULES PASSED (100% SUCCESS)")
+    print("ALL 10 TEST MODULES PASSED (100% SUCCESS)")
     print("=" * 60)
 
 if __name__ == "__main__":
