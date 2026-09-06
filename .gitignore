@@ -1,7 +1,14 @@
-.DS_Store
+﻿.DS_Store
 *.pyc
 *.egg-info
 *.swp
 tags
 node_modules
 __pycache__
+.env
+.env.*
+*.env
+!.env.example
+!frappe-mcp-server/.env.example
+frappe-mcp-server/.env
+frappe-mcp-server/.venv
