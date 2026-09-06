@@ -1,6 +1,6 @@
 ﻿"""
 Test 6: MCP Tool Execution Verification over Stdio Client Session.
-Verifies get_today_leads returns structured production lead data via the MCP Server.
+Verifies all 10 tools return structured production data via the MCP Protocol.
 """
 
 import sys
@@ -15,8 +15,22 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from config import config
 
 
+EXPECTED_TOOLS = [
+    "get_today_leads",
+    "get_leads_by_date",
+    "get_lead_report",
+    "get_leads_by_department",
+    "get_leads_by_counselor",
+    "get_lead_sources",
+    "get_unassigned_leads",
+    "get_followups",
+    "get_tasks",
+    "get_visa_applications",
+]
+
+
 async def main():
-    print("=== Test 6: MCP Tool Execution via Protocol Client Session ===")
+    print("=== Test 6: Complete MCP Tool Execution via Protocol Client Session ===")
     
     server_py = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "server.py"))
     python_bin = sys.executable
@@ -38,32 +52,73 @@ async def main():
             tools_res = await session.list_tools()
             tool_names = [t.name for t in tools_res.tools]
             print(f"[*] Discovered tools via protocol: {tool_names}")
-            assert "get_today_leads" in tool_names, "get_today_leads not found in tool list"
+            for tool_name in EXPECTED_TOOLS:
+                assert tool_name in tool_names, f"{tool_name} not found in tool list"
 
-            # 3. Call tool
-            print("[*] Calling tool 'get_today_leads' via session.call_tool()...")
-            tool_call_res = await session.call_tool("get_today_leads", arguments={})
-            assert len(tool_call_res.content) > 0, "Empty tool result content"
-            
-            raw_text = tool_call_res.content[0].text
-            result = json.loads(raw_text)
-            print(f"[*] Tool execution completed. Success flag: {result.get('success')}")
+            # 3. Test get_today_leads
+            print("\n[*] Calling tool 'get_today_leads' via session.call_tool()...")
+            res = await session.call_tool("get_today_leads", arguments={})
+            data = json.loads(res.content[0].text)
+            assert data.get("success") is True
+            print(f"    -> Success! Leads today: {data.get('total')}")
 
-            if config.is_configured:
-                assert result.get("success") is True, f"Tool call failed: {result}"
-                assert "leads" in result
-                assert "total" in result
-                print(f"[*] Live production leads retrieved via MCP tool: {result['total']}")
-                if result["leads"]:
-                    first_lead = result["leads"][0]
-                    print(f"[*] Sample Lead: Name={first_lead.get('name')}, Customer={first_lead.get('customer_name')}, Dept={first_lead.get('department')}")
-                print("\n[RESULT] Test 6: MCP Tool Execution via Protocol: PASS\n")
-            else:
-                print(f"[*] Credentials not set. Result: {result.get('error')}")
-                assert result.get("success") is False
-                assert "authentication" in result.get("error", "").lower()
-                print("[*] Controlled error handling verified via MCP protocol.")
-                print("\n[RESULT] Test 6 (Protocol Session Controlled Error): PASS\n")
+            # 4. Test get_leads_by_date
+            print("[*] Calling tool 'get_leads_by_date' for '2026-09-06'...")
+            res = await session.call_tool("get_leads_by_date", arguments={"date": "2026-09-06"})
+            data = json.loads(res.content[0].text)
+            assert data.get("success") is True
+            print(f"    -> Success! Leads on 2026-09-06: {data.get('total')}")
+
+            # 5. Test get_lead_report
+            print("[*] Calling tool 'get_lead_report' for '2026-09-01' to '2026-09-06'...")
+            res = await session.call_tool("get_lead_report", arguments={"start_date": "2026-09-01", "end_date": "2026-09-06"})
+            data = json.loads(res.content[0].text)
+            assert data.get("success") is True
+            print(f"    -> Success! Total in report: {data.get('total_leads')}")
+
+            # 6. Test get_leads_by_department
+            print("[*] Calling tool 'get_leads_by_department' for 'Holidays - MEH'...")
+            res = await session.call_tool("get_leads_by_department", arguments={"department": "Holidays - MEH"})
+            data = json.loads(res.content[0].text)
+            assert data.get("success") is True
+            print(f"    -> Success! Holidays leads: {data.get('total')}")
+
+            # 7. Test get_lead_sources
+            print("[*] Calling tool 'get_lead_sources'...")
+            res = await session.call_tool("get_lead_sources", arguments={"start_date": "2026-09-01", "end_date": "2026-09-06"})
+            data = json.loads(res.content[0].text)
+            assert data.get("success") is True
+            print(f"    -> Success! Sources: {data.get('sources')}")
+
+            # 8. Test get_unassigned_leads
+            print("[*] Calling tool 'get_unassigned_leads'...")
+            res = await session.call_tool("get_unassigned_leads", arguments={"start_date": "2026-09-06", "end_date": "2026-09-06"})
+            data = json.loads(res.content[0].text)
+            assert data.get("success") is True
+            print(f"    -> Success! Unassigned today: {data.get('total')}")
+
+            # 9. Test get_followups
+            print("[*] Calling tool 'get_followups'...")
+            res = await session.call_tool("get_followups", arguments={})
+            data = json.loads(res.content[0].text)
+            assert data.get("success") is True
+            print(f"    -> Success! Follow-ups: {data.get('total')}")
+
+            # 10. Test get_tasks
+            print("[*] Calling tool 'get_tasks'...")
+            res = await session.call_tool("get_tasks", arguments={})
+            data = json.loads(res.content[0].text)
+            assert data.get("success") is True
+            print(f"    -> Success! Tasks: {data.get('total')}")
+
+            # 11. Test get_visa_applications
+            print("[*] Calling tool 'get_visa_applications'...")
+            res = await session.call_tool("get_visa_applications", arguments={"status": "Draft"})
+            data = json.loads(res.content[0].text)
+            assert data.get("success") is True
+            print(f"    -> Success! Draft Visas: {data.get('total')}")
+
+            print("\n[RESULT] Test 6: All MCP Tools Executed Successfully via Stdio Protocol: PASS\n")
 
 
 if __name__ == "__main__":

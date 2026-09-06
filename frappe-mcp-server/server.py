@@ -1,11 +1,12 @@
 ﻿"""
 Frappe CRM Model Context Protocol (MCP) Server.
-Connects Google Gemini to production Frappe CRM via controlled Phase 1 API.
+Connects Google Gemini to production Frappe CRM via controlled read-only reporting APIs.
 Supports both local Stdio transport and remote SSE transport with Bearer token authentication.
 """
 
 import argparse
 import sys
+from typing import Optional
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route
@@ -15,6 +16,17 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from config import config
 from tools.leads import get_today_leads as fetch_today_leads
+from tools.reporting import (
+    get_leads_by_date as fetch_leads_by_date,
+    get_lead_report as fetch_lead_report,
+    get_leads_by_department as fetch_leads_by_department,
+    get_leads_by_counselor as fetch_leads_by_counselor,
+    get_lead_sources as fetch_lead_sources,
+    get_unassigned_leads as fetch_unassigned_leads,
+    get_followups as fetch_followups,
+    get_tasks as fetch_tasks,
+    get_visa_applications as fetch_visa_applications,
+)
 
 
 # Initialize MCPServer instance
@@ -22,22 +34,132 @@ mcp = MCPServer(
     name="frappe-crm",
     instructions=(
         "You are an assistant connected to the Visa CRM Frappe production system. "
-        "Use the get_today_leads tool to query real-time CRM lead records for today. "
-        "Always present accurate data and do not fabricate information."
+        "Use the provided read-only reporting tools to query real-time CRM leads, departments, "
+        "counselors, sources, reports, follow-ups, tasks, and visa applications. "
+        "Always present accurate live data and do not fabricate information."
     ),
 )
 
 
+# =============================================================================
+# STAGE A REPORTING TOOLS (LEADS)
+# =============================================================================
+
 @mcp.tool(
     name="get_today_leads",
-    description="Returns today's CRM Lead records from the production Visa CRM Frappe instance. This is a read-only reporting tool.",
+    description="Returns today's CRM Lead records from the production Visa CRM Frappe instance. Read-only.",
 )
 async def get_today_leads() -> dict:
-    """
-    Returns today's CRM Lead records from the production Visa CRM Frappe instance. This is a read-only reporting tool.
-    """
+    """Returns today's CRM Lead records from the production Visa CRM Frappe instance."""
     return await fetch_today_leads()
 
+
+@mcp.tool(
+    name="get_leads_by_date",
+    description="Returns CRM leads created on a specific calendar date (date in YYYY-MM-DD format). Read-only.",
+)
+async def get_leads_by_date(date: str) -> dict:
+    """Returns CRM leads created on a specific date (YYYY-MM-DD)."""
+    return await fetch_leads_by_date(date)
+
+
+@mcp.tool(
+    name="get_lead_report",
+    description=(
+        "Returns an aggregated CRM lead report for a date range (start_date and end_date in YYYY-MM-DD format). "
+        "Includes total leads, breakdown by department, breakdown by source, breakdown by status, "
+        "and assigned vs unassigned distribution."
+    ),
+)
+async def get_lead_report(start_date: str, end_date: str) -> dict:
+    """Returns an aggregated CRM lead report for a date range."""
+    return await fetch_lead_report(start_date, end_date)
+
+
+@mcp.tool(
+    name="get_leads_by_department",
+    description="Returns CRM leads belonging to a specific department (e.g. 'Holidays - MEH', 'Global visa - MEH', 'Holidays').",
+)
+async def get_leads_by_department(department: str) -> dict:
+    """Returns CRM leads belonging to a specific department."""
+    return await fetch_leads_by_department(department)
+
+
+@mcp.tool(
+    name="get_leads_by_counselor",
+    description="Returns CRM leads assigned to a specific counselor or user identifier.",
+)
+async def get_leads_by_counselor(counselor: str) -> dict:
+    """Returns CRM leads assigned to a specific counselor."""
+    return await fetch_leads_by_counselor(counselor)
+
+
+@mcp.tool(
+    name="get_lead_sources",
+    description="Returns lead acquisition counts aggregated by source channel (e.g. Meta Instant Form, WhatsApp, Website) for an optional date range (YYYY-MM-DD).",
+)
+async def get_lead_sources(
+    start_date: Optional[str] = None, end_date: Optional[str] = None
+) -> dict:
+    """Returns lead acquisition counts aggregated by source channel."""
+    return await fetch_lead_sources(start_date, end_date)
+
+
+@mcp.tool(
+    name="get_unassigned_leads",
+    description="Returns CRM leads where counselor/owner assignment is currently missing or pending, for an optional date range (YYYY-MM-DD).",
+)
+async def get_unassigned_leads(
+    start_date: Optional[str] = None, end_date: Optional[str] = None
+) -> dict:
+    """Returns CRM leads where counselor assignment is missing or pending."""
+    return await fetch_unassigned_leads(start_date, end_date)
+
+
+# =============================================================================
+# STAGE B REPORTING TOOLS (OPERATIONS, TASKS & VISAS)
+# =============================================================================
+
+@mcp.tool(
+    name="get_followups",
+    description="Returns controlled follow-up and reminder records linked to CRM leads for an optional date range (YYYY-MM-DD).",
+)
+async def get_followups(
+    start_date: Optional[str] = None, end_date: Optional[str] = None
+) -> dict:
+    """Returns controlled follow-up and reminder records linked to CRM leads."""
+    return await fetch_followups(start_date, end_date)
+
+
+@mcp.tool(
+    name="get_tasks",
+    description="Returns controlled task records linked to CRM leads or employees, with optional date range (YYYY-MM-DD) and optional assigned_employee filter.",
+)
+async def get_tasks(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    assigned_employee: Optional[str] = None,
+) -> dict:
+    """Returns controlled task records linked to CRM leads or employees."""
+    return await fetch_tasks(start_date, end_date, assigned_employee)
+
+
+@mcp.tool(
+    name="get_visa_applications",
+    description="Returns controlled Visa Application reporting data, with optional date range (YYYY-MM-DD) and optional status filter (e.g. 'Draft', 'Submitted', 'Approved', 'Rejected').",
+)
+async def get_visa_applications(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    status: Optional[str] = None,
+) -> dict:
+    """Returns controlled Visa Application reporting data."""
+    return await fetch_visa_applications(start_date, end_date, status)
+
+
+# =============================================================================
+# HTTP & SSE INFRASTRUCTURE
+# =============================================================================
 
 class MCPAuthMiddleware(BaseHTTPMiddleware):
     """
@@ -47,7 +169,6 @@ class MCPAuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request, call_next):
-        # Allow health checks without authentication
         if request.url.path in ("/health", "/health/"):
             return await call_next(request)
 
@@ -78,7 +199,19 @@ async def health_check(request):
             "status": "ok",
             "service": "frappe-crm-mcp",
             "transport": "sse",
-            "tools": ["get_today_leads"],
+            "stage": "B",
+            "tools": [
+                "get_today_leads",
+                "get_leads_by_date",
+                "get_lead_report",
+                "get_leads_by_department",
+                "get_leads_by_counselor",
+                "get_lead_sources",
+                "get_unassigned_leads",
+                "get_followups",
+                "get_tasks",
+                "get_visa_applications",
+            ],
         }
     )
 

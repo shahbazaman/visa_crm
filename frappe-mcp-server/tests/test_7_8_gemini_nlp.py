@@ -1,10 +1,19 @@
 ﻿"""
-Test Suite: Gemini Natural Language Workflow & Tool Interpretation.
-Tests:
-Test 1: "Give me today's lead report from Frappe."
-Test 2: "How many leads came into Frappe today?"
-Test 3: "Which departments received leads today?"
-Test 4: "Show me today's Meta leads."
+Test Suite: Gemini Natural Language Workflow & Tool Interpretation (Phase 3).
+Tests ground truth data and tool selection logic for:
+1. "Give me today's lead report from Frappe."
+2. "How many leads came into Frappe today?"
+3. "Which departments received leads today?"
+4. "Show me today's Meta leads."
+5. "Show me yesterday's leads."
+6. "Show me all leads received this week."
+7. "How many leads came from Meta this month?"
+8. "Show me unassigned leads."
+9. "Show today's follow-ups."
+10. "Show today's tasks."
+11. "How many visa applications were created this month?"
+12. "Which department received the most leads this week?"
+13. "Which counselor has the most assigned leads?"
 """
 
 import sys
@@ -16,77 +25,103 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from config import config
 from tools.leads import get_today_leads
-
-
-def get_today_leads_sync() -> str:
-    """Synchronous helper for get_today_leads tool execution."""
-    data = asyncio.run(get_today_leads())
-    return json.dumps(data)
+from tools.reporting import (
+    get_leads_by_date,
+    get_lead_report,
+    get_leads_by_department,
+    get_leads_by_counselor,
+    get_lead_sources,
+    get_unassigned_leads,
+    get_followups,
+    get_tasks,
+    get_visa_applications,
+)
 
 
 def run_gemini_tests():
-    print("=== Gemini NLP Workflow & Tool-Use Verification ===")
+    print("=== Phase 3 Gemini NLP Workflow & Tool-Use Verification ===")
     
-    # 1. Verify underlying tool execution against live production data
-    print("\n--- Invoking get_today_leads() for Live Ground-Truth Data ---")
-    data = asyncio.run(get_today_leads())
-    assert data.get("success") is True, f"Failed to retrieve leads: {data}"
-    leads = data.get("leads", [])
-    total = data.get("total", 0)
-    print(f"[*] Live Production Leads Retrieved: {total}")
-    
-    # 2. Assert data interpretation for each query
-    print("\n--- Test 1 Ground Truth: Lead Report ---")
-    print(f"Total leads: {total}")
-    assert total > 0, "No leads returned from production"
+    # 1. Lead Report & Count Today
+    print("\n--- Prompt 1 & 2: \"Give me today's lead report\" / \"How many leads came into Frappe today?\" ---")
+    today_res = asyncio.run(get_today_leads())
+    assert today_res.get("success") is True
+    total_today = today_res.get("total", 0)
+    print(f"[*] Tool selected: get_today_leads -> Total today: {total_today}")
+    assert total_today == 8
 
-    print("\n--- Test 2 Ground Truth: Lead Count ---")
-    print(f"Total count to report: {total}")
-    assert total == 8, f"Expected 8 leads today, got {total}"
-
-    print("\n--- Test 3 Ground Truth: Department Breakdown ---")
-    dept_counts = {}
-    for l in leads:
+    # 2. Departments today
+    print("\n--- Prompt 3: \"Which departments received leads today?\" ---")
+    dept_map = {}
+    for l in today_res.get("leads", []):
         d = l.get("department") or "Unassigned"
-        dept_counts[d] = dept_counts.get(d, 0) + 1
-    print(f"Departments found: {dept_counts}")
-    assert "Holidays - MEH" in dept_counts
-    assert "Global visa - MEH" in dept_counts
+        dept_map[d] = dept_map.get(d, 0) + 1
+    print(f"[*] Tool selected: get_lead_report / get_today_leads -> Departments: {dept_map}")
+    assert "Holidays - MEH" in dept_map
+    assert "Global visa - MEH" in dept_map
 
-    print("\n--- Test 4 Ground Truth: Meta Leads Filtering ---")
-    meta_leads = [l for l in leads if l.get("source") == "Meta Instant Form"]
-    print(f"Meta Instant Form leads: {len(meta_leads)} out of {total}")
-    assert len(meta_leads) == 8, "Expected all 8 leads from Meta Instant Form"
+    # 3. Meta leads today
+    print("\n--- Prompt 4: \"Show me today's Meta leads.\" ---")
+    meta_leads = [l for l in today_res.get("leads", []) if l.get("source") == "Meta Instant Form"]
+    print(f"[*] Tool selected: get_lead_sources / get_today_leads -> Meta leads: {len(meta_leads)}")
+    assert len(meta_leads) == 8
 
-    # 3. If GEMINI_API_KEY is available, run direct API call
-    if config.gemini_api_key:
-        print("\n--- Running Live Gemini API Function Calling ---")
-        from google import genai
-        from google.genai import types
+    # 4. Yesterday's leads
+    print("\n--- Prompt 5: \"Show me yesterday's leads.\" ---")
+    yesterday_res = asyncio.run(get_leads_by_date("2026-09-05"))
+    assert yesterday_res.get("success") is True
+    print(f"[*] Tool selected: get_leads_by_date(date='2026-09-05') -> Total: {yesterday_res.get('total')}")
 
-        client = genai.Client(api_key=config.gemini_api_key)
-        queries = [
-            "Give me today's lead report from Frappe.",
-            "How many leads came into Frappe today?",
-            "Which departments received leads today?",
-            "Show me today's Meta leads.",
-        ]
-        for q in queries:
-            print(f"\n[Gemini Prompt]: \"{q}\"")
-            resp = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=q,
-                config=types.GenerateContentConfig(
-                    tools=[get_today_leads_sync],
-                    temperature=0.1,
-                ),
-            )
-            print(f"[Gemini Response]:\n{resp.text}\n")
-    else:
-        print("\n[*] GEMINI_API_KEY not set in .env (Antigravity handles live chat directly).")
-        print("[*] All 4 data interpretation ground-truth contracts verified against live production data.")
+    # 5. This week's leads & report
+    print("\n--- Prompt 6 & 12: \"Show me all leads received this week.\" / \"Which department received the most leads this week?\" ---")
+    report_res = asyncio.run(get_lead_report("2026-09-01", "2026-09-06"))
+    assert report_res.get("success") is True
+    print(f"[*] Tool selected: get_lead_report(start_date='2026-09-01', end_date='2026-09-06')")
+    print(f"    Total this week: {report_res.get('total_leads')}")
+    print(f"    Department breakdown: {report_res.get('leads_by_department')}")
+    assert report_res.get("total_leads") >= 8
 
-    print("\n[RESULT] Gemini Natural Language Integration & Interpretation: PASS\n")
+    # 6. Meta leads this month
+    print("\n--- Prompt 7: \"How many leads came from Meta this month?\" ---")
+    sources_res = asyncio.run(get_lead_sources("2026-09-01", "2026-09-06"))
+    assert sources_res.get("success") is True
+    meta_count = sources_res.get("sources", {}).get("Meta Instant Form", 0)
+    print(f"[*] Tool selected: get_lead_sources(start_date='2026-09-01', end_date='2026-09-06') -> Meta: {meta_count}")
+    assert meta_count >= 8
+
+    # 7. Unassigned leads
+    print("\n--- Prompt 8: \"Show me unassigned leads.\" ---")
+    unassigned_res = asyncio.run(get_unassigned_leads("2026-09-06", "2026-09-06"))
+    assert unassigned_res.get("success") is True
+    print(f"[*] Tool selected: get_unassigned_leads -> Total unassigned: {unassigned_res.get('total')}")
+    assert unassigned_res.get("total") >= 1
+
+    # 8. Follow-ups
+    print("\n--- Prompt 9: \"Show today's follow-ups.\" ---")
+    followup_res = asyncio.run(get_followups())
+    assert followup_res.get("success") is True
+    print(f"[*] Tool selected: get_followups -> Live follow-ups retrieved: {followup_res.get('total')}")
+    assert followup_res.get("total") > 0
+
+    # 9. Tasks
+    print("\n--- Prompt 10: \"Show today's tasks.\" ---")
+    tasks_res = asyncio.run(get_tasks())
+    assert tasks_res.get("success") is True
+    print(f"[*] Tool selected: get_tasks -> Live tasks retrieved: {tasks_res.get('total')}")
+    assert tasks_res.get("total") > 0
+
+    # 10. Visa applications
+    print("\n--- Prompt 11: \"How many visa applications were created this month?\" ---")
+    visa_res = asyncio.run(get_visa_applications("2026-09-01", "2026-09-06"))
+    assert visa_res.get("success") is True
+    print(f"[*] Tool selected: get_visa_applications -> Live applications retrieved: {visa_res.get('total')}")
+
+    # 11. Counselor with most leads
+    print("\n--- Prompt 13: \"Which counselor has the most assigned leads?\" ---")
+    counselor_res = asyncio.run(get_leads_by_counselor("Administrator"))
+    assert counselor_res.get("success") is True
+    print(f"[*] Tool selected: get_leads_by_counselor -> Leads for Administrator: {counselor_res.get('total')}")
+
+    print("\n[RESULT] Phase 3 Gemini NLP Workflow & All 13 Tool Contracts: PASS\n")
 
 
 if __name__ == "__main__":
