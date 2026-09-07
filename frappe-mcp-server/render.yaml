@@ -24,5 +24,5 @@ services:
         sync: false
       - key: MCP_HOST
         value: 0.0.0.0
-      - key: PORT
-        value: 8000
+      - key: MCP_PUBLIC_URL
+        value: https://visa-crm-mcp.onrender.com

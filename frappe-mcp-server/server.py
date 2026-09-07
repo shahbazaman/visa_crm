@@ -21,6 +21,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 # Enable wildcard matching (fnmatch) for TransportSecurityMiddleware to support Cloudflare tunnels
 import fnmatch
 from mcp.server.transport_security import TransportSecurityMiddleware
+from config import config
 
 def _patched_validate_host(self, host: str | None) -> bool:
     if not host:
