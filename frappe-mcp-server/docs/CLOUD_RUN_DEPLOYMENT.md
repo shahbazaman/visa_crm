@@ -45,8 +45,8 @@ Because your code is in GitHub (`https://github.com/shahbazaman/visa_crm.git`), 
 | `FRAPPE_API_KEY` | *(Your Frappe Cloud API Key)* |
 | `FRAPPE_API_SECRET` | *(Your Frappe Cloud API Secret)* |
 | `GEMINI_CLIENT_ID` | `gemini-spark-client` |
-| `GEMINI_CLIENT_SECRET` | `gemini_sec_7a9f82d1c4b0e53a9821ef60b38c21a4` |
-| `OAUTH_JWT_SECRET` | `mcp_jwt_signing_key_77b319e05f2c4a8a9d18e5c381f927` |
+| `GEMINI_CLIENT_SECRET` | `<YOUR_GEMINI_CLIENT_SECRET>` |
+| `OAUTH_JWT_SECRET` | `<YOUR_OAUTH_JWT_SECRET>` |
 | `MCP_HOST` | `0.0.0.0` |
 
 7. Click **Create**.
@@ -69,7 +69,7 @@ gcloud run deploy frappe-crm-mcp \
   --region asia-south1 \
   --platform managed \
   --allow-unauthenticated \
-  --set-env-vars="FRAPPE_BASE_URL=https://middleeast.frappe.cloud,FRAPPE_API_KEY=7554b03cd82a1eb,FRAPPE_API_SECRET=daa99b3c2ff6753,GEMINI_CLIENT_ID=gemini-spark-client,GEMINI_CLIENT_SECRET=gemini_sec_7a9f82d1c4b0e53a9821ef60b38c21a4,OAUTH_JWT_SECRET=mcp_jwt_signing_key_77b319e05f2c4a8a9d18e5c381f927,MCP_HOST=0.0.0.0"
+  --set-env-vars="FRAPPE_BASE_URL=https://middleeast.frappe.cloud,FRAPPE_API_KEY=<YOUR_FRAPPE_API_KEY>,FRAPPE_API_SECRET=<YOUR_FRAPPE_API_SECRET>,GEMINI_CLIENT_ID=gemini-spark-client,GEMINI_CLIENT_SECRET=<YOUR_GEMINI_CLIENT_SECRET>,OAUTH_JWT_SECRET=<YOUR_OAUTH_JWT_SECRET>,MCP_HOST=0.0.0.0"
 ```
 
 ---
@@ -105,7 +105,7 @@ In **[Google Gemini](https://gemini.google.com)**:
    ```
 3. Under **Advanced settings**:
    * **Client ID**: `gemini-spark-client`
-   * **Client Secret**: `gemini_sec_7a9f82d1c4b0e53a9821ef60b38c21a4`
+   * **Client Secret**: `<YOUR_GEMINI_CLIENT_SECRET>`
 4. Click **Save** / **Connect**.
 
 ---

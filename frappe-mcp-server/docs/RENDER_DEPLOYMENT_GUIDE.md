@@ -35,7 +35,7 @@ We have already configured and committed the following files to your GitHub repo
    * **Branch**: `main`
    * **Root Directory**: `frappe-mcp-server`
    * **Runtime**: `Docker`
-   * **Instance Type**: Select **Free ($0/month)**
+   * **Instance Type**: Select **Starter ($7/month)** for 24/7 continuous availability without sleeping, or **Free ($0/month)** for testing
 
 ---
 
@@ -45,11 +45,11 @@ Scroll down to the **Environment Variables** section and click **Add Environment
 | Key | Value |
 | :--- | :--- |
 | `FRAPPE_BASE_URL` | `https://middleeast.frappe.cloud` |
-| `FRAPPE_API_KEY` | `7554b03cd82a1eb` |
-| `FRAPPE_API_SECRET` | `daa99b3c2ff6753` |
+| `FRAPPE_API_KEY` | `<YOUR_FRAPPE_API_KEY>` |
+| `FRAPPE_API_SECRET` | `<YOUR_FRAPPE_API_SECRET>` |
 | `GEMINI_CLIENT_ID` | `gemini-spark-client` |
-| `GEMINI_CLIENT_SECRET` | `gemini_sec_7a9f82d1c4b0e53a9821ef60b38c21a4` |
-| `OAUTH_JWT_SECRET` | `mcp_jwt_signing_key_77b319e05f2c4a8a9d18e5c381f927` |
+| `GEMINI_CLIENT_SECRET` | `<YOUR_GEMINI_CLIENT_SECRET>` |
+| `OAUTH_JWT_SECRET` | `<YOUR_OAUTH_JWT_SECRET>` |
 | `MCP_HOST` | `0.0.0.0` |
 
 ---
@@ -94,7 +94,7 @@ Once your Render service is live:
    ```
 4. Under **Advanced settings**:
    * **Client ID**: `gemini-spark-client`
-   * **Client Secret**: `gemini_sec_7a9f82d1c4b0e53a9821ef60b38c21a4`
+   * **Client Secret**: `<YOUR_GEMINI_CLIENT_SECRET>`
 5. Click **Save** / **Connect**.
 
 ---
