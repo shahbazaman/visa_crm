@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: visa-crm-mcp
+    runtime: docker
+    dockerfilePath: ./frappe-mcp-server/Dockerfile
+    dockerContext: ./frappe-mcp-server
+    plan: free
+    region: singapore
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: FRAPPE_BASE_URL
+        value: https://middleeast.frappe.cloud
+      - key: FRAPPE_API_KEY
+        value: 7554b03cd82a1eb
+      - key: FRAPPE_API_SECRET
+        value: daa99b3c2ff6753
+      - key: GEMINI_CLIENT_ID
+        value: gemini-spark-client
+      - key: GEMINI_CLIENT_SECRET
+        value: gemini_sec_7a9f82d1c4b0e53a9821ef60b38c21a4
+      - key: OAUTH_JWT_SECRET
+        value: mcp_jwt_signing_key_77b319e05f2c4a8a9d18e5c381f927
+      - key: MCP_HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 8000

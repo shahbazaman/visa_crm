@@ -113,6 +113,8 @@ class Config:
             "*.trycloudflare.com:*",
             "*.run.app",
             "*.run.app:*",
+            "*.onrender.com",
+            "*.onrender.com:*",
         ]
         custom_hosts = os.environ.get("MCP_ALLOWED_HOSTS", "").strip()
         if custom_hosts:
