@@ -1,3 +1,8 @@
+# =============================================================================
+# [DEPRECATED — LOCAL DEVELOPMENT ONLY]
+# Production MCP runs 24x7 in the cloud (Render / Cloud Run).
+# Do NOT run this script for production Google Gemini operation.
+# =============================================================================
 #!/bin/bash
 # Starts Frappe MCP Server and Cloudflare Quick Tunnel in background
 

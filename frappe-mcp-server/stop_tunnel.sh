@@ -1,3 +1,7 @@
+# =============================================================================
+# [DEPRECATED — LOCAL DEVELOPMENT ONLY]
+# Helper to stop local dev background processes.
+# =============================================================================
 #!/bin/bash
 # Stops Frappe MCP Server and Cloudflare Tunnel
 

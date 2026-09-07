@@ -1,3 +1,9 @@
+> [!WARNING]
+> **DEPRECATED — LOCAL TUNNEL ARCHITECTURE (DEVELOPMENT ONLY)**
+> This document describes local Cloudflare tunnels, which require an active local computer.
+> For true 24x7 always-on operation without keeping your PC powered on, refer to:
+> [`RENDER_DEPLOYMENT_GUIDE.md`](./RENDER_DEPLOYMENT_GUIDE.md)
+
 # Production Cloudflare Tunnel & Systemd Setup
 
 This guide details setting up a permanent Cloudflare Named Tunnel and systemd services for 24/7 autonomous production operation.
