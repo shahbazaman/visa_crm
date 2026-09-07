@@ -18,6 +18,7 @@ TEST_FILES = [
     "test_7_8_gemini_nlp.py",
     "test_level3_gemini_client.py",
     "test_public_endpoint_security.py",
+    "test_streamable_http_oauth.py",
 ]
 
 def main():

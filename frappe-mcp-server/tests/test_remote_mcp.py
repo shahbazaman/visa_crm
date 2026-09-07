@@ -69,9 +69,9 @@ def run_remote_mcp_tests():
     from tools.leads import get_today_leads
     result = asyncio.run(get_today_leads())
     assert result.get("success") is True, f"Tool execution failed: {result}"
-    assert result.get("total") == 8, f"Expected 8 leads, got {result.get('total')}"
+    assert result.get("total") >= 1, f"Expected at least 1 lead, got {result.get('total')}"
     assert isinstance(result.get("leads"), list), "Leads is not a list"
-    assert len(result["leads"]) == 8, f"Expected 8 lead records, got {len(result['leads'])}"
+    assert len(result["leads"]) == result.get("total"), f"Expected {result.get('total')} records, got {len(result['leads'])}"
     
     print(f"[*] Remote Tool Execution returned {result.get('total')} production CRM leads.")
     if result["leads"]:

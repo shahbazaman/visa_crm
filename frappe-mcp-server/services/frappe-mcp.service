@@ -1,0 +1,29 @@
+[Unit]
+Description=Frappe CRM Model Context Protocol (MCP) Streamable HTTP Server
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=shahbaz
+Group=shahbaz
+WorkingDirectory=/home/shahbaz/frappe-bench/apps/visa_crm/frappe-mcp-server
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/shahbaz/frappe-bench/apps/visa_crm/frappe-mcp-server/.venv/bin/python server.py --transport http --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5s
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadOnlyPaths=/home/shahbaz/frappe-bench/apps/visa_crm/frappe-mcp-server
+ReadWritePaths=/home/shahbaz/frappe-bench/apps/visa_crm/frappe-mcp-server/logs
+
+# Standard logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=frappe-mcp
+
+[Install]
+WantedBy=multi-user.target

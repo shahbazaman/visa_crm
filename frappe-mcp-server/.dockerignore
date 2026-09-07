@@ -1,0 +1,13 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.git/
+.github/
+tests/
+*.log
+.server.pid
+.tunnel.pid
+scratch/

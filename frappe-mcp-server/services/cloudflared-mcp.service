@@ -1,0 +1,20 @@
+[Unit]
+Description=Cloudflare Tunnel for Frappe CRM MCP Server
+After=network.target network-online.target frappe-mcp.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=shahbaz
+Group=shahbaz
+WorkingDirectory=/home/shahbaz/frappe-bench/apps/visa_crm/frappe-mcp-server
+ExecStart=/home/shahbaz/.local/bin/cloudflared tunnel --config /home/shahbaz/frappe-bench/apps/visa_crm/frappe-mcp-server/config/cloudflared-mcp.yml run
+Restart=always
+RestartSec=5s
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cloudflared-mcp
+
+[Install]
+WantedBy=multi-user.target

@@ -59,15 +59,96 @@ class Config:
     @property
     def mcp_host(self) -> str:
         self._ensure_loaded()
-        return os.environ.get("MCP_HOST", "127.0.0.1").strip()
+        return os.environ.get("MCP_HOST", "0.0.0.0").strip()
 
     @property
     def mcp_port(self) -> int:
         self._ensure_loaded()
         try:
-            return int(os.environ.get("MCP_PORT", "8000"))
+            return int(os.environ.get("PORT", os.environ.get("MCP_PORT", "8080")))
         except ValueError:
-            return 8000
+            return 8080
+
+    @property
+    def gemini_client_id(self) -> str:
+        """Dedicated OAuth Client ID for Gemini Spark connected app."""
+        self._ensure_loaded()
+        return os.environ.get("GEMINI_CLIENT_ID", "gemini-spark-client").strip()
+
+    @property
+    def gemini_client_secret(self) -> str:
+        """Dedicated OAuth Client Secret for Gemini Spark connected app."""
+        self._ensure_loaded()
+        return os.environ.get("GEMINI_CLIENT_SECRET", "").strip()
+
+    @property
+    def oauth_jwt_secret(self) -> str:
+        """Secret key for signing and verifying OAuth JWT access tokens."""
+        self._ensure_loaded()
+        return os.environ.get("OAUTH_JWT_SECRET", "").strip()
+
+    @property
+    def mcp_public_url(self) -> str:
+        """Publicly accessible HTTPS base URL (e.g. https://crm-mcp.example.com)."""
+        self._ensure_loaded()
+        url = os.environ.get("MCP_PUBLIC_URL", "").strip()
+        if url:
+            return url.rstrip("/")
+        return f"http://{self.mcp_host}:{self.mcp_port}"
+
+    @property
+    def allowed_hosts(self) -> list[str]:
+        """Allowed host header values for DNS rebinding protection."""
+        self._ensure_loaded()
+        hosts = [
+            "127.0.0.1",
+            "127.0.0.1:*",
+            "localhost",
+            "localhost:*",
+            "[::1]",
+            "[::1]:*",
+            "testserver",
+            "testserver:*",
+            "*.trycloudflare.com",
+            "*.trycloudflare.com:*",
+            "*.run.app",
+            "*.run.app:*",
+        ]
+        custom_hosts = os.environ.get("MCP_ALLOWED_HOSTS", "").strip()
+        if custom_hosts:
+            for h in custom_hosts.split(","):
+                h = h.strip()
+                if h and h not in hosts:
+                    hosts.append(h)
+        if self.mcp_public_url:
+            from urllib.parse import urlparse
+            parsed = urlparse(self.mcp_public_url)
+            if parsed.hostname and parsed.hostname not in hosts:
+                hosts.append(parsed.hostname)
+                hosts.append(f"{parsed.hostname}:*")
+        return hosts
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        """Allowed origin headers for CORS and DNS rebinding protection."""
+        self._ensure_loaded()
+        origins = [
+            "https://gemini.google.com",
+            "http://127.0.0.1:*",
+            "http://127.0.0.1",
+            "http://localhost:*",
+            "http://localhost",
+            "http://testserver",
+        ]
+        custom_origins = os.environ.get("MCP_ALLOWED_ORIGINS", "").strip()
+        if custom_origins:
+            for o in custom_origins.split(","):
+                o = o.strip()
+                if o and o not in origins:
+                    origins.append(o)
+        if self.mcp_public_url and self.mcp_public_url not in origins:
+            origins.append(self.mcp_public_url)
+        return origins
 
     @property
     def is_configured(self) -> bool:
@@ -83,6 +164,10 @@ class Config:
             missing.append("FRAPPE_API_KEY")
         if not self.frappe_api_secret:
             missing.append("FRAPPE_API_SECRET")
+        if not self.gemini_client_secret:
+            missing.append("GEMINI_CLIENT_SECRET")
+        if not self.oauth_jwt_secret:
+            missing.append("OAUTH_JWT_SECRET")
         if missing:
             raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
 
