@@ -2,10 +2,11 @@ services:
   - type: web
     name: visa-crm-mcp
     runtime: docker
-    dockerfilePath: ./frappe-mcp-server/Dockerfile
-    dockerContext: ./frappe-mcp-server
     plan: starter
     region: singapore
+    rootDir: frappe-mcp-server
+    dockerfilePath: Dockerfile
+    dockerContext: .
     healthCheckPath: /health
     autoDeploy: true
     envVars:
