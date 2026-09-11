@@ -15,17 +15,13 @@ after_migrate = [
     "visa_crm.api.call_log_hooks.setup_call_log_form_script"
 ]
 override_doctype_class = {
-        "Employee": {
-        "validate": ["visa_crm.api.holiday_engine.sync_employee_holidays"],
-        "on_update": ["visa_crm.api.holiday_engine.sync_employee_holidays"]
-    },
     "Lead Sync Source": "visa_crm.overrides.lead_sync_source.VisaCRMLeadSyncSource",
     "Contact": "visa_crm.overrides.contact.VisaCRMContact"
 }
 override_whitelisted_methods = {
     "crm.api.settings.create_email_account": "visa_crm.api.email_account.create_email_account",
     "crm.api.doc.get_data": "visa_crm.api.doc_overrides.get_data",
-        "crm.api.whatsapp.validate_access": "visa_crm.api.whatsapp_integration.validate_access",
+    "crm.api.whatsapp.validate_access": "visa_crm.api.whatsapp_integration.validate_access",
     "crm.api.whatsapp.is_whatsapp_enabled": "visa_crm.api.whatsapp_integration.is_whatsapp_enabled",
     "crm.api.whatsapp.is_whatsapp_installed": "visa_crm.api.whatsapp_integration.is_whatsapp_installed",
     "crm.api.whatsapp.get_whatsapp_messages": "visa_crm.api.whatsapp_integration.get_whatsapp_messages",
@@ -47,13 +43,6 @@ doc_events = {
         "after_insert": ["visa_crm.api.gemini_service.enqueue_processing"],
         "after_save": ["visa_crm.api.gemini_service.enqueue_processing"]
     },
-        "Attendance": "visa_crm.api.hr_permissions.attendance_permission_query",
-    "Leave Application": "visa_crm.api.hr_permissions.leave_application_permission_query",
-    "Attendance Request": "visa_crm.api.hr_permissions.attendance_request_permission_query",
-    "Salary Slip": "visa_crm.api.hr_permissions.salary_slip_permission_query",
-    "Employee Letter": "visa_crm.api.hr_permissions.employee_letter_permission_query",
-    "Employee Offer Letter": "visa_crm.api.hr_permissions.employee_offer_letter_permission_query",
-    "Offer Letter Template": "visa_crm.api.hr_permissions.offer_letter_template_permission_query",
     "CRM Lead": {
         "before_insert": ["visa_crm.api.lead_creator.log_crm_lead_hook"],
         "autoname": ["visa_crm.api.lead_creator.log_crm_lead_hook"],
@@ -76,7 +65,7 @@ doc_events = {
         "after_insert": ["visa_crm.api.whatsapp_integration.on_whatsapp_message_after_insert"],
         "on_update": ["visa_crm.api.whatsapp_integration.on_whatsapp_message_update"]
     },
-        "Employee": {
+    "Employee": {
         "validate": ["visa_crm.api.holiday_engine.sync_employee_holidays"],
         "on_update": ["visa_crm.api.holiday_engine.sync_employee_holidays"]
     },
@@ -84,6 +73,13 @@ doc_events = {
     "Email Account": {"before_validate": ["visa_crm.api.email_account.enforce_communication_only"]}
 }
 permission_query_conditions = {
+    "Attendance": "visa_crm.api.hr_permissions.attendance_permission_query",
+    "Leave Application": "visa_crm.api.hr_permissions.leave_application_permission_query",
+    "Attendance Request": "visa_crm.api.hr_permissions.attendance_request_permission_query",
+    "Salary Slip": "visa_crm.api.hr_permissions.salary_slip_permission_query",
+    "Employee Letter": "visa_crm.api.hr_permissions.employee_letter_permission_query",
+    "Employee Offer Letter": "visa_crm.api.hr_permissions.employee_offer_letter_permission_query",
+    "Offer Letter Template": "visa_crm.api.hr_permissions.offer_letter_template_permission_query",
     "CRM Lead": "visa_crm.api.lead_permissions.crm_lead_query",
     "Lead Intake Queue": "visa_crm.api.lead_permissions.queue_query",
     "Customer": "visa_crm.api.lead_permissions.customer_query",
@@ -100,7 +96,7 @@ permission_query_conditions = {
     "WhatsApp Message": "visa_crm.api.lead_permissions.whatsapp_message_query"
 }
 has_permission = {
-        "Attendance": "visa_crm.api.hr_permissions.attendance_has_permission",
+    "Attendance": "visa_crm.api.hr_permissions.attendance_has_permission",
     "Leave Application": "visa_crm.api.hr_permissions.leave_application_has_permission",
     "Salary Slip": "visa_crm.api.hr_permissions.salary_slip_has_permission",
     "Employee Letter": "visa_crm.api.hr_permissions.employee_letter_has_permission",
@@ -123,7 +119,7 @@ has_permission = {
 }
 whatsapp_access_guard = ["visa_crm.api.whatsapp_integration.whatsapp_access_guard"]
 doctype_js = {
-        "Employee": "public/js/employee.js",
+    "Employee": "public/js/employee.js",
     "Employee Letter": "visa_crm/doctype/employee_letter/employee_letter.js",
     "Employee Offer Letter": "visa_crm/doctype/employee_offer_letter/employee_offer_letter.js",
     "Call Intelligence": "public/js/call_intelligence.js",
