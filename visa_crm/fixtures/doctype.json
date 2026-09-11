@@ -17070,5 +17070,1198 @@
   "track_views": 0,
   "translated_doctype": 0,
   "website_search_field": null
+ },
+ {
+  "actions": [],
+  "allow_rename": 1,
+  "autoname": "field:template_name",
+  "creation": "2026-09-11 10:00:00.000000",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+   "template_name",
+   "is_default",
+   "company",
+   "company_name_display",
+   "column_break_head",
+   "heading",
+   "subject_prefix",
+   "salutation_template",
+   "body_section",
+   "introduction",
+   "compensation_text",
+   "probation_text",
+   "terms_section",
+   "performance_review_text",
+   "working_hours_text",
+   "leave_text",
+   "notice_period_text",
+   "joining_section",
+   "joining_details_text",
+   "required_documents_text",
+   "acceptance_section",
+   "acceptance_text",
+   "acceptance_statement",
+   "signatory_section",
+   "signatory_company_label",
+   "default_hr_signatory_name",
+   "default_hr_signatory_designation",
+   "default_hr_signatory_title",
+   "footer_section",
+   "footer_address",
+   "footer_contact",
+   "footer_email_web"
+  ],
+  "fields": [
+   {
+    "fieldname": "template_name",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Template Name",
+    "reqd": 1,
+    "unique": 1
+   },
+   {
+    "default": "0",
+    "fieldname": "is_default",
+    "fieldtype": "Check",
+    "in_list_view": 1,
+    "label": "Is Default Template"
+   },
+   {
+    "fieldname": "company",
+    "fieldtype": "Link",
+    "label": "Company",
+    "options": "Company"
+   },
+   {
+    "default": "Middle East Travels & Tourism",
+    "fieldname": "company_name_display",
+    "fieldtype": "Data",
+    "label": "Display Company Name"
+   },
+   {
+    "fieldname": "column_break_head",
+    "fieldtype": "Column Break"
+   },
+   {
+    "default": "CONGRATULATIONS",
+    "fieldname": "heading",
+    "fieldtype": "Data",
+    "label": "Main Heading"
+   },
+   {
+    "default": "Offer of Employment \u2013 ",
+    "fieldname": "subject_prefix",
+    "fieldtype": "Data",
+    "label": "Subject Prefix"
+   },
+   {
+    "default": "Dear Mr./Ms. {first_name},",
+    "fieldname": "salutation_template",
+    "fieldtype": "Data",
+    "label": "Salutation Template"
+   },
+   {
+    "fieldname": "body_section",
+    "fieldtype": "Section Break",
+    "label": "Introductory Terms (Page 1)"
+   },
+   {
+    "fieldname": "introduction",
+    "fieldtype": "Long Text",
+    "label": "Introduction Paragraph"
+   },
+   {
+    "fieldname": "compensation_text",
+    "fieldtype": "Long Text",
+    "label": "Compensation Text Template"
+   },
+   {
+    "fieldname": "probation_text",
+    "fieldtype": "Long Text",
+    "label": "Probation & Confirmation Text"
+   },
+   {
+    "fieldname": "terms_section",
+    "fieldtype": "Section Break",
+    "label": "Employment Terms & Policies (Page 2)"
+   },
+   {
+    "fieldname": "performance_review_text",
+    "fieldtype": "Long Text",
+    "label": "Performance Reviews Text"
+   },
+   {
+    "fieldname": "working_hours_text",
+    "fieldtype": "Long Text",
+    "label": "Working Hours Text"
+   },
+   {
+    "fieldname": "leave_text",
+    "fieldtype": "Long Text",
+    "label": "Leave Entitlement Text"
+   },
+   {
+    "fieldname": "notice_period_text",
+    "fieldtype": "Long Text",
+    "label": "Notice Period Text"
+   },
+   {
+    "fieldname": "joining_section",
+    "fieldtype": "Section Break",
+    "label": "Joining Instructions & Documents (Page 2)"
+   },
+   {
+    "fieldname": "joining_details_text",
+    "fieldtype": "Long Text",
+    "label": "Joining Formalities Text"
+   },
+   {
+    "fieldname": "required_documents_text",
+    "fieldtype": "Long Text",
+    "label": "Required Documents List"
+   },
+   {
+    "fieldname": "acceptance_section",
+    "fieldtype": "Section Break",
+    "label": "Offer Acceptance Terms (Page 3)"
+   },
+   {
+    "fieldname": "acceptance_text",
+    "fieldtype": "Long Text",
+    "label": "Acceptance Condition Text"
+   },
+   {
+    "default": "I accept the offer of employment with the terms and conditions as mentioned in the offer letter.",
+    "fieldname": "acceptance_statement",
+    "fieldtype": "Data",
+    "label": "Employee Acceptance Statement"
+   },
+   {
+    "fieldname": "signatory_section",
+    "fieldtype": "Section Break",
+    "label": "Authorized Signatory Defaults (Page 3)"
+   },
+   {
+    "default": "For, Middle East Travels & Tourism",
+    "fieldname": "signatory_company_label",
+    "fieldtype": "Data",
+    "label": "Signatory Company Line"
+   },
+   {
+    "default": "Gopika",
+    "fieldname": "default_hr_signatory_name",
+    "fieldtype": "Data",
+    "label": "HR Signatory Name"
+   },
+   {
+    "default": "HR Consultant",
+    "fieldname": "default_hr_signatory_designation",
+    "fieldtype": "Data",
+    "label": "HR Signatory Designation"
+   },
+   {
+    "default": "Authorized Signatory",
+    "fieldname": "default_hr_signatory_title",
+    "fieldtype": "Data",
+    "label": "HR Signatory Title"
+   },
+   {
+    "fieldname": "footer_section",
+    "fieldtype": "Section Break",
+    "label": "Document Footer Details"
+   },
+   {
+    "default": "Shobha Tower, 5/3412L, Mavoor Rd, near Emerald Mall, Arayidathupalam, Kozhikode, Kerala 673004",
+    "fieldname": "footer_address",
+    "fieldtype": "Data",
+    "label": "Footer Office Address"
+   },
+   {
+    "default": "Tel: 91 8593944666,91 7025144666",
+    "fieldname": "footer_contact",
+    "fieldtype": "Data",
+    "label": "Footer Contact Numbers"
+   },
+   {
+    "default": "info@middleeasttravels.in | www.middleeasttravels.in",
+    "fieldname": "footer_email_web",
+    "fieldtype": "Data",
+    "label": "Footer Email & Web"
+   }
+  ],
+  "index_web_pages_for_search": 0,
+  "module": "Visa CRM",
+  "name": "Offer Letter Template",
+  "permissions": [
+   {
+    "create": 1,
+    "delete": 1,
+    "email": 1,
+    "export": 1,
+    "print": 1,
+    "read": 1,
+    "report": 1,
+    "role": "System Manager",
+    "share": 1,
+    "write": 1
+   },
+   {
+    "create": 1,
+    "delete": 1,
+    "email": 1,
+    "export": 1,
+    "print": 1,
+    "read": 1,
+    "report": 1,
+    "role": "HR Manager",
+    "share": 1,
+    "write": 1
+   },
+   {
+    "create": 0,
+    "delete": 0,
+    "email": 1,
+    "export": 1,
+    "print": 1,
+    "read": 1,
+    "report": 1,
+    "role": "HR User",
+    "share": 0,
+    "write": 1
+   }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "track_changes": 1
+ },
+ {
+  "actions": [],
+  "allow_rename": 0,
+  "autoname": "naming_series:",
+  "creation": "2026-09-11 10:00:00.000000",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+   "naming_series",
+   "offer_number",
+   "reference_number",
+   "letter_date",
+   "status",
+   "column_break_header",
+   "company",
+   "company_name_display",
+   "offer_letter_template",
+   "candidate_section",
+   "employee",
+   "employee_name",
+   "first_name",
+   "designation",
+   "column_break_candidate",
+   "department",
+   "address",
+   "employment_terms_section",
+   "date_of_joining",
+   "joining_time",
+   "monthly_salary",
+   "monthly_salary_in_words",
+   "column_break_terms",
+   "probation",
+   "probation_period",
+   "working_hours",
+   "leave_entitlement",
+   "notice_period",
+   "content_page1_section",
+   "salutation",
+   "introduction",
+   "compensation_details",
+   "probation_details",
+   "content_page2_section",
+   "performance_reviews",
+   "working_hours_details",
+   "leave_details",
+   "notice_period_details",
+   "joining_details",
+   "required_documents",
+   "content_page3_section",
+   "acceptance_terms",
+   "acceptance_statement",
+   "signatory_section",
+   "signatory_company_label",
+   "hr_signatory_name",
+   "hr_signatory_designation",
+   "hr_signatory_title",
+   "column_break_sign",
+   "hr_signatory_user",
+   "issued_by",
+   "issued_date",
+   "amended_from"
+  ],
+  "fields": [
+   {
+    "default": "OFFER-.####",
+    "fieldname": "naming_series",
+    "fieldtype": "Select",
+    "label": "Series",
+    "options": "OFFER-.####\nOFFER-.#####",
+    "reqd": 1
+   },
+   {
+    "fieldname": "offer_number",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Offer Number",
+    "read_only": 1
+   },
+   {
+    "fieldname": "reference_number",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Reference Number (Ref)",
+    "read_only": 1
+   },
+   {
+    "default": "Today",
+    "fieldname": "letter_date",
+    "fieldtype": "Date",
+    "in_list_view": 1,
+    "label": "Letter Date",
+    "reqd": 1
+   },
+   {
+    "default": "Draft",
+    "fieldname": "status",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Status",
+    "options": "Draft\nApproved\nIssued\nCancelled",
+    "reqd": 1
+   },
+   {
+    "fieldname": "column_break_header",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "company",
+    "fieldtype": "Link",
+    "label": "Company",
+    "options": "Company",
+    "reqd": 1
+   },
+   {
+    "default": "Middle East Travels & Tourism",
+    "fieldname": "company_name_display",
+    "fieldtype": "Data",
+    "label": "Display Company Name"
+   },
+   {
+    "fieldname": "offer_letter_template",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "Offer Letter Template",
+    "options": "Offer Letter Template",
+    "reqd": 1
+   },
+   {
+    "fieldname": "candidate_section",
+    "fieldtype": "Section Break",
+    "label": "Candidate & Role Information"
+   },
+   {
+    "fieldname": "employee",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Employee / Candidate",
+    "options": "Employee",
+    "reqd": 1
+   },
+   {
+    "fieldname": "employee_name",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Employee Name",
+    "read_only": 1
+   },
+   {
+    "fieldname": "first_name",
+    "fieldtype": "Data",
+    "label": "First Name",
+    "read_only": 1
+   },
+   {
+    "fieldname": "designation",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Designation",
+    "options": "Designation"
+   },
+   {
+    "fieldname": "column_break_candidate",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "department",
+    "fieldtype": "Link",
+    "label": "Department",
+    "options": "Department"
+   },
+   {
+    "fieldname": "address",
+    "fieldtype": "Long Text",
+    "label": "Candidate Address"
+   },
+   {
+    "fieldname": "employment_terms_section",
+    "fieldtype": "Section Break",
+    "label": "Core Employment Terms"
+   },
+   {
+    "fieldname": "date_of_joining",
+    "fieldtype": "Date",
+    "label": "Date of Joining",
+    "reqd": 1
+   },
+   {
+    "default": "10:30 AM",
+    "fieldname": "joining_time",
+    "fieldtype": "Data",
+    "label": "Reporting Time"
+   },
+   {
+    "fieldname": "monthly_salary",
+    "fieldtype": "Currency",
+    "label": "Monthly Salary (INR)",
+    "reqd": 1
+   },
+   {
+    "fieldname": "monthly_salary_in_words",
+    "fieldtype": "Data",
+    "label": "Salary In Words",
+    "read_only": 1
+   },
+   {
+    "fieldname": "column_break_terms",
+    "fieldtype": "Column Break"
+   },
+   {
+    "default": "1",
+    "fieldname": "probation",
+    "fieldtype": "Check",
+    "label": "Subject to Probation"
+   },
+   {
+    "default": "three (3) months",
+    "fieldname": "probation_period",
+    "fieldtype": "Data",
+    "label": "Probation Period"
+   },
+   {
+    "default": "Monday to Saturday, 10:00 AM to 5:30 PM",
+    "fieldname": "working_hours",
+    "fieldtype": "Data",
+    "label": "Working Hours"
+   },
+   {
+    "default": "Two (2) paid leaves per month (1 paid leave during probation)",
+    "fieldname": "leave_entitlement",
+    "fieldtype": "Data",
+    "label": "Leave Entitlement"
+   },
+   {
+    "default": "One (1) month\u2019s written notice or salary in lieu thereof",
+    "fieldname": "notice_period",
+    "fieldtype": "Data",
+    "label": "Notice Period"
+   },
+   {
+    "fieldname": "content_page1_section",
+    "fieldtype": "Section Break",
+    "label": "Letter Content - Page 1"
+   },
+   {
+    "fieldname": "salutation",
+    "fieldtype": "Data",
+    "label": "Salutation Line"
+   },
+   {
+    "fieldname": "introduction",
+    "fieldtype": "Text Editor",
+    "label": "Offer Introduction Paragraph"
+   },
+   {
+    "fieldname": "compensation_details",
+    "fieldtype": "Text Editor",
+    "label": "Compensation Clause"
+   },
+   {
+    "fieldname": "probation_details",
+    "fieldtype": "Text Editor",
+    "label": "Probation and Confirmation Clause"
+   },
+   {
+    "fieldname": "content_page2_section",
+    "fieldtype": "Section Break",
+    "label": "Letter Content - Page 2"
+   },
+   {
+    "fieldname": "performance_reviews",
+    "fieldtype": "Text Editor",
+    "label": "Performance Reviews Clause"
+   },
+   {
+    "fieldname": "working_hours_details",
+    "fieldtype": "Text Editor",
+    "label": "Working Hours Clause"
+   },
+   {
+    "fieldname": "leave_details",
+    "fieldtype": "Text Editor",
+    "label": "Leave Clause"
+   },
+   {
+    "fieldname": "notice_period_details",
+    "fieldtype": "Text Editor",
+    "label": "Notice Period Clause"
+   },
+   {
+    "fieldname": "joining_details",
+    "fieldtype": "Text Editor",
+    "label": "Joining Formalities Clause"
+   },
+   {
+    "fieldname": "required_documents",
+    "fieldtype": "Text Editor",
+    "label": "Required Documents at Joining"
+   },
+   {
+    "fieldname": "content_page3_section",
+    "fieldtype": "Section Break",
+    "label": "Letter Content - Page 3"
+   },
+   {
+    "fieldname": "acceptance_terms",
+    "fieldtype": "Text Editor",
+    "label": "Acceptance of Offer Clause"
+   },
+   {
+    "default": "I accept the offer of employment with the terms and conditions as mentioned in the offer letter.",
+    "fieldname": "acceptance_statement",
+    "fieldtype": "Data",
+    "label": "Employee Acceptance Declaration"
+   },
+   {
+    "fieldname": "signatory_section",
+    "fieldtype": "Section Break",
+    "label": "Authorized Signatory & Audit Trail"
+   },
+   {
+    "default": "For, Middle East Travels & Tourism",
+    "fieldname": "signatory_company_label",
+    "fieldtype": "Data",
+    "label": "Signatory Company Header"
+   },
+   {
+    "default": "Gopika",
+    "fieldname": "hr_signatory_name",
+    "fieldtype": "Data",
+    "label": "Signatory Name"
+   },
+   {
+    "default": "HR Consultant",
+    "fieldname": "hr_signatory_designation",
+    "fieldtype": "Data",
+    "label": "Signatory Designation"
+   },
+   {
+    "default": "Authorized Signatory",
+    "fieldname": "hr_signatory_title",
+    "fieldtype": "Data",
+    "label": "Signatory Title"
+   },
+   {
+    "fieldname": "column_break_sign",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "hr_signatory_user",
+    "fieldtype": "Link",
+    "label": "Signatory User Account",
+    "options": "User"
+   },
+   {
+    "fieldname": "issued_by",
+    "fieldtype": "Link",
+    "label": "Issued By",
+    "options": "User",
+    "read_only": 1
+   },
+   {
+    "fieldname": "issued_date",
+    "fieldtype": "Datetime",
+    "label": "Issued Date",
+    "read_only": 1
+   },
+   {
+    "fieldname": "amended_from",
+    "fieldtype": "Link",
+    "label": "Amended From",
+    "no_copy": 1,
+    "options": "Employee Offer Letter",
+    "print_hide": 1,
+    "read_only": 1
+   }
+  ],
+  "index_web_pages_for_search": 0,
+  "is_submittable": 1,
+  "module": "Visa CRM",
+  "name": "Employee Offer Letter",
+  "permissions": [
+   {
+    "create": 1,
+    "delete": 1,
+    "email": 1,
+    "export": 1,
+    "print": 1,
+    "read": 1,
+    "report": 1,
+    "role": "System Manager",
+    "share": 1,
+    "submit": 1,
+    "cancel": 1,
+    "write": 1
+   },
+   {
+    "create": 1,
+    "delete": 1,
+    "email": 1,
+    "export": 1,
+    "print": 1,
+    "read": 1,
+    "report": 1,
+    "role": "HR Manager",
+    "share": 1,
+    "submit": 1,
+    "cancel": 1,
+    "write": 1
+   },
+   {
+    "create": 1,
+    "delete": 0,
+    "email": 1,
+    "export": 1,
+    "print": 1,
+    "read": 1,
+    "report": 1,
+    "role": "HR User",
+    "share": 0,
+    "submit": 1,
+    "cancel": 0,
+    "write": 1
+   },
+   {
+    "create": 0,
+    "delete": 0,
+    "email": 0,
+    "export": 1,
+    "print": 1,
+    "read": 1,
+    "report": 0,
+    "role": "Employee",
+    "share": 0,
+    "submit": 0,
+    "cancel": 0,
+    "write": 0
+   }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "track_changes": 1
+ },
+ {
+  "actions": [],
+  "allow_rename": 0,
+  "creation": "2026-09-10 12:00:00.000000",
+  "doctype": "DocType",
+  "editable_grid": 1,
+  "engine": "InnoDB",
+  "field_order": [
+   "holiday_list",
+   "from_date",
+   "to_date",
+   "priority",
+   "is_active",
+   "description"
+  ],
+  "fields": [
+   {
+    "fieldname": "holiday_list",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "label": "Holiday List",
+    "options": "Holiday List",
+    "reqd": 1
+   },
+   {
+    "fieldname": "from_date",
+    "fieldtype": "Date",
+    "in_list_view": 1,
+    "label": "From Date",
+    "reqd": 1
+   },
+   {
+    "fieldname": "to_date",
+    "fieldtype": "Date",
+    "in_list_view": 1,
+    "label": "To Date",
+    "reqd": 1
+   },
+   {
+    "default": "0",
+    "description": "Higher priority holiday list takes precedence on overlapping dates",
+    "fieldname": "priority",
+    "fieldtype": "Int",
+    "in_list_view": 1,
+    "label": "Priority"
+   },
+   {
+    "default": "1",
+    "fieldname": "is_active",
+    "fieldtype": "Check",
+    "in_list_view": 1,
+    "label": "Is Active"
+   },
+   {
+    "fieldname": "description",
+    "fieldtype": "Data",
+    "label": "Description"
+   }
+  ],
+  "index_web_pages_for_search": 0,
+  "istable": 1,
+  "module": "Visa CRM",
+  "name": "Employee Holiday Assignment",
+  "permissions": [],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "track_changes": 1
+ },
+ {
+  "actions": [],
+  "allow_rename": 0,
+  "creation": "2026-09-10 12:00:00.000000",
+  "doctype": "DocType",
+  "editable_grid": 1,
+  "engine": "InnoDB",
+  "field_order": [
+   "document_type",
+   "document_number",
+   "document_name",
+   "attachment",
+   "column_break_1",
+   "issue_date",
+   "expiry_date",
+   "verification_status",
+   "verified_by",
+   "verification_date",
+   "remarks"
+  ],
+  "fields": [
+   {
+    "fieldname": "document_type",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "label": "Document Type",
+    "options": "Aadhaar Card\nPAN Card\nPassport\nDriving Licence\nBank Document\nEducation Certificate\nExperience Certificate\nOffer Letter\nAppointment Letter\nIncrement Letter\nOther",
+    "reqd": 1
+   },
+   {
+    "fieldname": "document_number",
+    "fieldtype": "Data",
+    "in_list_view": 1,
+    "label": "Document Number"
+   },
+   {
+    "fieldname": "document_name",
+    "fieldtype": "Data",
+    "label": "Document Name"
+   },
+   {
+    "fieldname": "attachment",
+    "fieldtype": "Attach",
+    "in_list_view": 1,
+    "label": "Attachment",
+    "reqd": 1
+   },
+   {
+    "fieldname": "column_break_1",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "issue_date",
+    "fieldtype": "Date",
+    "label": "Issue Date"
+   },
+   {
+    "fieldname": "expiry_date",
+    "fieldtype": "Date",
+    "label": "Expiry Date"
+   },
+   {
+    "default": "Pending",
+    "fieldname": "verification_status",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "label": "Verification Status",
+    "options": "Pending\nVerified\nRejected"
+   },
+   {
+    "fieldname": "verified_by",
+    "fieldtype": "Link",
+    "label": "Verified By",
+    "options": "User",
+    "read_only": 1
+   },
+   {
+    "fieldname": "verification_date",
+    "fieldtype": "Date",
+    "label": "Verification Date",
+    "read_only": 1
+   },
+   {
+    "fieldname": "remarks",
+    "fieldtype": "Small Text",
+    "label": "Remarks"
+   }
+  ],
+  "index_web_pages_for_search": 0,
+  "istable": 1,
+  "module": "Visa CRM",
+  "name": "Employee Document",
+  "permissions": [],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "track_changes": 1
+ },
+ {
+  "actions": [],
+  "allow_rename": 0,
+  "autoname": "naming_series:",
+  "creation": "2026-09-10 12:00:00.000000",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+   "letter_type",
+   "naming_series",
+   "status",
+   "letter_date",
+   "column_break_basic",
+   "company",
+   "employee",
+   "applicant_name",
+   "job_applicant",
+   "details_section",
+   "designation",
+   "department",
+   "work_location",
+   "column_break_details",
+   "date_of_joining",
+   "probation_period",
+   "reporting_manager",
+   "salary_section",
+   "monthly_salary",
+   "annual_ctc",
+   "column_break_salary",
+   "previous_salary",
+   "new_salary",
+   "increment_amount",
+   "increment_percentage",
+   "effective_date",
+   "content_section",
+   "content",
+   "signatory_section",
+   "authorized_signatory",
+   "signatory_designation",
+   "column_break_sign",
+   "issued_by",
+   "issued_date",
+   "amended_from"
+  ],
+  "fields": [
+   {
+    "fieldname": "letter_type",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Letter Type",
+    "options": "Offer Letter\nAppointment Letter\nIncrement Letter",
+    "reqd": 1
+   },
+   {
+    "fieldname": "naming_series",
+    "fieldtype": "Select",
+    "label": "Series",
+    "options": "OFFER-.YYYY.-.#####\nAPPT-.YYYY.-.#####\nINCR-.YYYY.-.#####",
+    "reqd": 1
+   },
+   {
+    "default": "Draft",
+    "fieldname": "status",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Status",
+    "options": "Draft\nHR Review\nApproved\nIssued\nArchived",
+    "reqd": 1
+   },
+   {
+    "default": "Today",
+    "fieldname": "letter_date",
+    "fieldtype": "Date",
+    "in_list_view": 1,
+    "label": "Letter Date",
+    "reqd": 1
+   },
+   {
+    "fieldname": "column_break_basic",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "company",
+    "fieldtype": "Link",
+    "label": "Company",
+    "options": "Company",
+    "reqd": 1
+   },
+   {
+    "fieldname": "employee",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Employee",
+    "options": "Employee"
+   },
+   {
+    "fieldname": "applicant_name",
+    "fieldtype": "Data",
+    "label": "Applicant Name"
+   },
+   {
+    "fieldname": "job_applicant",
+    "fieldtype": "Link",
+    "label": "Job Applicant",
+    "options": "Job Applicant"
+   },
+   {
+    "fieldname": "details_section",
+    "fieldtype": "Section Break",
+    "label": "Role & Employment Details"
+   },
+   {
+    "fieldname": "designation",
+    "fieldtype": "Link",
+    "label": "Designation",
+    "options": "Designation"
+   },
+   {
+    "fieldname": "department",
+    "fieldtype": "Link",
+    "label": "Department",
+    "options": "Department"
+   },
+   {
+    "fieldname": "work_location",
+    "fieldtype": "Data",
+    "label": "Work Location"
+   },
+   {
+    "fieldname": "column_break_details",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "date_of_joining",
+    "fieldtype": "Date",
+    "label": "Date of Joining"
+   },
+   {
+    "fieldname": "probation_period",
+    "fieldtype": "Data",
+    "label": "Probation Period"
+   },
+   {
+    "fieldname": "reporting_manager",
+    "fieldtype": "Link",
+    "label": "Reporting Manager",
+    "options": "Employee"
+   },
+   {
+    "fieldname": "salary_section",
+    "fieldtype": "Section Break",
+    "label": "Compensation & Increment Details"
+   },
+   {
+    "fieldname": "monthly_salary",
+    "fieldtype": "Currency",
+    "label": "Monthly Gross Salary"
+   },
+   {
+    "fieldname": "annual_ctc",
+    "fieldtype": "Currency",
+    "label": "Annual CTC"
+   },
+   {
+    "fieldname": "column_break_salary",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "previous_salary",
+    "fieldtype": "Currency",
+    "label": "Previous Salary"
+   },
+   {
+    "fieldname": "new_salary",
+    "fieldtype": "Currency",
+    "label": "New Salary"
+   },
+   {
+    "fieldname": "increment_amount",
+    "fieldtype": "Currency",
+    "label": "Increment Amount",
+    "read_only": 1
+   },
+   {
+    "fieldname": "increment_percentage",
+    "fieldtype": "Percent",
+    "label": "Increment Percentage",
+    "read_only": 1
+   },
+   {
+    "fieldname": "effective_date",
+    "fieldtype": "Date",
+    "label": "Effective Date"
+   },
+   {
+    "fieldname": "content_section",
+    "fieldtype": "Section Break",
+    "label": "Letter Body & Content"
+   },
+   {
+    "fieldname": "content",
+    "fieldtype": "Text Editor",
+    "label": "Letter Content"
+   },
+   {
+    "fieldname": "signatory_section",
+    "fieldtype": "Section Break",
+    "label": "Signatory & Audit Trail"
+   },
+   {
+    "fieldname": "authorized_signatory",
+    "fieldtype": "Link",
+    "label": "Authorized Signatory",
+    "options": "Employee"
+   },
+   {
+    "fieldname": "signatory_designation",
+    "fieldtype": "Data",
+    "label": "Signatory Designation"
+   },
+   {
+    "fieldname": "column_break_sign",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "issued_by",
+    "fieldtype": "Link",
+    "label": "Issued By",
+    "options": "User",
+    "read_only": 1
+   },
+   {
+    "fieldname": "issued_date",
+    "fieldtype": "Datetime",
+    "label": "Issued Date",
+    "read_only": 1
+   },
+   {
+    "fieldname": "amended_from",
+    "fieldtype": "Link",
+    "label": "Amended From",
+    "no_copy": 1,
+    "options": "Employee Letter",
+    "print_hide": 1,
+    "read_only": 1
+   }
+  ],
+  "index_web_pages_for_search": 0,
+  "is_submittable": 1,
+  "module": "Visa CRM",
+  "name": "Employee Letter",
+  "permissions": [
+   {
+    "create": 1,
+    "delete": 1,
+    "email": 1,
+    "export": 1,
+    "print": 1,
+    "read": 1,
+    "report": 1,
+    "role": "System Manager",
+    "share": 1,
+    "submit": 1,
+    "cancel": 1,
+    "write": 1
+   },
+   {
+    "create": 1,
+    "delete": 1,
+    "email": 1,
+    "export": 1,
+    "print": 1,
+    "read": 1,
+    "report": 1,
+    "role": "HR Manager",
+    "share": 1,
+    "submit": 1,
+    "cancel": 1,
+    "write": 1
+   },
+   {
+    "create": 1,
+    "delete": 0,
+    "email": 1,
+    "export": 1,
+    "print": 1,
+    "read": 1,
+    "report": 1,
+    "role": "HR User",
+    "share": 0,
+    "submit": 1,
+    "cancel": 0,
+    "write": 1
+   },
+   {
+    "create": 0,
+    "delete": 0,
+    "email": 0,
+    "export": 1,
+    "print": 1,
+    "read": 1,
+    "report": 0,
+    "role": "Employee",
+    "share": 0,
+    "submit": 0,
+    "cancel": 0,
+    "write": 0
+   }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "track_changes": 1
  }
 ]

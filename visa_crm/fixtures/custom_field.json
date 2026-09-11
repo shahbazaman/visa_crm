@@ -739,5 +739,85 @@
   "translatable": 0,
   "unique": 0,
   "width": null
+ },
+ {
+  "dt": "Employee",
+  "fieldname": "custom_probation_end_date",
+  "label": "Probation End Date",
+  "fieldtype": "Date",
+  "insert_after": "custom_is_on_probation",
+  "description": "Expected or confirmed end date of probation period",
+  "doctype": "Custom Field",
+  "name": "Employee-custom_probation_end_date"
+ },
+ {
+  "dt": "Employee",
+  "fieldname": "custom_probation_status",
+  "label": "Probation Status",
+  "fieldtype": "Select",
+  "options": "Pending\nConfirmed\nExtended",
+  "default": "Pending",
+  "insert_after": "custom_probation_end_date",
+  "doctype": "Custom Field",
+  "name": "Employee-custom_probation_status"
+ },
+ {
+  "dt": "Employee",
+  "fieldname": "custom_aadhaar_number",
+  "label": "Aadhaar Number",
+  "fieldtype": "Data",
+  "insert_after": "pan_number",
+  "description": "12-digit Indian UIDAI Aadhaar Number",
+  "doctype": "Custom Field",
+  "name": "Employee-custom_aadhaar_number"
+ },
+ {
+  "dt": "Employee",
+  "fieldname": "custom_holiday_assignments",
+  "label": "Holiday Assignments",
+  "fieldtype": "Table",
+  "options": "Employee Holiday Assignment",
+  "insert_after": "holiday_list",
+  "description": "Multiple effective-dated holiday lists merged deterministically",
+  "doctype": "Custom Field",
+  "name": "Employee-custom_holiday_assignments"
+ },
+ {
+  "dt": "Employee",
+  "fieldname": "custom_employee_documents",
+  "label": "Employee Documents",
+  "fieldtype": "Table",
+  "options": "Employee Document",
+  "insert_after": "profile_tab",
+  "description": "Verified employee certificates, identity, and compliance documents",
+  "doctype": "Custom Field",
+  "name": "Employee-custom_employee_documents"
+ },
+ {
+  "dt": "Attendance Request",
+  "fieldname": "custom_check_in",
+  "label": "Requested Check-In Time",
+  "fieldtype": "Time",
+  "insert_after": "shift",
+  "doctype": "Custom Field",
+  "name": "Attendance Request-custom_check_in"
+ },
+ {
+  "dt": "Attendance Request",
+  "fieldname": "custom_check_out",
+  "label": "Requested Check-Out Time",
+  "fieldtype": "Time",
+  "insert_after": "custom_check_in",
+  "doctype": "Custom Field",
+  "name": "Attendance Request-custom_check_out"
+ },
+ {
+  "dt": "Attendance Request",
+  "fieldname": "custom_hr_remarks",
+  "label": "HR Remarks",
+  "fieldtype": "Small Text",
+  "insert_after": "explanation",
+  "doctype": "Custom Field",
+  "name": "Attendance Request-custom_hr_remarks"
  }
 ]

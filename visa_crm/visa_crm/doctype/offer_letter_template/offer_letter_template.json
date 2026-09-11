@@ -1,0 +1,265 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:template_name",
+ "creation": "2026-09-11 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "template_name",
+  "is_default",
+  "company",
+  "company_name_display",
+  "column_break_head",
+  "heading",
+  "subject_prefix",
+  "salutation_template",
+  "body_section",
+  "introduction",
+  "compensation_text",
+  "probation_text",
+  "terms_section",
+  "performance_review_text",
+  "working_hours_text",
+  "leave_text",
+  "notice_period_text",
+  "joining_section",
+  "joining_details_text",
+  "required_documents_text",
+  "acceptance_section",
+  "acceptance_text",
+  "acceptance_statement",
+  "signatory_section",
+  "signatory_company_label",
+  "default_hr_signatory_name",
+  "default_hr_signatory_designation",
+  "default_hr_signatory_title",
+  "footer_section",
+  "footer_address",
+  "footer_contact",
+  "footer_email_web"
+ ],
+ "fields": [
+  {
+   "fieldname": "template_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Template Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_default",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Default Template"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "default": "Middle East Travels & Tourism",
+   "fieldname": "company_name_display",
+   "fieldtype": "Data",
+   "label": "Display Company Name"
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "CONGRATULATIONS",
+   "fieldname": "heading",
+   "fieldtype": "Data",
+   "label": "Main Heading"
+  },
+  {
+   "default": "Offer of Employment \u2013 ",
+   "fieldname": "subject_prefix",
+   "fieldtype": "Data",
+   "label": "Subject Prefix"
+  },
+  {
+   "default": "Dear Mr./Ms. {first_name},",
+   "fieldname": "salutation_template",
+   "fieldtype": "Data",
+   "label": "Salutation Template"
+  },
+  {
+   "fieldname": "body_section",
+   "fieldtype": "Section Break",
+   "label": "Introductory Terms (Page 1)"
+  },
+  {
+   "fieldname": "introduction",
+   "fieldtype": "Long Text",
+   "label": "Introduction Paragraph"
+  },
+  {
+   "fieldname": "compensation_text",
+   "fieldtype": "Long Text",
+   "label": "Compensation Text Template"
+  },
+  {
+   "fieldname": "probation_text",
+   "fieldtype": "Long Text",
+   "label": "Probation & Confirmation Text"
+  },
+  {
+   "fieldname": "terms_section",
+   "fieldtype": "Section Break",
+   "label": "Employment Terms & Policies (Page 2)"
+  },
+  {
+   "fieldname": "performance_review_text",
+   "fieldtype": "Long Text",
+   "label": "Performance Reviews Text"
+  },
+  {
+   "fieldname": "working_hours_text",
+   "fieldtype": "Long Text",
+   "label": "Working Hours Text"
+  },
+  {
+   "fieldname": "leave_text",
+   "fieldtype": "Long Text",
+   "label": "Leave Entitlement Text"
+  },
+  {
+   "fieldname": "notice_period_text",
+   "fieldtype": "Long Text",
+   "label": "Notice Period Text"
+  },
+  {
+   "fieldname": "joining_section",
+   "fieldtype": "Section Break",
+   "label": "Joining Instructions & Documents (Page 2)"
+  },
+  {
+   "fieldname": "joining_details_text",
+   "fieldtype": "Long Text",
+   "label": "Joining Formalities Text"
+  },
+  {
+   "fieldname": "required_documents_text",
+   "fieldtype": "Long Text",
+   "label": "Required Documents List"
+  },
+  {
+   "fieldname": "acceptance_section",
+   "fieldtype": "Section Break",
+   "label": "Offer Acceptance Terms (Page 3)"
+  },
+  {
+   "fieldname": "acceptance_text",
+   "fieldtype": "Long Text",
+   "label": "Acceptance Condition Text"
+  },
+  {
+   "default": "I accept the offer of employment with the terms and conditions as mentioned in the offer letter.",
+   "fieldname": "acceptance_statement",
+   "fieldtype": "Data",
+   "label": "Employee Acceptance Statement"
+  },
+  {
+   "fieldname": "signatory_section",
+   "fieldtype": "Section Break",
+   "label": "Authorized Signatory Defaults (Page 3)"
+  },
+  {
+   "default": "For, Middle East Travels & Tourism",
+   "fieldname": "signatory_company_label",
+   "fieldtype": "Data",
+   "label": "Signatory Company Line"
+  },
+  {
+   "default": "Gopika",
+   "fieldname": "default_hr_signatory_name",
+   "fieldtype": "Data",
+   "label": "HR Signatory Name"
+  },
+  {
+   "default": "HR Consultant",
+   "fieldname": "default_hr_signatory_designation",
+   "fieldtype": "Data",
+   "label": "HR Signatory Designation"
+  },
+  {
+   "default": "Authorized Signatory",
+   "fieldname": "default_hr_signatory_title",
+   "fieldtype": "Data",
+   "label": "HR Signatory Title"
+  },
+  {
+   "fieldname": "footer_section",
+   "fieldtype": "Section Break",
+   "label": "Document Footer Details"
+  },
+  {
+   "default": "Shobha Tower, 5/3412L, Mavoor Rd, near Emerald Mall, Arayidathupalam, Kozhikode, Kerala 673004",
+   "fieldname": "footer_address",
+   "fieldtype": "Data",
+   "label": "Footer Office Address"
+  },
+  {
+   "default": "Tel: 91 8593944666,91 7025144666",
+   "fieldname": "footer_contact",
+   "fieldtype": "Data",
+   "label": "Footer Contact Numbers"
+  },
+  {
+   "default": "info@middleeasttravels.in | www.middleeasttravels.in",
+   "fieldname": "footer_email_web",
+   "fieldtype": "Data",
+   "label": "Footer Email & Web"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "module": "Visa CRM",
+ "name": "Offer Letter Template",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR User",
+   "share": 0,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

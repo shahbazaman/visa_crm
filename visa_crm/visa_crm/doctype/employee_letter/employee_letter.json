@@ -1,0 +1,316 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-09-10 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "letter_type",
+  "naming_series",
+  "status",
+  "letter_date",
+  "column_break_basic",
+  "company",
+  "employee",
+  "applicant_name",
+  "job_applicant",
+  "details_section",
+  "designation",
+  "department",
+  "work_location",
+  "column_break_details",
+  "date_of_joining",
+  "probation_period",
+  "reporting_manager",
+  "salary_section",
+  "monthly_salary",
+  "annual_ctc",
+  "column_break_salary",
+  "previous_salary",
+  "new_salary",
+  "increment_amount",
+  "increment_percentage",
+  "effective_date",
+  "content_section",
+  "content",
+  "signatory_section",
+  "authorized_signatory",
+  "signatory_designation",
+  "column_break_sign",
+  "issued_by",
+  "issued_date",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "letter_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Letter Type",
+   "options": "Offer Letter\nAppointment Letter\nIncrement Letter",
+   "reqd": 1
+  },
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "OFFER-.YYYY.-.#####\nAPPT-.YYYY.-.#####\nINCR-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nHR Review\nApproved\nIssued\nArchived",
+   "reqd": 1
+  },
+  {
+   "default": "Today",
+   "fieldname": "letter_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Letter Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_basic",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Employee",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "applicant_name",
+   "fieldtype": "Data",
+   "label": "Applicant Name"
+  },
+  {
+   "fieldname": "job_applicant",
+   "fieldtype": "Link",
+   "label": "Job Applicant",
+   "options": "Job Applicant"
+  },
+  {
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Role & Employment Details"
+  },
+  {
+   "fieldname": "designation",
+   "fieldtype": "Link",
+   "label": "Designation",
+   "options": "Designation"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department"
+  },
+  {
+   "fieldname": "work_location",
+   "fieldtype": "Data",
+   "label": "Work Location"
+  },
+  {
+   "fieldname": "column_break_details",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "date_of_joining",
+   "fieldtype": "Date",
+   "label": "Date of Joining"
+  },
+  {
+   "fieldname": "probation_period",
+   "fieldtype": "Data",
+   "label": "Probation Period"
+  },
+  {
+   "fieldname": "reporting_manager",
+   "fieldtype": "Link",
+   "label": "Reporting Manager",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "salary_section",
+   "fieldtype": "Section Break",
+   "label": "Compensation & Increment Details"
+  },
+  {
+   "fieldname": "monthly_salary",
+   "fieldtype": "Currency",
+   "label": "Monthly Gross Salary"
+  },
+  {
+   "fieldname": "annual_ctc",
+   "fieldtype": "Currency",
+   "label": "Annual CTC"
+  },
+  {
+   "fieldname": "column_break_salary",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "previous_salary",
+   "fieldtype": "Currency",
+   "label": "Previous Salary"
+  },
+  {
+   "fieldname": "new_salary",
+   "fieldtype": "Currency",
+   "label": "New Salary"
+  },
+  {
+   "fieldname": "increment_amount",
+   "fieldtype": "Currency",
+   "label": "Increment Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "increment_percentage",
+   "fieldtype": "Percent",
+   "label": "Increment Percentage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "effective_date",
+   "fieldtype": "Date",
+   "label": "Effective Date"
+  },
+  {
+   "fieldname": "content_section",
+   "fieldtype": "Section Break",
+   "label": "Letter Body & Content"
+  },
+  {
+   "fieldname": "content",
+   "fieldtype": "Text Editor",
+   "label": "Letter Content"
+  },
+  {
+   "fieldname": "signatory_section",
+   "fieldtype": "Section Break",
+   "label": "Signatory & Audit Trail"
+  },
+  {
+   "fieldname": "authorized_signatory",
+   "fieldtype": "Link",
+   "label": "Authorized Signatory",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "signatory_designation",
+   "fieldtype": "Data",
+   "label": "Signatory Designation"
+  },
+  {
+   "fieldname": "column_break_sign",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "issued_by",
+   "fieldtype": "Link",
+   "label": "Issued By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "issued_date",
+   "fieldtype": "Datetime",
+   "label": "Issued Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Employee Letter",
+   "print_hide": 1,
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "is_submittable": 1,
+ "module": "Visa CRM",
+ "name": "Employee Letter",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "cancel": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "submit": 1,
+   "cancel": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR User",
+   "share": 0,
+   "submit": 1,
+   "cancel": 0,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 0,
+   "role": "Employee",
+   "share": 0,
+   "submit": 0,
+   "cancel": 0,
+   "write": 0
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

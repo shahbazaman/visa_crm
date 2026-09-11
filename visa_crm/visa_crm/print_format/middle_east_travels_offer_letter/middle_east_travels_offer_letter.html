@@ -1,0 +1,428 @@
+{% set comp_name = doc.company_name_display or "Middle East Travels & Tourism" %}
+{% set ref_no = doc.reference_number or ("ME/HRD/OL/" + ("%02d" % ((doc.offer_number or "1") | int))) %}
+{% set let_date = frappe.utils.formatdate(doc.letter_date, "dd.mm.yyyy") %}
+{% set doj_date = frappe.utils.formatdate(doc.date_of_joining, "dd.mm.yyyy") %}
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Open+Sans:wght@400;600;700&display=swap');
+
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  body, .print-format {
+    margin: 0;
+    padding: 0;
+    font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color: #111827;
+    background: #ffffff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .offer-page {
+    box-sizing: border-box;
+    width: 210mm;
+    height: 297mm;
+    padding: 16mm 22mm 16mm 22mm;
+    margin: 0 auto;
+    position: relative;
+    page-break-after: always;
+    break-after: page;
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .offer-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid transparent;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+  }
+
+  .logo-middle-east {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .logo-text-main {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 24px;
+    font-weight: 900;
+    color: #000000;
+    letter-spacing: 0.5px;
+    line-height: 1;
+  }
+
+  .logo-text-sub {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 8.5px;
+    font-weight: 700;
+    color: #000000;
+    letter-spacing: 3.5px;
+    margin-top: 4px;
+    padding-left: 2px;
+    text-transform: uppercase;
+  }
+
+  .logo-iata {
+    display: flex;
+    align-items: center;
+  }
+
+  .iata-svg {
+    width: 60px;
+    height: 42px;
+  }
+
+  .page-footer {
+    width: 100%;
+    border-top: 1px solid #1f2937;
+    padding-top: 8px;
+    margin-top: auto;
+    text-align: center;
+    font-size: 10px;
+    line-height: 1.45;
+    color: #374151;
+  }
+
+  .footer-address {
+    font-weight: 500;
+    color: #1f2937;
+  }
+
+  .footer-contact {
+    margin-top: 2px;
+  }
+
+  .footer-web {
+    margin-top: 2px;
+    color: #4b5563;
+  }
+
+  .page-content {
+    flex: 1;
+    font-size: 13.2px;
+    line-height: 1.6;
+    color: #1f2937;
+  }
+
+  .meta-block {
+    text-align: right;
+    font-size: 13.5px;
+    line-height: 1.5;
+    margin-bottom: 20px;
+  }
+
+  .recipient-block {
+    font-size: 13.5px;
+    line-height: 1.45;
+    margin-bottom: 22px;
+    max-width: 320px;
+  }
+
+  .candidate-name {
+    font-weight: 600;
+    color: #000000;
+  }
+
+  .congratulations-heading {
+    text-align: center;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 14.5px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #000000;
+    margin: 24px 0 20px 0;
+  }
+
+  .subject-line {
+    font-weight: 700;
+    font-size: 13.5px;
+    margin-bottom: 20px;
+    color: #000000;
+  }
+
+  .salutation-line {
+    margin-bottom: 14px;
+    font-size: 13.5px;
+  }
+
+  .clause-p {
+    margin-bottom: 18px;
+    text-align: justify;
+    text-justify: inter-word;
+    font-size: 13.2px;
+    line-height: 1.6;
+  }
+
+  .clause-title {
+    font-weight: 700;
+    color: #000000;
+  }
+
+  .docs-list {
+    margin: 10px 0 20px 0;
+    padding-left: 22px;
+    line-height: 1.65;
+  }
+
+  .docs-list li {
+    margin-bottom: 4px;
+  }
+
+  .dashed-divider {
+    border: none;
+    border-top: 1px dashed #4b5563;
+    margin: 28px 0 22px 0;
+  }
+
+  .signatory-box {
+    margin-top: 25px;
+    margin-bottom: 30px;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+
+  .signatory-name {
+    font-weight: 700;
+    color: #000000;
+    margin-top: 10px;
+  }
+
+  .signature-svg-container {
+    height: 48px;
+    margin: 4px 0;
+  }
+
+  .acceptance-grid {
+    width: 100%;
+    border: none;
+    font-size: 13.5px;
+    margin-top: 20px;
+  }
+
+  .acceptance-grid td {
+    padding: 10px 0 25px 0;
+    vertical-align: top;
+  }
+
+  @media print {
+    .offer-page {
+      width: 100%;
+      height: 100vh;
+      padding: 14mm 20mm 14mm 20mm;
+      page-break-after: always;
+      break-after: page;
+    }
+    .offer-page:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+  }
+</style>
+
+<!-- ====================================================================== -->
+<!-- PAGE 1                                                                 -->
+<!-- ====================================================================== -->
+<div class="offer-page">
+  <div class="page-header">
+    <div class="logo-middle-east">
+      <span class="logo-text-main">MIDDLE EAST</span>
+      <span class="logo-text-sub">TRAVELS & TOURISM</span>
+    </div>
+    <div class="logo-iata">
+      <svg class="iata-svg" viewBox="0 0 100 70" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="35" r="30" fill="#005a9c" />
+        <ellipse cx="50" cy="35" rx="28" ry="12" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <ellipse cx="50" cy="35" rx="14" ry="28" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <line x1="20" y1="35" x2="80" y2="35" stroke="#ffffff" stroke-width="1.8" />
+        <rect x="22" y="24" width="56" height="22" rx="4" fill="#005a9c" opacity="0.95" />
+        <text x="50" y="41" font-family="'Montserrat', sans-serif" font-size="16" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1">IATA</text>
+      </svg>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="meta-block">
+      <div><strong>Date:</strong> {{ let_date }}</div>
+      <div><strong>Ref:</strong> {{ ref_no }}</div>
+    </div>
+
+    <div class="recipient-block">
+      <div class="candidate-name">{{ doc.employee_name or "Candidate Name" }}</div>
+      {% if doc.address %}
+        <div>{{ doc.address | replace('
+', '<br>') }}</div>
+      {% else %}
+        <div>Kozhikode, Kerala</div>
+      {% endif %}
+    </div>
+
+    <div class="congratulations-heading">CONGRATULATIONS</div>
+
+    <div class="subject-line">
+      Subject: Offer of Employment – {{ doc.designation or "Sales & Marketing Executive" }}
+    </div>
+
+    <div class="salutation-line">
+      {{ doc.salutation or ("Dear Mr./Ms. " + (doc.first_name or "Candidate") + ",") }}
+    </div>
+
+    <div class="clause-p">
+      {{ doc.introduction }}
+    </div>
+
+    <div class="clause-p">
+      <span class="clause-title">Date of Joining:</span> {{ doj_date }}
+    </div>
+
+    <div class="clause-p">
+      <span class="clause-title">Compensation:</span> {{ doc.compensation_details }}
+    </div>
+
+    <div class="clause-p">
+      <span class="clause-title">Probation and Confirmation:</span> {{ doc.probation_details }}
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div class="footer-address">Shobha Tower, 5/3412L, Mavoor Rd, near Emerald Mall, Arayidathupalam, Kozhikode, Kerala 673004</div>
+    <div class="footer-contact">Tel: 91 8593944666, 91 7025144666</div>
+    <div class="footer-web">info@middleeasttravels.in | www.middleeasttravels.in</div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- PAGE 2                                                                 -->
+<!-- ====================================================================== -->
+<div class="offer-page">
+  <div class="page-header">
+    <div class="logo-middle-east">
+      <span class="logo-text-main">MIDDLE EAST</span>
+      <span class="logo-text-sub">TRAVELS & TOURISM</span>
+    </div>
+    <div class="logo-iata">
+      <svg class="iata-svg" viewBox="0 0 100 70" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="35" r="30" fill="#005a9c" />
+        <ellipse cx="50" cy="35" rx="28" ry="12" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <ellipse cx="50" cy="35" rx="14" ry="28" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <line x1="20" y1="35" x2="80" y2="35" stroke="#ffffff" stroke-width="1.8" />
+        <rect x="22" y="24" width="56" height="22" rx="4" fill="#005a9c" opacity="0.95" />
+        <text x="50" y="41" font-family="'Montserrat', sans-serif" font-size="16" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1">IATA</text>
+      </svg>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="clause-p">
+      <span class="clause-title">Performance Reviews:</span> {{ doc.performance_reviews }}
+    </div>
+
+    <div class="clause-p">
+      <span class="clause-title">Working Hours:</span> {{ doc.working_hours_details }}
+    </div>
+
+    <div class="clause-p">
+      <span class="clause-title">Leave:</span> {{ doc.leave_details }}
+    </div>
+
+    <div class="clause-p">
+      <span class="clause-title">Notice Period:</span> {{ doc.notice_period_details }}
+    </div>
+
+    <div class="clause-p">
+      <span class="clause-title">Joining Details:</span> {{ doc.joining_details }}
+    </div>
+
+    <div style="margin-top: 22px; font-weight: 600; font-size: 13.5px; color: #000000;">
+      Copy of Documents Required at the Time of Joining:
+    </div>
+
+    <div style="font-size: 13.2px; line-height: 1.65; margin-top: 10px;">
+      {{ doc.required_documents }}
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div class="footer-address">Shobha Tower, 5/3412L, Mavoor Rd, near Emerald Mall, Arayidathupalam, Kozhikode, Kerala 673004</div>
+    <div class="footer-contact">Tel: 91 8593944666, 91 7025144666</div>
+    <div class="footer-web">info@middleeasttravels.in | www.middleeasttravels.in</div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- PAGE 3                                                                 -->
+<!-- ====================================================================== -->
+<div class="offer-page">
+  <div class="page-header">
+    <div class="logo-middle-east">
+      <span class="logo-text-main">MIDDLE EAST</span>
+      <span class="logo-text-sub">TRAVELS & TOURISM</span>
+    </div>
+    <div class="logo-iata">
+      <svg class="iata-svg" viewBox="0 0 100 70" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="35" r="30" fill="#005a9c" />
+        <ellipse cx="50" cy="35" rx="28" ry="12" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <ellipse cx="50" cy="35" rx="14" ry="28" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <line x1="20" y1="35" x2="80" y2="35" stroke="#ffffff" stroke-width="1.8" />
+        <rect x="22" y="24" width="56" height="22" rx="4" fill="#005a9c" opacity="0.95" />
+        <text x="50" y="41" font-family="'Montserrat', sans-serif" font-size="16" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1">IATA</text>
+      </svg>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="clause-p">
+      <span class="clause-title">Acceptance of Offer:</span> {{ doc.acceptance_terms }}
+    </div>
+
+    <div class="signatory-box">
+      <div>{{ doc.signatory_company_label or "For, Middle East Travels & Tourism" }}</div>
+      <div class="signatory-name">{{ doc.hr_signatory_name or "Gopika" }}</div>
+      <div>{{ doc.hr_signatory_designation or "HR Consultant" }}</div>
+      <div class="signature-svg-container">
+        <svg width="140" height="46" viewBox="0 0 140 46">
+          <path d="M12,32 Q28,8 42,24 T68,14 T92,28 T115,16 Q125,12 132,24" fill="none" stroke="#1d4ed8" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M32,26 Q42,34 58,30" fill="none" stroke="#1d4ed8" stroke-width="1.8"/>
+          <circle cx="36" cy="18" r="2" fill="#1d4ed8"/>
+        </svg>
+      </div>
+      <div style="font-weight: 700; color: #000000;">{{ doc.hr_signatory_title or "Authorized Signatory" }}</div>
+    </div>
+
+    <div class="dashed-divider"></div>
+
+    <div style="font-size: 13.5px; line-height: 1.6; margin-bottom: 30px;">
+      {{ doc.acceptance_statement or "I accept the offer of employment with the terms and conditions as mentioned in the offer letter." }}
+    </div>
+
+    <table class="acceptance-grid">
+      <tr>
+        <td style="width: 50%;"><strong>Name:</strong></td>
+        <td style="width: 50%;"><strong>Date:</strong></td>
+      </tr>
+      <tr>
+        <td style="width: 50%;"><strong>Signature:</strong></td>
+        <td style="width: 50%;"><strong>Place:</strong></td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="page-footer">
+    <div class="footer-address">Shobha Tower, 5/3412L, Mavoor Rd, near Emerald Mall, Arayidathupalam, Kozhikode, Kerala 673004</div>
+    <div class="footer-contact">Tel: 91 8593944666, 91 7025144666</div>
+    <div class="footer-web">info@middleeasttravels.in | www.middleeasttravels.in</div>
+  </div>
+</div>
