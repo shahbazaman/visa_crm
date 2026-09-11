@@ -221,6 +221,8 @@ def setup_workflows():
         wf.insert()
 
 def setup_offer_letter_template():
+    if not frappe.db.exists("DocType", "Offer Letter Template"):
+        return
     tmpl_name = "Middle East Travels Default Offer Letter Template"
     if not frappe.db.exists("Offer Letter Template", tmpl_name):
         comp = "middle east holidays" if frappe.db.exists("Company", "middle east holidays") else (frappe.db.get_single_value("Global Defaults", "default_company") or "")
