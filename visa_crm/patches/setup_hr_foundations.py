@@ -15,13 +15,21 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 
 def execute():
-    setup_custom_fields()
-    setup_property_setters()
-    setup_salary_components()
-    link_production_employees()
-    setup_workflows()
-    setup_offer_letter_template()
-    setup_letter_head()
+    for step_name, fn in [
+        ("custom_fields", setup_custom_fields),
+        ("property_setters", setup_property_setters),
+        ("salary_components", setup_salary_components),
+        ("link_employees", link_production_employees),
+        ("workflows", setup_workflows),
+        ("offer_letter_template", setup_offer_letter_template),
+        ("letter_head", setup_letter_head),
+    ]:
+        try:
+            fn()
+            print(f"[setup_hr_foundations] Step {step_name} completed.")
+        except Exception as e:
+            print(f"[setup_hr_foundations] Step {step_name} non-fatal warning: {e}")
+            frappe.log_error(f"setup_hr_foundations step {step_name} warning: {e}", "setup_hr_foundations")
 
 def setup_custom_fields():
     custom_fields = {
@@ -165,60 +173,65 @@ def link_production_employees():
                 up.insert()
 
 def setup_workflows():
-    # 1. Leave Application Workflow
-    if not frappe.db.exists("Workflow", "Leave Application Workflow"):
-        # Ensure Workflow States exist
-        for s, docstatus in [("Draft", "0"), ("Pending Approval", "0"), ("Approved", "1"), ("Rejected", "2")]:
-            if not frappe.db.exists("Workflow State", s):
-                ws = frappe.new_doc("Workflow State")
-                ws.workflow_state_name = s
-                ws.doc_status = docstatus
-                ws.flags.ignore_permissions = True
-                ws.insert()
+    try:
+        if not frappe.db.exists("DocType", "Leave Application"):
+            return
+        if not frappe.db.exists("Workflow", "Leave Application Workflow"):
+            for s in ["Draft", "Pending Approval", "Approved", "Rejected"]:
+                if not frappe.db.exists("Workflow State", s):
+                    ws = frappe.new_doc("Workflow State")
+                    ws.workflow_state_name = s
+                    ws.flags.ignore_permissions = True
+                    ws.insert()
 
-        # Ensure Workflow Actions exist
-        for act in ["Submit for Approval", "Approve", "Reject"]:
-            if not frappe.db.exists("Workflow Action Master", act):
-                wa = frappe.new_doc("Workflow Action Master")
-                wa.workflow_action_name = act
-                wa.flags.ignore_permissions = True
-                wa.insert()
+            for act in ["Submit for Approval", "Approve", "Reject"]:
+                if not frappe.db.exists("Workflow Action Master", act):
+                    wa = frappe.new_doc("Workflow Action Master")
+                    wa.workflow_action_name = act
+                    wa.flags.ignore_permissions = True
+                    wa.insert()
 
-        wf = frappe.new_doc("Workflow")
-        wf.workflow_name = "Leave Application Workflow"
-        wf.document_type = "Leave Application"
-        wf.is_active = 1
-        wf.workflow_state_field = "workflow_state"
+            for r in ["Employee", "HR User", "HR Manager", "Leave Approver"]:
+                if not frappe.db.exists("Role", r):
+                    return
 
-        wf.set("states", [
-            {"state": "Draft", "doc_status": "0", "allow_edit": "Employee"},
-            {"state": "Pending Approval", "doc_status": "0", "allow_edit": "HR User"},
-            {"state": "Approved", "doc_status": "1", "allow_edit": "HR Manager"},
-            {"state": "Rejected", "doc_status": "2", "allow_edit": "HR Manager"}
-        ])
+            wf = frappe.new_doc("Workflow")
+            wf.workflow_name = "Leave Application Workflow"
+            wf.document_type = "Leave Application"
+            wf.is_active = 0
+            wf.workflow_state_field = "workflow_state"
 
-        wf.set("transitions", [
-            {
-                "state": "Draft",
-                "action": "Submit for Approval",
-                "next_state": "Pending Approval",
-                "allowed": "Employee"
-            },
-            {
-                "state": "Pending Approval",
-                "action": "Approve",
-                "next_state": "Approved",
-                "allowed": "Leave Approver"
-            },
-            {
-                "state": "Pending Approval",
-                "action": "Reject",
-                "next_state": "Rejected",
-                "allowed": "Leave Approver"
-            }
-        ])
-        wf.flags.ignore_permissions = True
-        wf.insert()
+            wf.set("states", [
+                {"state": "Draft", "doc_status": "0", "allow_edit": "Employee"},
+                {"state": "Pending Approval", "doc_status": "0", "allow_edit": "HR User"},
+                {"state": "Approved", "doc_status": "1", "allow_edit": "HR Manager"},
+                {"state": "Rejected", "doc_status": "0", "allow_edit": "HR Manager"}
+            ])
+
+            wf.set("transitions", [
+                {
+                    "state": "Draft",
+                    "action": "Submit for Approval",
+                    "next_state": "Pending Approval",
+                    "allowed": "Employee"
+                },
+                {
+                    "state": "Pending Approval",
+                    "action": "Approve",
+                    "next_state": "Approved",
+                    "allowed": "Leave Approver"
+                },
+                {
+                    "state": "Pending Approval",
+                    "action": "Reject",
+                    "next_state": "Rejected",
+                    "allowed": "Leave Approver"
+                }
+            ])
+            wf.flags.ignore_permissions = True
+            wf.insert()
+    except Exception as e:
+        print(f"setup_workflows skipped: {e}")
 
 def setup_offer_letter_template():
     if not frappe.db.exists("DocType", "Offer Letter Template"):
