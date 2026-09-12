@@ -1,17 +1,11 @@
 frappe.ui.form.on('Employee Offer Letter', {
     refresh: function(frm) {
         if (!frm.is_new()) {
-            // Button 1: Direct 3-page PDF download
-            frm.add_custom_button(__('Download 3-Page PDF'), function() {
-                const url = `/api/method/frappe.utils.print_format.download_pdf?doctype=Employee Offer Letter&name=${encodeURIComponent(frm.doc.name)}&format=Middle East Travels Offer Letter&no_letterhead=1`;
-                window.open(url);
-            }).addClass('btn-primary');
-
-            // Button 2: Print preview in exact Middle East Travels format
+            // Primary Action: Opens the exact perfect format print preview (where user can print or save as PDF with 100% fidelity)
             frm.add_custom_button(__('Print Exact Offer Letter'), function() {
                 const url = `/printview?doctype=Employee Offer Letter&name=${encodeURIComponent(frm.doc.name)}&format=Middle East Travels Offer Letter&no_letterhead=1`;
                 window.open(url, '_blank');
-            });
+            }).addClass('btn-primary');
         }
     },
     employee: function(frm) {
