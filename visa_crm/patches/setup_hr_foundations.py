@@ -23,6 +23,7 @@ def execute():
         ("workflows", setup_workflows),
         ("offer_letter_template", setup_offer_letter_template),
         ("letter_head", setup_letter_head),
+        ("default_print_format", setup_default_print_format),
     ]:
         try:
             fn()
@@ -299,3 +300,15 @@ def setup_letter_head():
         lh.flags.ignore_permissions = True
         lh.insert()
         print("Seeded Middle East Travels & Tourism Letter Head")
+
+def setup_default_print_format():
+    try:
+        if frappe.db.exists("Print Format", "Middle East Travels Offer Letter"):
+            frappe.db.set_value("Print Format", "Middle East Travels Offer Letter", "default", 1)
+            frappe.db.set_value("Print Format", "Middle East Travels Offer Letter", "disabled", 0)
+        if frappe.db.exists("DocType", "Employee Offer Letter"):
+            frappe.db.set_value("DocType", "Employee Offer Letter", "default_print_format", "Middle East Travels Offer Letter")
+        frappe.db.commit()
+        print("Enforced Middle East Travels Offer Letter as system default print format!")
+    except Exception as e:
+        print(f"setup_default_print_format warning: {e}")

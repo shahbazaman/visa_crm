@@ -29,6 +29,10 @@
   "acceptance_section",
   "acceptance_text",
   "acceptance_statement",
+  "branding_section",
+  "company_logo",
+  "iata_logo",
+  "signature_image",
   "signatory_section",
   "signatory_company_label",
   "default_hr_signatory_name",
@@ -216,6 +220,26 @@
    "fieldname": "footer_email_web",
    "fieldtype": "Data",
    "label": "Footer Email & Web"
+  },
+  {
+   "fieldname": "branding_section",
+   "fieldtype": "Section Break",
+   "label": "Logo & Signature Branding"
+  },
+  {
+   "fieldname": "company_logo",
+   "fieldtype": "Attach Image",
+   "label": "Company Logo (Default: Middle East Travels & Tourism)"
+  },
+  {
+   "fieldname": "iata_logo",
+   "fieldtype": "Attach Image",
+   "label": "IATA Logo"
+  },
+  {
+   "fieldname": "signature_image",
+   "fieldtype": "Attach Image",
+   "label": "Signatory Signature Image"
   }
  ],
  "index_web_pages_for_search": 0,

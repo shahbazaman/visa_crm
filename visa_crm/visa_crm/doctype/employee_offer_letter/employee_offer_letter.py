@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import re
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -25,6 +26,7 @@ class EmployeeOfferLetter(Document):
         self.validate_employee_data()
         self.calculate_salary_in_words()
         self.populate_from_template()
+        self.resolve_all_placeholders()
 
     def validate_employee_data(self):
         if self.employee:
@@ -56,14 +58,13 @@ class EmployeeOfferLetter(Document):
         if self.monthly_salary:
             words = money_in_words(self.monthly_salary, "INR")
             # Clean up standard formatting: "INR Eighteen Thousand only." -> "Rupees Eighteen Thousand Only"
-            cleaned = words.replace("INR ", "Rupees ").replace(" only.", " Only").replace(" Only.", " Only")
+            cleaned = words.replace("INR ", "Rupees ").replace(" only.", " Only").replace(" Only.", " Only").replace(" only", " Only")
             if not cleaned.endswith("Only"):
                 cleaned += " Only"
             self.monthly_salary_in_words = cleaned
 
     def populate_from_template(self):
         if not self.offer_letter_template:
-            # Pick default template if none selected
             default_tmpl = frappe.db.get_value("Offer Letter Template", {"is_default": 1}, "name")
             if not default_tmpl:
                 default_tmpl = frappe.db.get_value("Offer Letter Template", {}, "name")
@@ -75,33 +76,18 @@ class EmployeeOfferLetter(Document):
 
         tmpl = frappe.get_doc("Offer Letter Template", self.offer_letter_template)
 
-        # Substitution mapping
-        desig = self.designation or "Sales & Marketing Executive"
-        comp = self.company_name_display or tmpl.company_name_display or "Middle East Travels & Tourism"
+        # Inherit branding assets if not already overridden
+        if not self.company_logo and tmpl.get("company_logo"):
+            self.company_logo = tmpl.company_logo
+        if not self.iata_logo and tmpl.get("iata_logo"):
+            self.iata_logo = tmpl.iata_logo
+        if not self.signature_image and tmpl.get("signature_image"):
+            self.signature_image = tmpl.signature_image
+
+        subs = self._build_substitution_dict(tmpl)
+
+        # Populate sections if empty
         first_name = self.first_name or (self.employee_name.split()[0] if self.employee_name else "Candidate")
-        sal_formatted = f"{self.monthly_salary:,.2f}".rstrip("0").rstrip(".") if self.monthly_salary else "18,000"
-        sal_words = self.monthly_salary_in_words or "Rupees Eighteen Thousand Only"
-        doj_str = formatdate(self.date_of_joining, "dd.mm.yyyy") if self.date_of_joining else "11.09.2026"
-        doj_formatted = formatdate(self.date_of_joining, "d MMMM YYYY") if self.date_of_joining else "11th September 2026"
-        prob_period = self.probation_period or "three (3) months"
-        hrs = self.working_hours or "Monday to Saturday, 10:00 AM to 5:30 PM"
-        time_str = self.joining_time or "10:30 AM"
-
-        subs = {
-            "designation": desig,
-            "company": comp,
-            "first_name": first_name,
-            "employee_name": self.employee_name or "Candidate",
-            "monthly_salary": sal_formatted,
-            "monthly_salary_in_words": sal_words,
-            "date_of_joining": doj_str,
-            "joining_date_formatted": doj_formatted,
-            "probation_period": prob_period,
-            "working_hours": hrs,
-            "joining_time": time_str
-        }
-
-        # Populate sections only if empty (preserves HR manual edits!)
         if not self.salutation:
             self.salutation = f"Dear Mr./Ms. {first_name},"
         if not self.introduction and tmpl.introduction:
@@ -133,6 +119,45 @@ class EmployeeOfferLetter(Document):
             self.hr_signatory_title = tmpl.default_hr_signatory_title or "Authorized Signatory"
         if not self.signatory_company_label:
             self.signatory_company_label = tmpl.signatory_company_label or "For, Middle East Travels & Tourism"
+
+    def _build_substitution_dict(self, tmpl=None):
+        desig = self.designation or "Sales & Marketing Executive"
+        comp = self.company_name_display or (tmpl.company_name_display if tmpl else "Middle East Travels & Tourism")
+        first_name = self.first_name or (self.employee_name.split()[0] if self.employee_name else "Candidate")
+        sal_formatted = f"{self.monthly_salary:,.2f}".rstrip("0").rstrip(".") if self.monthly_salary else "18,000"
+        sal_words = self.monthly_salary_in_words or "Rupees Eighteen Thousand Only"
+        doj_str = formatdate(self.date_of_joining, "dd.mm.yyyy") if self.date_of_joining else "11.09.2026"
+        doj_formatted = formatdate(self.date_of_joining, "d MMMM yyyy") if self.date_of_joining else "11th September 2026"
+        prob_period = self.probation_period or "three (3) months"
+        hrs = self.working_hours or "Monday to Saturday, 10:00 AM to 5:30 PM"
+        time_str = self.joining_time or "10:30 AM"
+
+        return {
+            "designation": desig,
+            "company": comp,
+            "first_name": first_name,
+            "employee_name": self.employee_name or "Candidate",
+            "monthly_salary": sal_formatted,
+            "monthly_salary_in_words": sal_words,
+            "date_of_joining": doj_str,
+            "joining_date_formatted": doj_formatted,
+            "probation_period": prob_period,
+            "working_hours": hrs,
+            "joining_time": time_str
+        }
+
+    def resolve_all_placeholders(self):
+        """Final cleanup pass: ensure NO {variable} remains in any clause!"""
+        subs = self._build_substitution_dict()
+        clauses = [
+            "salutation", "introduction", "compensation_details", "probation_details",
+            "performance_reviews", "working_hours_details", "leave_details",
+            "notice_period_details", "joining_details", "required_documents", "acceptance_terms"
+        ]
+        for field in clauses:
+            val = getattr(self, field, None)
+            if val and isinstance(val, str) and "{" in val and "}" in val:
+                setattr(self, field, self._render_string(val, subs))
 
     def _render_string(self, text, context):
         if not text:

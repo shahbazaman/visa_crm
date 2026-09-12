@@ -49,6 +49,10 @@
   "content_page3_section",
   "acceptance_terms",
   "acceptance_statement",
+  "branding_section",
+  "company_logo",
+  "iata_logo",
+  "signature_image",
   "signatory_section",
   "signatory_company_label",
   "hr_signatory_name",
@@ -377,6 +381,26 @@
    "options": "Employee Offer Letter",
    "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "branding_section",
+   "fieldtype": "Section Break",
+   "label": "Branding & Signature (Optional Overrides)"
+  },
+  {
+   "fieldname": "company_logo",
+   "fieldtype": "Attach Image",
+   "label": "Company Logo"
+  },
+  {
+   "fieldname": "iata_logo",
+   "fieldtype": "Attach Image",
+   "label": "IATA Logo"
+  },
+  {
+   "fieldname": "signature_image",
+   "fieldtype": "Attach Image",
+   "label": "Signatory Signature Image"
   }
  ],
  "index_web_pages_for_search": 0,
@@ -443,5 +467,6 @@
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
- "track_changes": 1
+ "track_changes": 1,
+ "default_print_format": "Middle East Travels & Tourism Offer Letter"
 }
