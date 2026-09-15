@@ -28,7 +28,8 @@ def get_data(
 	Custom wrapper around crm.api.doc.get_data:
 	1. Normalizes Lead filters (category -> lead_category, subcategory -> lead_group, Like queries).
 	2. Sanitizes query rows and enriches virtual columns (Contacts: customer_name, category, subcat).
-	3. Ensures all sidebar lists (Leads, Contacts, Notes, Call Logs) and Tree view filters work seamlessly.
+	3. Enriches CRM Deal list view with rich staff-friendly columns and batch lead fallback.
+	4. Ensures all sidebar lists and Tree view filters work seamlessly.
 	"""
 	if isinstance(filters, str):
 		try:
@@ -49,6 +50,25 @@ def get_data(
 			filters = normalize_crm_lead_filters(filters)
 		if isinstance(default_filters, dict):
 			default_filters = normalize_crm_lead_filters(default_filters)
+
+	# For CRM Deal, ensure 14 rich columns are supplied if not customized
+	if doctype == "CRM Deal":
+		view_type = "list"
+		if isinstance(view, str):
+			try:
+				view_dict = json.loads(view)
+				view_type = view_dict.get("view_type") or "list"
+			except Exception:
+				view_type = "list"
+		elif isinstance(view, dict):
+			view_type = view.get("view_type") or "list"
+
+		if view_type == "list" and not columns:
+			from visa_crm.overrides.deal import VisaCRMDeal
+			default_data = VisaCRMDeal.default_list_data()
+			columns = default_data["columns"]
+			if not rows:
+				rows = default_data["rows"]
 
 	# For Contact, sanitize custom columns so MySQL get_list doesn't fail
 	if doctype == "Contact":
@@ -82,7 +102,61 @@ def get_data(
 	if doctype == "Contact" and isinstance(res, dict) and "data" in res:
 		res["data"] = VisaCRMContact.parse_list_data(res["data"])
 
+	# Ensure CRM Deal list gracefully enriches missing lead fields in batch
+	if doctype == "CRM Deal" and isinstance(res, dict) and "data" in res:
+		res["data"] = enrich_deal_list_data(res["data"])
+
 	return res
+
+
+def enrich_deal_list_data(deal_rows: list) -> list:
+	"""Batch enrich empty deal fields from linked CRM Lead without N+1 queries."""
+	if not deal_rows:
+		return deal_rows
+
+	leads_to_fetch = set()
+	for row in deal_rows:
+		if isinstance(row, dict) and row.get("lead"):
+			if not row.get("email") or not row.get("mobile_no") or not row.get("lead_name"):
+				leads_to_fetch.add(row["lead"])
+
+	if not leads_to_fetch:
+		return deal_rows
+
+	lead_records = frappe.get_all(
+		"CRM Lead",
+		filters={"name": ["in", list(leads_to_fetch)]},
+		fields=[
+			"name", "lead_name", "first_name", "last_name", "email", "mobile_no", "phone",
+			"meta_campaign_name", "meta_adset_name", "lead_category", "responsible_department",
+			"custom_destination"
+		],
+	)
+	lead_map = {l.name: l for l in lead_records}
+
+	for row in deal_rows:
+		if isinstance(row, dict) and row.get("lead") in lead_map:
+			lead_info = lead_map[row["lead"]]
+			if not row.get("lead_name"):
+				row["lead_name"] = lead_info.lead_name or f"{lead_info.first_name or ''} {lead_info.last_name or ''}".strip()
+			if not row.get("email"):
+				row["email"] = lead_info.email
+			if not row.get("mobile_no"):
+				row["mobile_no"] = lead_info.mobile_no
+			if not row.get("phone"):
+				row["phone"] = lead_info.phone or lead_info.mobile_no
+			if not row.get("custom_meta_campaign_name"):
+				row["custom_meta_campaign_name"] = getattr(lead_info, "meta_campaign_name", None)
+			if not row.get("custom_meta_adset_name"):
+				row["custom_meta_adset_name"] = getattr(lead_info, "meta_adset_name", None)
+			if not row.get("custom_lead_category"):
+				row["custom_lead_category"] = getattr(lead_info, "lead_category", None)
+			if not row.get("custom_responsible_department"):
+				row["custom_responsible_department"] = getattr(lead_info, "responsible_department", None)
+			if not row.get("custom_destination"):
+				row["custom_destination"] = getattr(lead_info, "custom_destination", None)
+
+	return deal_rows
 
 
 def normalize_crm_lead_filters(filters: dict) -> dict:

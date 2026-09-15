@@ -24,10 +24,23 @@ def create_deal_if_supported(lead, data=None):
     existing = frappe.db.exists("CRM Deal", {"lead": lead}) if frappe.get_meta("CRM Deal").has_field("lead") else None
     if existing:
         return existing
+
+    from visa_crm.api.deal_sync import map_lead_to_deal
+
+    lead_doc = frappe.get_doc("CRM Lead", lead) if frappe.db.exists("CRM Lead", lead) else None
     doc = frappe.new_doc("CRM Deal")
-    for field, value in {"lead": lead, "deal_name": (data or {}).get("customer_name") or lead, "status": "Open", "source": "Meta Ads"}.items():
+    doc.lead = lead
+    doc.deal_name = (data or {}).get("customer_name") or (lead_doc.lead_name if lead_doc else None) or lead
+    doc.status = "Open"
+    _ensure_link_master(doc, "status", "Open")
+
+    if lead_doc:
+        map_lead_to_deal(doc, lead_doc, overwrite_existing=False)
+
+    for field, value in {"lead": lead, "deal_name": doc.deal_name, "status": doc.status, "source": doc.source or "Meta Ads"}.items():
         _ensure_link_master(doc, field, value)
         set_if_has(doc, field, value)
+
     doc.insert(ignore_permissions=True)
     return doc.name
 

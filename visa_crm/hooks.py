@@ -16,7 +16,8 @@ after_migrate = [
 ]
 override_doctype_class = {
     "Lead Sync Source": "visa_crm.overrides.lead_sync_source.VisaCRMLeadSyncSource",
-    "Contact": "visa_crm.overrides.contact.VisaCRMContact"
+    "Contact": "visa_crm.overrides.contact.VisaCRMContact",
+    "CRM Deal": "visa_crm.overrides.deal.VisaCRMDeal"
 }
 override_whitelisted_methods = {
     "crm.api.settings.create_email_account": "visa_crm.api.email_account.create_email_account",
@@ -43,6 +44,10 @@ doc_events = {
         "after_insert": ["visa_crm.api.gemini_service.enqueue_processing"],
         "after_save": ["visa_crm.api.gemini_service.enqueue_processing"]
     },
+    "CRM Deal": {
+        "before_insert": ["visa_crm.api.deal_sync.sync_lead_to_deal_before_insert"],
+        "validate": ["visa_crm.api.deal_sync.sync_lead_to_deal_validate"]
+    },
     "CRM Lead": {
         "before_insert": ["visa_crm.api.lead_creator.log_crm_lead_hook"],
         "autoname": ["visa_crm.api.lead_creator.log_crm_lead_hook"],
@@ -50,7 +55,7 @@ doc_events = {
         "validate": ["visa_crm.api.lead_creator.log_crm_lead_hook"],
         "before_save": ["visa_crm.api.crm_lifecycle.validate_lead_transition", "visa_crm.api.lead_creator.log_crm_lead_hook"],
         "after_insert": ["visa_crm.api.lead_creator.log_crm_lead_hook"],
-        "after_save": ["visa_crm.api.crm_lifecycle.on_lead_update"]
+        "after_save": ["visa_crm.api.crm_lifecycle.on_lead_update", "visa_crm.api.deal_sync.sync_lead_to_linked_deal_after_save"]
     },
     "CRM Call Log": {
         "before_insert": ["visa_crm.api.call_log_hooks.auto_populate_call_log_phone"],
