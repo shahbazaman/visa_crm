@@ -5,6 +5,7 @@ app_description = "Visa CRM AI Integration"
 app_email = "shahbazaman2003@gmail.com"
 app_license = "mit"
 after_install = "visa_crm.install.after_install"
+page_renderer = ["visa_crm.overrides.crm_page_renderer.CRMPageRenderer"]
 app_include_css = ["/assets/visa_crm/css/visa_crm.css", "/assets/visa_crm/css/visa_portal.css"]
 app_include_js = ["/assets/visa_crm/js/crm_spa_redirect.js"]
 web_include_js = ["/assets/visa_crm/js/crm_spa_redirect.js"]

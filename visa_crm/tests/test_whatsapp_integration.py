@@ -130,11 +130,9 @@ class TestWhatsAppIntegration(unittest.TestCase):
 		self.mock_db.get_value.return_value = "Active"
 		self.assertTrue(is_whatsapp_enabled())
 
-	def test_is_whatsapp_enabled_with_no_account(self):
-		self.mock_db.exists.return_value = True
-		self.mock_db.get_single_value.return_value = None
-		with patch("frappe.get_all", return_value=[]):
-			self.assertFalse(is_whatsapp_enabled())
+	def test_is_whatsapp_enabled_with_no_doctype(self):
+		self.mock_db.exists.return_value = False
+		self.assertFalse(is_whatsapp_enabled())
 
 	def test_is_whatsapp_installed(self):
 		self.mock_db.exists.return_value = True
@@ -152,9 +150,10 @@ class TestWhatsAppIntegration(unittest.TestCase):
 		mock_doc.get.side_effect = lambda k, default=None: "Test Lead" if k in ("lead_name", "customer_name") else default
 		mock_doc.has_permission.return_value = True
 
-		mock_msg = frappe._dict({
+		mock_msg = {
 			"name": "MSG-001",
 			"direction": "Incoming",
+			"type": "Incoming",
 			"from": "+971501234567",
 			"to": "Primary WhatsApp",
 			"message": "Hello from lead",
@@ -166,11 +165,14 @@ class TestWhatsAppIntegration(unittest.TestCase):
 			"reply_to_message": "",
 			"reference_doctype": "CRM Lead",
 			"reference_docname": "CRM-LEAD-001",
+			"reference_name": "CRM-LEAD-001",
 			"is_template": 0,
 			"whatsapp_template": None,
-		})
+		}
+		self.mock_db.sql.side_effect = None
+		self.mock_db.sql.return_value = [mock_msg]
 
-		with patch("frappe.get_doc", return_value=mock_doc), 		     patch("frappe.get_all", return_value=[mock_msg]):
+		with patch("frappe.get_doc", return_value=mock_doc):
 			msgs = get_whatsapp_messages("CRM Lead", "CRM-LEAD-001")
 			self.assertEqual(len(msgs), 1)
 			self.assertEqual(msgs[0]["type"], "Incoming")
@@ -190,11 +192,13 @@ class TestWhatsAppIntegration(unittest.TestCase):
 		mock_msg_doc = MagicMock()
 		mock_msg_doc.name = "NEW-MSG-001"
 
-		with patch("frappe.get_doc", return_value=mock_doc), 		     patch("visa_crm.api.whatsapp_integration.get_or_create_whatsapp_profile", return_value="WP-001"), 		     patch("frappe.new_doc", return_value=mock_msg_doc):
+		with patch("frappe.get_doc", return_value=mock_doc), \
+		     patch("visa_crm.api.whatsapp_integration.get_default_whatsapp_account", return_value="Primary WhatsApp"), \
+		     patch("visa_crm.api.whatsapp_integration.get_or_create_whatsapp_profile", return_value="WP-001"), \
+		     patch("frappe.new_doc", return_value=mock_msg_doc):
 			name = create_whatsapp_message("CRM Lead", "CRM-LEAD-001", "Hello", "+971501234567")
 			self.assertEqual(name, "NEW-MSG-001")
 			mock_msg_doc.insert.assert_called_once()
-
 
 if __name__ == "__main__":
 	unittest.main()

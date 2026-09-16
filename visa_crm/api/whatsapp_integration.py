@@ -237,10 +237,8 @@ def whatsapp_access_guard():
 def validate_access(reference_doctype=None, reference_name=None, permtype="read"):
 	"""
 	Custom access validator for CRM WhatsApp API endpoints.
-	Ensures counselors can access WhatsApp for leads they are permitted to view.
+	Ensures counselors and permitted users can access WhatsApp for documents they are permitted to view/edit.
 	"""
-	whatsapp_access_guard()
-
 	if reference_doctype and reference_name:
 		if not frappe.db.exists(reference_doctype, reference_name):
 			frappe.throw(
@@ -256,6 +254,7 @@ def validate_access(reference_doctype=None, reference_name=None, permtype="read"
 			)
 		return doc
 
+	whatsapp_access_guard()
 	return None
 
 
@@ -443,57 +442,130 @@ def get_or_create_whatsapp_profile(phone: str, whatsapp_account: str, profile_na
 def get_whatsapp_messages(reference_doctype: str, reference_name: str):
 	"""
 	CRM API bridge: returns normalized conversation messages for the CRM Lead / Deal Vue SPA.
-	Handles both official frappe/whatsapp and native CRM schemas.
+	Queries by document link AND phone number variants, ensuring zero missed messages.
+	Opportunistically backfills links on unlinked incoming messages.
 	"""
 	validate_access(reference_doctype, reference_name)
 	if not frappe.db.exists("DocType", "WhatsApp Message"):
 		return []
 
-	# Check if reference doc is CRM Deal with linked lead
-	lead_name = None
-	if reference_doctype == "CRM Deal":
-		deal_doc = frappe.get_doc(reference_doctype, reference_name)
-		lead_name = deal_doc.get("lead")
+	phone_variants = set()
+	lead_names = set()
 
-	# Fetch messages matching reference_doctype and reference_docname
-	or_filters = [
-		{"reference_doctype": reference_doctype, "reference_docname": reference_name}
-	]
-	if lead_name:
-		or_filters.append({"reference_doctype": "CRM Lead", "reference_docname": lead_name})
-
-	# Query WhatsApp Messages with safe field fallback
-	all_messages = []
-	for f in or_filters:
+	if reference_doctype == "CRM Lead":
+		lead_names.add(reference_name)
 		try:
-			msgs = frappe.get_all(
+			lead_doc = frappe.get_doc("CRM Lead", reference_name)
+			for f in ("mobile_no", "phone", "whatsapp_no"):
+				val = lead_doc.get(f)
+				if val:
+					phone_variants.update(get_phone_search_variants(val))
+		except Exception:
+			pass
+
+	elif reference_doctype == "CRM Deal":
+		try:
+			deal_doc = frappe.get_doc("CRM Deal", reference_name)
+			lead = deal_doc.get("lead")
+			if lead:
+				lead_names.add(lead)
+				try:
+					lead_doc = frappe.get_doc("CRM Lead", lead)
+					for f in ("mobile_no", "phone", "whatsapp_no"):
+						val = lead_doc.get(f)
+						if val:
+							phone_variants.update(get_phone_search_variants(val))
+				except Exception:
+					pass
+			for f in ("mobile_no", "phone"):
+				val = deal_doc.get(f)
+				if val:
+					phone_variants.update(get_phone_search_variants(val))
+		except Exception:
+			pass
+
+	elif reference_doctype == "Customer":
+		try:
+			cust_doc = frappe.get_doc("Customer", reference_name)
+			for f in ("mobile_no", "whatsapp_no", "phone"):
+				val = cust_doc.get(f)
+				if val:
+					phone_variants.update(get_phone_search_variants(val))
+		except Exception:
+			pass
+
+	# Build robust SQL query matching direct docname OR phone variants
+	conditions = []
+	values = {"ref_dt": reference_doctype, "ref_dn": reference_name}
+
+	ref_clause = ["(reference_doctype = %(ref_dt)s AND (reference_docname = %(ref_dn)s OR reference_name = %(ref_dn)s))"]
+	for idx, l_name in enumerate(lead_names):
+		k = f"lead_{idx}"
+		values[k] = l_name
+		ref_clause.append(f"(reference_doctype = 'CRM Lead' AND (reference_docname = %({k})s OR reference_name = %({k})s))")
+
+	conditions.append(" OR ".join(ref_clause))
+
+	clean_phones = [p for p in phone_variants if p]
+	if clean_phones:
+		phone_conds = []
+		for idx, p in enumerate(clean_phones):
+			k = f"phone_{idx}"
+			values[k] = p
+			phone_conds.append(f"`to` = %({k})s OR `from` = %({k})s")
+		if phone_conds:
+			conditions.append(" OR ".join(phone_conds))
+
+	where_clause = " OR ".join(f"({c})" for c in conditions)
+
+	all_messages = []
+	try:
+		all_messages = frappe.db.sql(
+			f"""
+				SELECT * FROM `tabWhatsApp Message`
+				WHERE {where_clause}
+				ORDER BY creation ASC
+			""",
+			values,
+			as_dict=True,
+		)
+	except Exception:
+		# Fallback to simple get_all if SQL fails
+		try:
+			all_messages = frappe.get_all(
 				"WhatsApp Message",
-				filters=f,
-				fields=[
-					"name",
-					"direction",
-					"to",
-					"from",
-					"message",
-					"attach",
-					"status",
-					"message_id",
-					"context_message_id",
-					"reply_to_message",
-					"creation",
-					"reference_doctype",
-					"reference_docname",
-					"is_template",
-					"whatsapp_template",
-				],
+				filters={"reference_doctype": reference_doctype, "reference_docname": reference_name},
+				fields=["*"],
 				order_by="creation asc",
 			)
-			all_messages.extend(msgs)
 		except Exception:
-			# In case table has legacy schema
+			all_messages = []
+
+	# Deduplicate messages by name
+	seen_names = set()
+	unique_messages = []
+	for m in all_messages:
+		if m["name"] not in seen_names:
+			seen_names.add(m["name"])
+			unique_messages.append(m)
+
+	# Backfill reference on any unlinked messages matching this lead's phone
+	if reference_doctype and reference_name and unique_messages:
+		unlinked_names = [
+			m["name"] for m in unique_messages
+			if not (m.get("reference_docname") or m.get("reference_name"))
+		]
+		if unlinked_names:
 			try:
-				msgs = frappe.get_all("WhatsApp Message", filters=f, fields=["*"], order_by="creation asc")
-				all_messages.extend(msgs)
+				frappe.db.sql(
+					"""
+					UPDATE `tabWhatsApp Message`
+					SET reference_doctype = %(dt)s, reference_docname = %(dn)s, reference_name = %(dn)s
+					WHERE name IN %(names)s
+					""",
+					{"dt": reference_doctype, "dn": reference_name, "names": tuple(unlinked_names)},
+				)
+				frappe.db.commit()
 			except Exception:
 				pass
 
@@ -506,7 +578,7 @@ def get_whatsapp_messages(reference_doctype: str, reference_name: str):
 	except Exception:
 		pass
 
-	for m in all_messages:
+	for m in unique_messages:
 		direction = m.get("direction") or m.get("type") or "Outgoing"
 		from_val = m.get("from")
 		to_val = m.get("to")
@@ -514,7 +586,7 @@ def get_whatsapp_messages(reference_doctype: str, reference_name: str):
 
 		formatted.append({
 			"name": m.get("name"),
-			"type": direction,  # Frontend checks msg.type == 'Outgoing' / 'Incoming'
+			"type": direction,
 			"direction": direction,
 			"to": to_val,
 			"from": from_val,
@@ -537,7 +609,6 @@ def get_whatsapp_messages(reference_doctype: str, reference_name: str):
 		})
 
 	return formatted
-
 
 @frappe.whitelist()
 def create_whatsapp_message(
@@ -569,11 +640,13 @@ def create_whatsapp_message(
 	doc.whatsapp_account = default_account
 	doc.to = profile_name
 	doc.direction = "Outgoing"
+	doc.type = "Outgoing"
 	doc.status = "Pending"
 	doc.message = message or attach or ""
 	doc.attach = attach or ""
 	doc.reference_doctype = reference_doctype
 	doc.reference_docname = reference_name
+	doc.reference_name = reference_name
 
 	if reply_to and frappe.db.exists("WhatsApp Message", reply_to):
 		try:
@@ -592,6 +665,16 @@ def create_whatsapp_message(
 			doc.submit()
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "CRM WhatsApp Outgoing Dispatch")
+
+	frappe.publish_realtime(
+		"whatsapp_message",
+		{
+			"reference_doctype": reference_doctype,
+			"reference_name": reference_name,
+			"name": doc.name,
+		},
+		after_commit=True,
+	)
 
 	return doc.name
 
@@ -617,6 +700,7 @@ def send_whatsapp_template(reference_doctype: str, reference_name: str, template
 	doc.whatsapp_account = default_account
 	doc.to = profile_name
 	doc.direction = "Outgoing"
+	doc.type = "Outgoing"
 	doc.status = "Pending"
 	doc.is_template = 1
 	doc.whatsapp_template = template

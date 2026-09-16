@@ -1,23 +1,45 @@
 /**
  * visa_crm/public/js/crm_spa_redirect.js
  *
- * In-Tab WhatsApp Navigation & Native Frappe CRM Enhancements.
- * Ensures clicking 'WhatsApp' in Frappe CRM sidebar navigates in the current tab
- * directly to /crm/whatsapp instead of launching web.whatsapp.com in a new tab.
+ * In-Tab WhatsApp Navigation & Native Frappe CRM Workspace Integration.
+ * Guarantees that clicking 'WhatsApp' in Frappe CRM sidebar or workspace navigates
+ * within the SAME browser tab directly to /crm/whatsapp instead of opening
+ * web.whatsapp.com in an external tab.
  */
 
 (function () {
   'use strict';
 
-  function navigateToWhatsApp() {
-    if (window.location.pathname === '/crm/whatsapp') return;
+  function getVueRouter() {
     try {
       const app = document.querySelector('#app');
-      if (app && app.__vue_app__ && app.__vue_app__.config.globalProperties.$router) {
-        app.__vue_app__.config.globalProperties.$router.push({ name: 'WhatsApp' });
-        return;
+      if (app && app.__vue_app__ && app.__vue_app__.config && app.__vue_app__.config.globalProperties) {
+        return app.__vue_app__.config.globalProperties.$router;
       }
     } catch (err) {}
+    return null;
+  }
+
+  function navigateToWhatsApp() {
+    // If already on /crm/whatsapp, avoid re-navigating
+    if (window.location.pathname === '/crm/whatsapp') {
+      return;
+    }
+
+    // Try SPA routing via Vue Router
+    const router = getVueRouter();
+    if (router && typeof router.push === 'function') {
+      try {
+        router.push({ name: 'WhatsApp' }).catch(function () {
+          router.push('/whatsapp').catch(function () {
+            window.location.href = '/crm/whatsapp';
+          });
+        });
+        return;
+      } catch (e) {}
+    }
+
+    // Fallback: standard in-tab browser navigation
     window.location.href = '/crm/whatsapp';
   }
 
@@ -26,7 +48,7 @@
     window.__wa_open_guard_installed = true;
     const _origOpen = window.open;
     window.open = function (url, target, features) {
-      if (typeof url === 'string' && url.includes('web.whatsapp.com')) {
+      if (typeof url === 'string' && (url.includes('web.whatsapp.com') || url.includes('api.whatsapp.com'))) {
         navigateToWhatsApp();
         return window;
       }
@@ -44,8 +66,13 @@
         if (!target) return;
 
         const text = (target.innerText || target.textContent || '').trim();
+        const title = (target.getAttribute('title') || '').trim();
+        const ariaLabel = (target.getAttribute('aria-label') || '').trim();
+
         const isWhatsApp =
           text === 'WhatsApp' ||
+          title === 'WhatsApp' ||
+          ariaLabel === 'WhatsApp' ||
           (text.startsWith('WhatsApp') && target.closest('aside, nav, [role="navigation"]'));
 
         if (isWhatsApp) {
@@ -60,17 +87,17 @@
     );
   }
 
-  // 3. SIDEBAR INJECTION & STYLING FALLBACK
+  // 3. SIDEBAR INJECTION & IN-TAB LINK ENHANCEMENT
   function checkAndEnhanceSidebar() {
-    const navLists = document.querySelectorAll('nav.flex.flex-col, aside');
+    const navLists = document.querySelectorAll('nav.flex.flex-col, aside, [role="navigation"]');
     if (!navLists || !navLists.length) return;
 
-    // Check if any existing button is WhatsApp and ensure it has correct title and cursor
     for (const nav of navLists) {
-      const buttons = nav.querySelectorAll('button, a');
+      const buttons = nav.querySelectorAll('button, a, [role="button"]');
       for (const btn of buttons) {
-        const text = (btn.innerText || '').trim();
-        if (text === 'WhatsApp') {
+        const text = (btn.innerText || btn.textContent || '').trim();
+        const title = (btn.getAttribute('title') || '').trim();
+        if (text === 'WhatsApp' || title === 'WhatsApp') {
           btn.removeAttribute('target');
           if (!btn.hasAttribute('title')) {
             btn.setAttribute('title', 'WhatsApp');
@@ -89,10 +116,10 @@
       let callLogsBtn = null;
 
       for (const nav of navLists) {
-        const buttons = nav.querySelectorAll('button');
+        const buttons = nav.querySelectorAll('button, a');
         for (const btn of buttons) {
-          const text = (btn.innerText || '').trim();
-          if (text === 'Call Logs' || text === 'Call Log' || btn.textContent.includes('Call Logs')) {
+          const text = (btn.innerText || btn.textContent || '').trim();
+          if (text === 'Call Logs' || text === 'Call Log' || text.includes('Call Logs')) {
             targetNav = nav;
             callLogsBtn = btn;
             break;
@@ -102,8 +129,8 @@
       }
 
       if (targetNav && callLogsBtn) {
-        const hasWA = Array.from(targetNav.querySelectorAll('button')).some(
-          b => (b.innerText || '').trim() === 'WhatsApp'
+        const hasWA = Array.from(targetNav.querySelectorAll('button, a')).some(
+          b => (b.innerText || b.textContent || '').trim() === 'WhatsApp'
         );
         if (!hasWA) {
           const waBtn = document.createElement('button');
