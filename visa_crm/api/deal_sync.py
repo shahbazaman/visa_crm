@@ -36,55 +36,79 @@ def parse_numeric_budget(val) -> float:
 def ensure_contact_for_deal(deal_doc, lead_doc):
     """
     Ensure the Deal has a linked Contact in deal_doc.contacts child table.
-    This prevents Frappe CRM core CRMDeal.validate() from clearing email and mobile_no.
+    Guarantees that:
+    1. Existing Contact is reused without creating duplicates.
+    2. Child table row has email/mobile_no/is_primary populated so core CRMDeal.validate()
+       never clears Deal email and mobile_no.
+    3. Handles missing lead or missing contact gracefully.
     """
     if not lead_doc:
         return None
 
-    # 1. If deal already has contacts in child table, pick the first
+    target_name = getattr(lead_doc, "lead_name", None) or f"{getattr(lead_doc, 'first_name', '') or ''} {getattr(lead_doc, 'last_name', '') or ''}".strip()
+    target_mobile = getattr(lead_doc, "mobile_no", None) or getattr(lead_doc, "phone", None)
+    target_email = getattr(lead_doc, "email", None)
+
+    # 1. If deal already has contacts in child table, ensure fields are populated on primary row
     if hasattr(deal_doc, "contacts") and deal_doc.contacts:
-        first_contact = deal_doc.contacts[0].contact
-        if first_contact and not getattr(deal_doc, "contact", None):
-            deal_doc.contact = first_contact
-        return first_contact
+        primary_row = None
+        for row in deal_doc.contacts:
+            if getattr(row, "is_primary", None):
+                primary_row = row
+                break
+        if not primary_row and deal_doc.contacts:
+            primary_row = deal_doc.contacts[0]
+            primary_row.is_primary = 1
+
+        if primary_row:
+            if not getattr(deal_doc, "contact", None) and primary_row.contact:
+                deal_doc.contact = primary_row.contact
+            if not getattr(primary_row, "mobile_no", None) and target_mobile:
+                primary_row.mobile_no = target_mobile
+            if not getattr(primary_row, "email", None) and target_email:
+                primary_row.email = target_email
+            if not getattr(primary_row, "full_name", None) and target_name:
+                primary_row.full_name = target_name
+            return primary_row.contact
 
     contact_name = None
 
-    # 2. Check if CRM Lead has a linked Contact via tabDynamic Link
-    linked_contact = frappe.db.get_value(
-        "Dynamic Link",
-        {"link_doctype": "CRM Lead", "link_name": lead_doc.name, "parenttype": "Contact"},
-        "parent",
-    )
-    if linked_contact and frappe.db.exists("Contact", linked_contact):
-        contact_name = linked_contact
+    # 2. Check if Deal has a linked contact field
+    if getattr(deal_doc, "contact", None) and frappe.db.exists("Contact", deal_doc.contact):
+        contact_name = deal_doc.contact
 
-    # 3. Check if Contact exists by Email or Phone
+    # 3. Check if CRM Lead has a linked Contact via tabDynamic Link
     if not contact_name:
-        if getattr(lead_doc, "email", None):
-            contact_name = frappe.db.get_value("Contact Email", {"email_id": lead_doc.email}, "parent")
-        if not contact_name and getattr(lead_doc, "mobile_no", None):
-            contact_name = frappe.db.get_value("Contact Phone", {"phone": lead_doc.mobile_no}, "parent")
-        if not contact_name and getattr(lead_doc, "phone", None):
-            contact_name = frappe.db.get_value("Contact Phone", {"phone": lead_doc.phone}, "parent")
+        linked_contact = frappe.db.get_value(
+            "Dynamic Link",
+            {"link_doctype": "CRM Lead", "link_name": lead_doc.name, "parenttype": "Contact"},
+            "parent",
+        )
+        if linked_contact and frappe.db.exists("Contact", linked_contact):
+            contact_name = linked_contact
 
-    # 4. If no contact exists, create one from the lead
-    if not contact_name and (lead_doc.lead_name or lead_doc.email or lead_doc.mobile_no or lead_doc.phone):
+    # 4. Check if Contact exists by Email or Phone
+    if not contact_name:
+        if target_email:
+            contact_name = frappe.db.get_value("Contact Email", {"email_id": target_email}, "parent")
+        if not contact_name and target_mobile:
+            contact_name = frappe.db.get_value("Contact Phone", {"phone": target_mobile}, "parent")
+
+    # 5. If no contact exists, create one from the lead
+    if not contact_name and (target_name or target_email or target_mobile):
         try:
             contact = frappe.new_doc("Contact")
-            contact.first_name = lead_doc.first_name or lead_doc.lead_name or "Lead"
-            contact.last_name = lead_doc.last_name or ""
+            contact.first_name = getattr(lead_doc, "first_name", None) or target_name or "Lead"
+            contact.last_name = getattr(lead_doc, "last_name", None) or ""
             contact.salutation = getattr(lead_doc, "salutation", None)
             contact.gender = getattr(lead_doc, "gender", None)
             contact.designation = getattr(lead_doc, "job_title", None)
             contact.company_name = getattr(lead_doc, "organization", None)
 
-            if getattr(lead_doc, "email", None):
-                contact.append("email_ids", {"email_id": lead_doc.email, "is_primary": 1})
-            if getattr(lead_doc, "mobile_no", None):
-                contact.append("phone_nos", {"phone": lead_doc.mobile_no, "is_primary_mobile_no": 1})
-            elif getattr(lead_doc, "phone", None):
-                contact.append("phone_nos", {"phone": lead_doc.phone, "is_primary_phone": 1})
+            if target_email:
+                contact.append("email_ids", {"email_id": target_email, "is_primary": 1})
+            if target_mobile:
+                contact.append("phone_nos", {"phone": target_mobile, "is_primary_mobile_no": 1})
 
             # Append dynamic link to CRM Lead
             contact.append("links", {"link_doctype": "CRM Lead", "link_name": lead_doc.name})
@@ -93,14 +117,21 @@ def ensure_contact_for_deal(deal_doc, lead_doc):
         except Exception as e:
             frappe.logger().warning(f"Unable to auto-create contact for lead {lead_doc.name}: {e}")
 
-    # 5. Link contact to Deal
+    # 6. Link contact to Deal child table with fields populated
     if contact_name:
         if not getattr(deal_doc, "contact", None):
             deal_doc.contact = contact_name
         if hasattr(deal_doc, "contacts"):
             existing = [c.contact for c in (deal_doc.contacts or [])]
             if contact_name not in existing:
-                deal_doc.append("contacts", {"contact": contact_name, "is_primary": 1})
+                deal_doc.append("contacts", {
+                    "contact": contact_name,
+                    "full_name": target_name or "",
+                    "email": target_email or "",
+                    "mobile_no": target_mobile or "",
+                    "phone": target_mobile or "",
+                    "is_primary": 1
+                })
 
     return contact_name
 
@@ -108,7 +139,9 @@ def ensure_contact_for_deal(deal_doc, lead_doc):
 def map_lead_to_deal(deal_doc, lead_doc, overwrite_existing=False) -> list:
     """
     Pure mapping engine from CRM Lead to CRM Deal.
-    Copies standard and custom fields, respecting existing values unless overwrite_existing=True.
+    Copies standard and custom fields using deterministic precedence:
+    1. Existing valid Deal field value (preserved unless overwrite_existing=True)
+    2. Linked Lead field value
     Returns list of updated fieldnames.
     """
     if not lead_doc:
@@ -129,13 +162,17 @@ def map_lead_to_deal(deal_doc, lead_doc, overwrite_existing=False) -> list:
                 updated_fields.append(target_field)
 
     # Core identification & Person fields
+    target_name = getattr(lead_doc, "lead_name", None) or f"{getattr(lead_doc, 'first_name', '') or ''} {getattr(lead_doc, 'last_name', '') or ''}".strip()
+    target_mobile = getattr(lead_doc, "mobile_no", None) or getattr(lead_doc, "phone", None)
+    target_email = getattr(lead_doc, "email", None)
+
     set_field("lead", lead_doc.name)
-    set_field("lead_name", lead_doc.lead_name or f"{lead_doc.first_name or ''} {lead_doc.last_name or ''}".strip())
-    set_field("first_name", lead_doc.first_name)
-    set_field("last_name", lead_doc.last_name)
-    set_field("email", lead_doc.email)
-    set_field("mobile_no", lead_doc.mobile_no)
-    set_field("phone", getattr(lead_doc, "phone", None) or lead_doc.mobile_no)
+    set_field("lead_name", target_name)
+    set_field("first_name", getattr(lead_doc, "first_name", None))
+    set_field("last_name", getattr(lead_doc, "last_name", None))
+    set_field("email", target_email)
+    set_field("mobile_no", target_mobile)
+    set_field("phone", target_mobile)
     set_field("job_title", getattr(lead_doc, "job_title", None))
 
     # Organization fields
@@ -144,8 +181,8 @@ def map_lead_to_deal(deal_doc, lead_doc, overwrite_existing=False) -> list:
             set_field("organization", lead_doc.organization)
         org_name = getattr(lead_doc, "organization_name", None) or lead_doc.organization
         set_field("organization_name", org_name)
-    elif lead_doc.lead_name:
-        set_field("organization_name", lead_doc.lead_name)
+    elif target_name:
+        set_field("organization_name", target_name)
 
     # Source field validation
     if getattr(lead_doc, "source", None):
@@ -231,15 +268,19 @@ def sync_lead_to_deal_validate(doc, method=None):
     if getattr(doc, "lead", None):
         try:
             lead_doc = frappe.get_cached_doc("CRM Lead", doc.lead)
+            target_name = getattr(lead_doc, "lead_name", None) or f"{getattr(lead_doc, 'first_name', '') or ''} {getattr(lead_doc, 'last_name', '') or ''}".strip()
+            target_mobile = getattr(lead_doc, "mobile_no", None) or getattr(lead_doc, "phone", None)
+            target_email = getattr(lead_doc, "email", None)
+
             # Restore email and mobile_no if emptied
-            if not getattr(doc, "email", None) and getattr(lead_doc, "email", None):
-                doc.email = lead_doc.email
-            if not getattr(doc, "mobile_no", None) and getattr(lead_doc, "mobile_no", None):
-                doc.mobile_no = lead_doc.mobile_no
-            if not getattr(doc, "phone", None) and getattr(lead_doc, "phone", None):
-                doc.phone = lead_doc.phone
-            if not getattr(doc, "lead_name", None) and getattr(lead_doc, "lead_name", None):
-                doc.lead_name = lead_doc.lead_name
+            if not getattr(doc, "email", None) and target_email:
+                doc.email = target_email
+            if not getattr(doc, "mobile_no", None) and target_mobile:
+                doc.mobile_no = target_mobile
+            if not getattr(doc, "phone", None) and target_mobile:
+                doc.phone = target_mobile
+            if not getattr(doc, "lead_name", None) and target_name:
+                doc.lead_name = target_name
 
             # Ensure contact link in child table
             ensure_contact_for_deal(doc, lead_doc)
@@ -287,6 +328,9 @@ def audit_and_backfill_deals(dry_run=True, deal_name=None, limit=None):
         "mode": "DRY_RUN" if dry_run else "LIVE_UPDATE",
         "total_deals_examined": len(deal_names),
         "deals_requiring_update": 0,
+        "contacts_created": 0,
+        "contacts_reused": 0,
+        "deals_skipped": 0,
         "field_update_counts": {},
         "sample_updates": [],
     }
@@ -294,9 +338,15 @@ def audit_and_backfill_deals(dry_run=True, deal_name=None, limit=None):
     for dname in deal_names:
         deal_doc = frappe.get_doc("CRM Deal", dname)
         if not deal_doc.lead or not frappe.db.exists("CRM Lead", deal_doc.lead):
+            report["deals_skipped"] += 1
             continue
 
         lead_doc = frappe.get_doc("CRM Lead", deal_doc.lead)
+        
+        # Check if contact already exists before mapping
+        c_before = len(deal_doc.contacts or [])
+        contact_id_before = getattr(deal_doc, "contact", None)
+
         updated_fields = map_lead_to_deal(deal_doc, lead_doc, overwrite_existing=False)
 
         if updated_fields:
@@ -317,6 +367,7 @@ def audit_and_backfill_deals(dry_run=True, deal_name=None, limit=None):
 
             if not dry_run:
                 deal_doc.flags.ignore_permissions = True
+                deal_doc.flags.ignore_validate_update_after_submit = True
                 deal_doc.save()
 
     if not dry_run:

@@ -1,6 +1,7 @@
 import frappe
 from visa_crm.api.meta_utils import has_doctype, meta_debug_log, set_if_has
 
+
 def mark_lead_stage(lead, stage="Lead", context=None):
     context = context or {}
     meta_debug_log("workflow_update_start", lead=lead, stage=stage, **context)
@@ -15,8 +16,10 @@ def mark_lead_stage(lead, stage="Lead", context=None):
     doc.save(ignore_permissions=True)
     meta_debug_log("workflow_update_end", lead=lead, stage=stage, **context)
 
+
 def qualify_lead(lead, context=None):
     mark_lead_stage(lead, "Qualified", context)
+
 
 def create_deal_if_supported(lead, data=None):
     if not lead or not has_doctype("CRM Deal"):
@@ -28,21 +31,28 @@ def create_deal_if_supported(lead, data=None):
     from visa_crm.api.deal_sync import map_lead_to_deal
 
     lead_doc = frappe.get_doc("CRM Lead", lead) if frappe.db.exists("CRM Lead", lead) else None
+    target_name = (data or {}).get("customer_name") or (lead_doc.lead_name if lead_doc else None) or lead
+    target_mobile = (data or {}).get("phone") or (lead_doc.mobile_no if lead_doc else None)
+    target_email = (data or {}).get("email") or (lead_doc.email if lead_doc else None)
+
     doc = frappe.new_doc("CRM Deal")
     doc.lead = lead
-    doc.deal_name = (data or {}).get("customer_name") or (lead_doc.lead_name if lead_doc else None) or lead
+    doc.lead_name = target_name
+    doc.mobile_no = target_mobile
+    doc.email = target_email
     doc.status = "Open"
     _ensure_link_master(doc, "status", "Open")
 
     if lead_doc:
         map_lead_to_deal(doc, lead_doc, overwrite_existing=False)
 
-    for field, value in {"lead": lead, "deal_name": doc.deal_name, "status": doc.status, "source": doc.source or "Meta Ads"}.items():
+    for field, value in {"lead": lead, "lead_name": doc.lead_name, "mobile_no": doc.mobile_no, "status": doc.status, "source": doc.source or "Meta Ads"}.items():
         _ensure_link_master(doc, field, value)
         set_if_has(doc, field, value)
 
     doc.insert(ignore_permissions=True)
     return doc.name
+
 
 def _ensure_link_master(doc, fieldname, value):
     field = doc.meta.get_field(fieldname)
@@ -63,10 +73,11 @@ def _ensure_link_master(doc, fieldname, value):
     except frappe.DuplicateEntryError:
         return
 
+
 def _allowed(doc, field, value):
     meta_field = doc.meta.get_field(field)
     if not meta_field:
         return False
     if meta_field.fieldtype != "Select" or not meta_field.options:
         return True
-    return value in [option.strip() for option in meta_field.options.split("\n") if option.strip()]
+    return value in [option.strip() for option in (meta_field.options or "").splitlines() if option.strip()]
