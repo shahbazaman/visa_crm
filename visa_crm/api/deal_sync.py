@@ -328,11 +328,13 @@ def audit_and_backfill_deals(dry_run=True, deal_name=None, limit=None):
         "mode": "DRY_RUN" if dry_run else "LIVE_UPDATE",
         "total_deals_examined": len(deal_names),
         "deals_requiring_update": 0,
+        "deals_updated": 0,
         "contacts_created": 0,
         "contacts_reused": 0,
         "deals_skipped": 0,
         "field_update_counts": {},
         "sample_updates": [],
+        "errors": [],
     }
 
     for dname in deal_names:
@@ -366,9 +368,21 @@ def audit_and_backfill_deals(dry_run=True, deal_name=None, limit=None):
                 })
 
             if not dry_run:
-                deal_doc.flags.ignore_permissions = True
-                deal_doc.flags.ignore_validate_update_after_submit = True
-                deal_doc.save()
+                try:
+                    for f in updated_fields:
+                        deal_doc.db_set(f, getattr(deal_doc, f), update_modified=False)
+                    if hasattr(deal_doc, "contacts") and deal_doc.contacts:
+                        for row in deal_doc.contacts:
+                            row.parent = dname
+                            row.parenttype = "CRM Deal"
+                            row.parentfield = "contacts"
+                            if not row.name:
+                                row.db_insert()
+                            else:
+                                row.db_update()
+                    report["deals_updated"] += 1
+                except Exception as e:
+                    report["errors"].append({"deal": dname, "error": str(e)})
 
     if not dry_run:
         frappe.db.commit()
