@@ -10,36 +10,29 @@
 (function () {
   'use strict';
 
-  function getVueRouter() {
-    try {
-      const app = document.querySelector('#app');
-      if (app && app.__vue_app__ && app.__vue_app__.config && app.__vue_app__.config.globalProperties) {
-        return app.__vue_app__.config.globalProperties.$router;
-      }
-    } catch (err) {}
-    return null;
-  }
-
   function navigateToWhatsApp() {
     // If already on /crm/whatsapp, avoid re-navigating
     if (window.location.pathname === '/crm/whatsapp') {
       return;
     }
 
-    // Try SPA routing via Vue Router
-    const router = getVueRouter();
-    if (router && typeof router.push === 'function') {
-      try {
-        router.push({ name: 'WhatsApp' }).catch(function () {
-          router.push('/whatsapp').catch(function () {
-            window.location.href = '/crm/whatsapp';
-          });
-        });
-        return;
-      } catch (e) {}
-    }
+    // Try SPA routing via Vue Router if WhatsApp route is registered
+    try {
+      const app = document.querySelector('#app');
+      if (app && app.__vue_app__ && app.__vue_app__.config && app.__vue_app__.config.globalProperties) {
+        const router = app.__vue_app__.config.globalProperties.$router;
+        if (router && typeof router.push === 'function') {
+          if (typeof router.hasRoute === 'function' && router.hasRoute('WhatsApp')) {
+            router.push({ name: 'WhatsApp' }).catch(function () {
+              window.location.href = '/crm/whatsapp';
+            });
+            return;
+          }
+        }
+      }
+    } catch (err) {}
 
-    // Fallback: standard in-tab browser navigation
+    // Fallback: standard in-tab browser navigation (SAME TAB)
     window.location.href = '/crm/whatsapp';
   }
 
@@ -48,9 +41,12 @@
     window.__wa_open_guard_installed = true;
     const _origOpen = window.open;
     window.open = function (url, target, features) {
-      if (typeof url === 'string' && (url.includes('web.whatsapp.com') || url.includes('api.whatsapp.com'))) {
+      if (
+        typeof url === 'string' &&
+        (url.includes('web.whatsapp.com') || url.includes('api.whatsapp.com') || url.includes('whatsapp'))
+      ) {
         navigateToWhatsApp();
-        return window;
+        return null;
       }
       return _origOpen ? _origOpen.apply(this, arguments) : null;
     };
@@ -68,11 +64,13 @@
         const text = (target.innerText || target.textContent || '').trim();
         const title = (target.getAttribute('title') || '').trim();
         const ariaLabel = (target.getAttribute('aria-label') || '').trim();
+        const href = (target.getAttribute('href') || '').trim();
 
         const isWhatsApp =
           text === 'WhatsApp' ||
           title === 'WhatsApp' ||
           ariaLabel === 'WhatsApp' ||
+          href.includes('whatsapp') ||
           (text.startsWith('WhatsApp') && target.closest('aside, nav, [role="navigation"]'));
 
         if (isWhatsApp) {
@@ -97,11 +95,26 @@
       for (const btn of buttons) {
         const text = (btn.innerText || btn.textContent || '').trim();
         const title = (btn.getAttribute('title') || '').trim();
-        if (text === 'WhatsApp' || title === 'WhatsApp') {
+        const href = (btn.getAttribute('href') || '').trim();
+
+        if (text === 'WhatsApp' || title === 'WhatsApp' || href.includes('whatsapp')) {
           btn.removeAttribute('target');
           if (!btn.hasAttribute('title')) {
             btn.setAttribute('title', 'WhatsApp');
           }
+
+          // Strip external onclick or listeners
+          if (!btn.dataset.waEnhanced) {
+            btn.dataset.waEnhanced = 'true';
+            btn.onclick = function (e) {
+              e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation();
+              navigateToWhatsApp();
+              return false;
+            };
+          }
+
           // Highlight active state if on /crm/whatsapp
           if (window.location.pathname === '/crm/whatsapp') {
             btn.classList.add('bg-surface-gray-2', 'text-ink-gray-9', 'font-medium');
