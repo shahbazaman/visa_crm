@@ -309,6 +309,11 @@ def setup_default_print_format():
             frappe.db.set_value("Print Format", "Middle East Travels Offer Letter", "disabled", 0)
         if frappe.db.exists("DocType", "Employee Offer Letter"):
             frappe.db.set_value("DocType", "Employee Offer Letter", "default_print_format", "Middle East Travels Offer Letter")
+        if frappe.db.exists("Print Format", "Middle East Travels Appointment Letter"):
+            frappe.db.set_value("Print Format", "Middle East Travels Appointment Letter", "default", 1)
+            frappe.db.set_value("Print Format", "Middle East Travels Appointment Letter", "disabled", 0)
+        if frappe.db.exists("DocType", "Employee Appointment Letter"):
+            frappe.db.set_value("DocType", "Employee Appointment Letter", "default_print_format", "Middle East Travels Appointment Letter")
         frappe.db.commit()
         print("Enforced Middle East Travels Offer Letter as system default print format!")
     except Exception as e:
