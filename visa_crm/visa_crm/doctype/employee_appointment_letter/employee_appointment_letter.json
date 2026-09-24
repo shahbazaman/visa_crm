@@ -1,0 +1,620 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-09-24 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "appointment_number",
+  "reference_number",
+  "letter_date",
+  "status",
+  "column_break_header",
+  "company",
+  "company_name_display",
+  "appointment_letter_template",
+  "candidate_section",
+  "employee",
+  "employee_name",
+  "salutation_title",
+  "first_name",
+  "designation",
+  "column_break_candidate",
+  "department",
+  "posting_location",
+  "address",
+  "employment_terms_section",
+  "date_of_joining",
+  "probation_period",
+  "working_hours",
+  "working_days",
+  "lunch_break",
+  "column_break_terms",
+  "monthly_salary",
+  "monthly_salary_in_words",
+  "annual_ctc",
+  "annexure_section",
+  "basic_salary_monthly",
+  "basic_salary_annual",
+  "da_monthly",
+  "da_annual",
+  "hra_monthly",
+  "hra_annual",
+  "other_allowances_monthly",
+  "other_allowances_annual",
+  "column_break_annexure",
+  "gross_salary_monthly",
+  "gross_salary_annual",
+  "employer_pf_monthly",
+  "employer_pf_annual",
+  "employer_esi_monthly",
+  "employer_esi_annual",
+  "ctc_monthly",
+  "ctc_annual",
+  "content_p1_section",
+  "salutation",
+  "introduction",
+  "clause_1_appointment_scope",
+  "content_p2_section",
+  "clause_2_classification",
+  "clause_3_probation",
+  "clause_4_working_hours",
+  "clause_5_leave_policy",
+  "content_p3_section",
+  "clause_6_compensation",
+  "clause_7_duties_conduct",
+  "content_p4_section",
+  "clause_8_dress_code",
+  "clause_9_confidentiality",
+  "clause_10_transfer",
+  "clause_11_resignation_termination",
+  "content_p5_section",
+  "clause_12_general_terms",
+  "content_p6_section",
+  "clause_13_policy_compliance",
+  "clause_14_acceptance",
+  "acceptance_statement",
+  "signatory_section",
+  "signatory_company_label",
+  "hr_signatory_name",
+  "hr_signatory_designation",
+  "hr_signatory_title",
+  "column_break_sign",
+  "issued_by",
+  "issued_date",
+  "amended_from",
+  "branding_section",
+  "company_logo",
+  "iata_logo",
+  "signature_image"
+ ],
+ "fields": [
+  {
+   "default": "APPT-.####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "APPT-.####\nAPPT-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "appointment_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Appointment Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reference_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Reference Number (Ref)",
+   "read_only": 1
+  },
+  {
+   "default": "Today",
+   "fieldname": "letter_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Letter Date",
+   "reqd": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nIssued\nCancelled",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company_name_display",
+   "fieldtype": "Data",
+   "label": "Display Company Name"
+  },
+  {
+   "fieldname": "appointment_letter_template",
+   "fieldtype": "Link",
+   "label": "Appointment Letter Template",
+   "options": "Appointment Letter Template"
+  },
+  {
+   "fieldname": "candidate_section",
+   "fieldtype": "Section Break",
+   "label": "Employee & Position Details"
+  },
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "label": "Employee",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Employee Name",
+   "reqd": 1
+  },
+  {
+   "default": "Ms.",
+   "fieldname": "salutation_title",
+   "fieldtype": "Select",
+   "label": "Salutation Title",
+   "options": "Ms.\nMr.\nMrs.\nDr."
+  },
+  {
+   "fieldname": "first_name",
+   "fieldtype": "Data",
+   "label": "First Name"
+  },
+  {
+   "fieldname": "designation",
+   "fieldtype": "Link",
+   "label": "Designation",
+   "options": "Designation"
+  },
+  {
+   "fieldname": "column_break_candidate",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department"
+  },
+  {
+   "default": "Calicut",
+   "fieldname": "posting_location",
+   "fieldtype": "Data",
+   "label": "Place of Posting"
+  },
+  {
+   "fieldname": "address",
+   "fieldtype": "Long Text",
+   "label": "Employee Address"
+  },
+  {
+   "fieldname": "employment_terms_section",
+   "fieldtype": "Section Break",
+   "label": "Core Employment Terms"
+  },
+  {
+   "fieldname": "date_of_joining",
+   "fieldtype": "Date",
+   "label": "Date of Joining"
+  },
+  {
+   "default": "three (3) months",
+   "fieldname": "probation_period",
+   "fieldtype": "Data",
+   "label": "Probation Period"
+  },
+  {
+   "default": "10:00 AM to 5:30 PM",
+   "fieldname": "working_hours",
+   "fieldtype": "Data",
+   "label": "Working Hours"
+  },
+  {
+   "default": "Monday to Saturday",
+   "fieldname": "working_days",
+   "fieldtype": "Data",
+   "label": "Working Days"
+  },
+  {
+   "default": "40 minute lunch break (between 1:00 PM and 2:30 PM)",
+   "fieldname": "lunch_break",
+   "fieldtype": "Data",
+   "label": "Lunch Break"
+  },
+  {
+   "fieldname": "column_break_terms",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "monthly_salary",
+   "fieldtype": "Currency",
+   "label": "Monthly Gross Salary (INR)"
+  },
+  {
+   "fieldname": "monthly_salary_in_words",
+   "fieldtype": "Data",
+   "label": "Salary In Words"
+  },
+  {
+   "fieldname": "annual_ctc",
+   "fieldtype": "Currency",
+   "label": "Annual CTC (INR)"
+  },
+  {
+   "fieldname": "annexure_section",
+   "fieldtype": "Section Break",
+   "label": "Annexure I - Detailed Salary Breakdown"
+  },
+  {
+   "fieldname": "basic_salary_monthly",
+   "fieldtype": "Currency",
+   "label": "Basic Salary (Monthly)"
+  },
+  {
+   "fieldname": "basic_salary_annual",
+   "fieldtype": "Currency",
+   "label": "Basic Salary (Annual)"
+  },
+  {
+   "fieldname": "da_monthly",
+   "fieldtype": "Currency",
+   "label": "Dearness Allowance (Monthly)"
+  },
+  {
+   "fieldname": "da_annual",
+   "fieldtype": "Currency",
+   "label": "Dearness Allowance (Annual)"
+  },
+  {
+   "fieldname": "hra_monthly",
+   "fieldtype": "Currency",
+   "label": "House Rent Allowance (Monthly)"
+  },
+  {
+   "fieldname": "hra_annual",
+   "fieldtype": "Currency",
+   "label": "House Rent Allowance (Annual)"
+  },
+  {
+   "fieldname": "other_allowances_monthly",
+   "fieldtype": "Currency",
+   "label": "Other Allowances (Monthly)"
+  },
+  {
+   "fieldname": "other_allowances_annual",
+   "fieldtype": "Currency",
+   "label": "Other Allowances (Annual)"
+  },
+  {
+   "fieldname": "column_break_annexure",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gross_salary_monthly",
+   "fieldtype": "Currency",
+   "label": "Gross Salary (Monthly)"
+  },
+  {
+   "fieldname": "gross_salary_annual",
+   "fieldtype": "Currency",
+   "label": "Gross Salary (Annual)"
+  },
+  {
+   "default": "NA",
+   "fieldname": "employer_pf_monthly",
+   "fieldtype": "Data",
+   "label": "Employer PF Contribution (Monthly)"
+  },
+  {
+   "default": "NA",
+   "fieldname": "employer_pf_annual",
+   "fieldtype": "Data",
+   "label": "Employer PF Contribution (Annual)"
+  },
+  {
+   "default": "NA",
+   "fieldname": "employer_esi_monthly",
+   "fieldtype": "Data",
+   "label": "Employer ESI Contribution (Monthly)"
+  },
+  {
+   "default": "NA",
+   "fieldname": "employer_esi_annual",
+   "fieldtype": "Data",
+   "label": "Employer ESI Contribution (Annual)"
+  },
+  {
+   "fieldname": "ctc_monthly",
+   "fieldtype": "Currency",
+   "label": "Cost To Company (CTC) (Monthly)"
+  },
+  {
+   "fieldname": "ctc_annual",
+   "fieldtype": "Currency",
+   "label": "Cost To Company (CTC) (Annual)"
+  },
+  {
+   "fieldname": "content_p1_section",
+   "fieldtype": "Section Break",
+   "label": "Letter Content - Page 1 (Intro & Scope)"
+  },
+  {
+   "fieldname": "salutation",
+   "fieldtype": "Data",
+   "label": "Salutation Line"
+  },
+  {
+   "fieldname": "introduction",
+   "fieldtype": "Text Editor",
+   "label": "Introduction Paragraph"
+  },
+  {
+   "fieldname": "clause_1_appointment_scope",
+   "fieldtype": "Text Editor",
+   "label": "1. Appointment & Scope of Employment"
+  },
+  {
+   "fieldname": "content_p2_section",
+   "fieldtype": "Section Break",
+   "label": "Letter Content - Page 2 (Classification, Probation, Hours, Leave)"
+  },
+  {
+   "fieldname": "clause_2_classification",
+   "fieldtype": "Text Editor",
+   "label": "2. Employment Classification"
+  },
+  {
+   "fieldname": "clause_3_probation",
+   "fieldtype": "Text Editor",
+   "label": "3. Probation, Review & Confirmation"
+  },
+  {
+   "fieldname": "clause_4_working_hours",
+   "fieldtype": "Text Editor",
+   "label": "4. Working Days, Hours & Breaks"
+  },
+  {
+   "fieldname": "clause_5_leave_policy",
+   "fieldtype": "Text Editor",
+   "label": "5. Leave Policy & Entitlements"
+  },
+  {
+   "fieldname": "content_p3_section",
+   "fieldtype": "Section Break",
+   "label": "Letter Content - Page 3 (Compensation & Conduct)"
+  },
+  {
+   "fieldname": "clause_6_compensation",
+   "fieldtype": "Text Editor",
+   "label": "6. Compensation"
+  },
+  {
+   "fieldname": "clause_7_duties_conduct",
+   "fieldtype": "Text Editor",
+   "label": "7. Duties, Responsibilities & Conduct"
+  },
+  {
+   "fieldname": "content_p4_section",
+   "fieldtype": "Section Break",
+   "label": "Letter Content - Page 4 (Conduct cont, Dress, Confidentiality, Transfer, Resignation)"
+  },
+  {
+   "fieldname": "clause_8_dress_code",
+   "fieldtype": "Text Editor",
+   "label": "8. Dress Code & Workplace Behaviour"
+  },
+  {
+   "fieldname": "clause_9_confidentiality",
+   "fieldtype": "Text Editor",
+   "label": "9. Confidentiality & Company Assets"
+  },
+  {
+   "fieldname": "clause_10_transfer",
+   "fieldtype": "Text Editor",
+   "label": "10. Transfer, Mobility & Deployment"
+  },
+  {
+   "fieldname": "clause_11_resignation_termination",
+   "fieldtype": "Text Editor",
+   "label": "11. Resignation & Termination"
+  },
+  {
+   "fieldname": "content_p5_section",
+   "fieldtype": "Section Break",
+   "label": "Letter Content - Page 5 (General Terms)"
+  },
+  {
+   "fieldname": "clause_12_general_terms",
+   "fieldtype": "Text Editor",
+   "label": "12. General Terms & Conditions"
+  },
+  {
+   "fieldname": "content_p6_section",
+   "fieldtype": "Section Break",
+   "label": "Letter Content - Page 6 (Compliance & Acceptance)"
+  },
+  {
+   "fieldname": "clause_13_policy_compliance",
+   "fieldtype": "Text Editor",
+   "label": "13. Policy Compliance"
+  },
+  {
+   "fieldname": "clause_14_acceptance",
+   "fieldtype": "Text Editor",
+   "label": "14. Acceptance Terms"
+  },
+  {
+   "default": "I hereby accept the terms and conditions stated in this Appointment Letter.",
+   "fieldname": "acceptance_statement",
+   "fieldtype": "Data",
+   "label": "Employee Acceptance Statement"
+  },
+  {
+   "fieldname": "signatory_section",
+   "fieldtype": "Section Break",
+   "label": "Authorized Signatory & Audit Trail"
+  },
+  {
+   "fieldname": "signatory_company_label",
+   "fieldtype": "Data",
+   "label": "Signatory Company Header"
+  },
+  {
+   "default": "Gopika",
+   "fieldname": "hr_signatory_name",
+   "fieldtype": "Data",
+   "label": "Signatory Name"
+  },
+  {
+   "default": "HR Consultant",
+   "fieldname": "hr_signatory_designation",
+   "fieldtype": "Data",
+   "label": "Signatory Designation"
+  },
+  {
+   "default": "Authorized Signatory",
+   "fieldname": "hr_signatory_title",
+   "fieldtype": "Data",
+   "label": "Signatory Title"
+  },
+  {
+   "fieldname": "column_break_sign",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "issued_by",
+   "fieldtype": "Link",
+   "label": "Issued By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "issued_date",
+   "fieldtype": "Datetime",
+   "label": "Issued Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Employee Appointment Letter",
+   "read_only": 1
+  },
+  {
+   "fieldname": "branding_section",
+   "fieldtype": "Section Break",
+   "label": "Branding & Signature (Optional Overrides)"
+  },
+  {
+   "fieldname": "company_logo",
+   "fieldtype": "Attach Image",
+   "label": "Company Logo"
+  },
+  {
+   "fieldname": "iata_logo",
+   "fieldtype": "Attach Image",
+   "label": "IATA Logo"
+  },
+  {
+   "fieldname": "signature_image",
+   "fieldtype": "Attach Image",
+   "label": "Signatory Signature Image"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-09-24 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Visa CRM",
+ "name": "Employee Appointment Letter",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "cancel": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "submit": 1,
+   "cancel": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR User",
+   "share": 0,
+   "submit": 1,
+   "cancel": 0,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 0,
+   "role": "Employee",
+   "share": 0,
+   "submit": 0,
+   "cancel": 0,
+   "write": 0
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1,
+ "default_print_format": "Middle East Travels Appointment Letter"
+}

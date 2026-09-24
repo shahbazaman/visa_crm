@@ -1,0 +1,301 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:template_name",
+ "creation": "2026-09-24 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "template_name",
+  "is_default",
+  "company",
+  "company_name_display",
+  "reference_prefix",
+  "column_break_head",
+  "letter_heading",
+  "salutation_template",
+  "body_section",
+  "introduction",
+  "clause_1_appointment_scope",
+  "clause_2_classification",
+  "clause_3_probation",
+  "clause_4_working_hours",
+  "clause_5_leave_policy",
+  "clause_6_compensation",
+  "clause_7_duties_conduct",
+  "clause_8_dress_code",
+  "clause_9_confidentiality",
+  "clause_10_transfer",
+  "clause_11_resignation_termination",
+  "clause_12_general_terms",
+  "clause_13_policy_compliance",
+  "clause_14_acceptance",
+  "acceptance_statement",
+  "signatory_section",
+  "signatory_company_label",
+  "default_hr_signatory_name",
+  "default_hr_signatory_designation",
+  "default_hr_signatory_title",
+  "footer_section",
+  "footer_address",
+  "footer_contact",
+  "footer_email_web",
+  "branding_section",
+  "company_logo",
+  "iata_logo",
+  "signature_image"
+ ],
+ "fields": [
+  {
+   "fieldname": "template_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Template Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_default",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Default Template"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company_name_display",
+   "fieldtype": "Data",
+   "label": "Display Company Name"
+  },
+  {
+   "default": "METT/HR/AL",
+   "fieldname": "reference_prefix",
+   "fieldtype": "Data",
+   "label": "Reference Number Prefix"
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "APPOINTMENT LETTER",
+   "fieldname": "letter_heading",
+   "fieldtype": "Data",
+   "label": "Letter Heading"
+  },
+  {
+   "default": "Dear {salutation_title} {first_name},",
+   "fieldname": "salutation_template",
+   "fieldtype": "Data",
+   "label": "Salutation Template"
+  },
+  {
+   "fieldname": "body_section",
+   "fieldtype": "Section Break",
+   "label": "Appointment Clauses"
+  },
+  {
+   "fieldname": "introduction",
+   "fieldtype": "Long Text",
+   "label": "Introduction Paragraph"
+  },
+  {
+   "fieldname": "clause_1_appointment_scope",
+   "fieldtype": "Long Text",
+   "label": "1. Appointment & Scope of Employment"
+  },
+  {
+   "fieldname": "clause_2_classification",
+   "fieldtype": "Long Text",
+   "label": "2. Employment Classification"
+  },
+  {
+   "fieldname": "clause_3_probation",
+   "fieldtype": "Long Text",
+   "label": "3. Probation, Review & Confirmation"
+  },
+  {
+   "fieldname": "clause_4_working_hours",
+   "fieldtype": "Long Text",
+   "label": "4. Working Days, Hours & Breaks"
+  },
+  {
+   "fieldname": "clause_5_leave_policy",
+   "fieldtype": "Long Text",
+   "label": "5. Leave Policy & Entitlements"
+  },
+  {
+   "fieldname": "clause_6_compensation",
+   "fieldtype": "Long Text",
+   "label": "6. Compensation"
+  },
+  {
+   "fieldname": "clause_7_duties_conduct",
+   "fieldtype": "Long Text",
+   "label": "7. Duties, Responsibilities & Conduct"
+  },
+  {
+   "fieldname": "clause_8_dress_code",
+   "fieldtype": "Long Text",
+   "label": "8. Dress Code & Workplace Behaviour"
+  },
+  {
+   "fieldname": "clause_9_confidentiality",
+   "fieldtype": "Long Text",
+   "label": "9. Confidentiality & Company Assets"
+  },
+  {
+   "fieldname": "clause_10_transfer",
+   "fieldtype": "Long Text",
+   "label": "10. Transfer, Mobility & Deployment"
+  },
+  {
+   "fieldname": "clause_11_resignation_termination",
+   "fieldtype": "Long Text",
+   "label": "11. Resignation & Termination"
+  },
+  {
+   "fieldname": "clause_12_general_terms",
+   "fieldtype": "Long Text",
+   "label": "12. General Terms & Conditions"
+  },
+  {
+   "fieldname": "clause_13_policy_compliance",
+   "fieldtype": "Long Text",
+   "label": "13. Policy Compliance"
+  },
+  {
+   "fieldname": "clause_14_acceptance",
+   "fieldtype": "Long Text",
+   "label": "14. Acceptance Terms"
+  },
+  {
+   "fieldname": "acceptance_statement",
+   "fieldtype": "Long Text",
+   "label": "Employee Acceptance Statement"
+  },
+  {
+   "fieldname": "signatory_section",
+   "fieldtype": "Section Break",
+   "label": "Signatory & Branding Defaults"
+  },
+  {
+   "fieldname": "signatory_company_label",
+   "fieldtype": "Data",
+   "label": "Signatory Company Header"
+  },
+  {
+   "default": "Gopika",
+   "fieldname": "default_hr_signatory_name",
+   "fieldtype": "Data",
+   "label": "HR Signatory Name"
+  },
+  {
+   "default": "HR Consultant",
+   "fieldname": "default_hr_signatory_designation",
+   "fieldtype": "Data",
+   "label": "HR Signatory Designation"
+  },
+  {
+   "default": "Authorized Signatory",
+   "fieldname": "default_hr_signatory_title",
+   "fieldtype": "Data",
+   "label": "HR Signatory Title"
+  },
+  {
+   "fieldname": "footer_section",
+   "fieldtype": "Section Break",
+   "label": "Footer Details"
+  },
+  {
+   "fieldname": "footer_address",
+   "fieldtype": "Data",
+   "label": "Footer Office Address"
+  },
+  {
+   "fieldname": "footer_contact",
+   "fieldtype": "Data",
+   "label": "Footer Contact Numbers"
+  },
+  {
+   "fieldname": "footer_email_web",
+   "fieldtype": "Data",
+   "label": "Footer Email & Web"
+  },
+  {
+   "fieldname": "branding_section",
+   "fieldtype": "Section Break",
+   "label": "Logos & Signatures"
+  },
+  {
+   "fieldname": "company_logo",
+   "fieldtype": "Attach Image",
+   "label": "Company Logo"
+  },
+  {
+   "fieldname": "iata_logo",
+   "fieldtype": "Attach Image",
+   "label": "IATA Logo"
+  },
+  {
+   "fieldname": "signature_image",
+   "fieldtype": "Attach Image",
+   "label": "Signatory Signature Image"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-24 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Visa CRM",
+ "name": "Appointment Letter Template",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR User",
+   "share": 0,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

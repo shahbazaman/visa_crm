@@ -150,3 +150,30 @@ def offer_letter_template_permission_query(user=None):
 
 def offer_letter_template_has_permission(doc, ptype="read", user=None):
     return is_hr_or_manager(user)
+
+
+def employee_appointment_letter_permission_query(user=None):
+    if is_hr_or_manager(user):
+        return ""
+    emp, _ = get_employee_scope(user)
+    if not emp:
+        return "1=0"
+    return f"`tabEmployee Appointment Letter`.`employee` = {frappe.db.escape(emp)} and `tabEmployee Appointment Letter`.`status` = 'Issued'"
+
+def employee_appointment_letter_has_permission(doc, ptype="read", user=None):
+    if is_hr_or_manager(user):
+        return True
+    emp, _ = get_employee_scope(user)
+    if not emp:
+        return False
+    if ptype != "read":
+        return False
+    return doc.employee == emp and doc.status == "Issued"
+
+def appointment_letter_template_permission_query(user=None):
+    if is_hr_or_manager(user):
+        return ""
+    return "1=0"
+
+def appointment_letter_template_has_permission(doc, ptype="read", user=None):
+    return is_hr_or_manager(user)

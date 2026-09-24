@@ -1,0 +1,840 @@
+{% set comp_name = doc.company_name_display or "Middle East Travels & Tourism" %}
+{% set let_year = frappe.utils.formatdate(doc.letter_date, "yyyy") if doc.letter_date else "2026" %}
+{% set ref_no = doc.reference_number or ("METT/HR/AL/" + ("%02d" % ((doc.appointment_number or "2") | int)) + "/" + let_year) %}
+{% set let_date = frappe.utils.formatdate(doc.letter_date, "dd.mm.yyyy") if doc.letter_date else "17.08.2026" %}
+{% set doj_date = frappe.utils.formatdate(doc.date_of_joining, "dd.mm.yyyy") if doc.date_of_joining else "17.08.2026" %}
+{% set sal_formatted = ("{:,.0f}".format(doc.monthly_salary)) if doc.monthly_salary else "15,000" %}
+{% set sal_words = doc.monthly_salary_in_words or "Rupees Fifteen Thousand Only" %}
+{% set basic_monthly = ("{:,.0f}".format(doc.basic_salary_monthly)) if doc.basic_salary_monthly else "7,500" %}
+{% set basic_annual = ("{:,.0f}".format(doc.basic_salary_annual)) if doc.basic_salary_annual else "90,000" %}
+{% set da_monthly = ("{:,.0f}".format(doc.da_monthly)) if doc.da_monthly else "1,500" %}
+{% set da_annual = ("{:,.0f}".format(doc.da_annual)) if doc.da_annual else "18,000" %}
+{% set hra_monthly = ("{:,.0f}".format(doc.hra_monthly)) if doc.hra_monthly else "3,000" %}
+{% set hra_annual = ("{:,.0f}".format(doc.hra_annual)) if doc.hra_annual else "36,000" %}
+{% set other_monthly = ("{:,.0f}".format(doc.other_allowances_monthly)) if doc.other_allowances_monthly else "3,000" %}
+{% set other_annual = ("{:,.0f}".format(doc.other_allowances_annual)) if doc.other_allowances_annual else "36,000" %}
+{% set gross_monthly = ("{:,.0f}".format(doc.gross_salary_monthly or doc.monthly_salary)) if (doc.gross_salary_monthly or doc.monthly_salary) else "15,000" %}
+{% set gross_annual = ("{:,.0f}".format(doc.gross_salary_annual or doc.annual_ctc)) if (doc.gross_salary_annual or doc.annual_ctc) else "180,000" %}
+{% set ctc_monthly = ("{:,.0f}".format(doc.ctc_monthly or doc.monthly_salary)) if (doc.ctc_monthly or doc.monthly_salary) else "15,000" %}
+{% set ctc_annual = ("{:,.0f}".format(doc.ctc_annual or doc.annual_ctc)) if (doc.ctc_annual or doc.annual_ctc) else "180,000" %}
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Carlito:ital,wght@0,400;0,700;1,400;1,700&family=Montserrat:wght@700;800;900&display=swap');
+
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  body, .print-format {
+    margin: 0 !important;
+    padding: 0 !important;
+    font-family: 'Carlito', 'Calibri', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+    color: #000000 !important;
+    background-color: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .appointment-page {
+    box-sizing: border-box;
+    width: 210mm;
+    height: 297mm;
+    max-height: 297mm;
+    padding: 12mm 16mm 12mm 16mm;
+    margin: 0 auto;
+    position: relative;
+    page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid;
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+  }
+
+  .appointment-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1.5px solid #1f2937;
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+  }
+
+  .logo-middle-east {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .logo-text-main {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 22px;
+    font-weight: 900;
+    color: #000000;
+    letter-spacing: 0.5px;
+    line-height: 1;
+  }
+
+  .logo-text-sub {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 8px;
+    font-weight: 700;
+    color: #000000;
+    letter-spacing: 3.5px;
+    margin-top: 3px;
+    padding-left: 2px;
+    text-transform: uppercase;
+  }
+
+  .logo-iata {
+    display: flex;
+    align-items: center;
+  }
+
+  .iata-svg {
+    width: 52px;
+    height: 36px;
+  }
+
+  .page-footer {
+    width: 100%;
+    border-top: 1px solid #1f2937;
+    padding-top: 5px;
+    margin-top: auto;
+    text-align: center;
+  }
+
+  .footer-text {
+    font-size: 8pt;
+    line-height: 1.35;
+    color: #222222;
+  }
+
+  .page-content {
+    flex: 1;
+    font-size: 9.8pt;
+    line-height: 1.4;
+    color: #000000;
+    text-align: justify;
+  }
+
+  .meta-right {
+    text-align: right;
+    font-size: 10pt;
+    line-height: 1.35;
+    margin-bottom: 14px;
+  }
+
+  .letter-heading {
+    text-align: center;
+    font-size: 12.5pt;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    text-decoration: underline;
+    margin: 10px 0 14px 0;
+    color: #000000;
+  }
+
+  .recipient-block {
+    font-size: 10pt;
+    line-height: 1.35;
+    margin-bottom: 12px;
+  }
+
+  .salutation-line {
+    font-size: 10pt;
+    margin-bottom: 10px;
+    font-weight: 500;
+  }
+
+  .section-title {
+    font-weight: 700;
+    font-size: 10pt;
+    color: #000000;
+    text-transform: uppercase;
+    margin-top: 10px;
+    margin-bottom: 4px;
+  }
+
+  .clause-item {
+    margin-bottom: 6px;
+    text-align: justify;
+    line-height: 1.4;
+  }
+
+  .bullet-list {
+    margin: 4px 0 6px 0;
+    padding-left: 20px;
+  }
+
+  .bullet-list li {
+    margin-bottom: 3px;
+  }
+
+  .signatory-container {
+    margin-top: 18px;
+    margin-bottom: 10px;
+    font-size: 10pt;
+    line-height: 1.35;
+  }
+
+  .signatory-company {
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .signature-space {
+    height: 48px;
+    display: flex;
+    align-items: center;
+    margin: 4px 0;
+  }
+
+  .signature-img {
+    max-height: 48px;
+    max-width: 140px;
+    object-fit: contain;
+    mix-blend-mode: multiply;
+  }
+
+  .signatory-name {
+    font-weight: 700;
+  }
+
+  .signatory-desig {
+    font-size: 9.5pt;
+  }
+
+  .signatory-title {
+    font-weight: 700;
+  }
+
+  .acceptance-heading {
+    font-weight: 700;
+    font-size: 10.5pt;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+
+  .acceptance-text {
+    font-size: 9.8pt;
+    margin-bottom: 12px;
+    line-height: 1.4;
+  }
+
+  .acceptance-grid {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 18px;
+  }
+
+  .acceptance-grid td {
+    padding: 6px 4px;
+    font-size: 9.8pt;
+    vertical-align: top;
+  }
+
+  .annexure-title {
+    font-weight: 700;
+    font-size: 11pt;
+    margin-top: 10px;
+    margin-bottom: 4px;
+  }
+
+  .annexure-company {
+    font-weight: 700;
+    font-size: 10.5pt;
+    margin-bottom: 8px;
+  }
+
+  .candidate-summary-box {
+    margin-bottom: 10px;
+    border: 1px solid #1f2937;
+  }
+
+  .summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5pt;
+  }
+
+  .summary-table td {
+    padding: 5px 8px;
+    border: 1px solid #e5e7eb;
+  }
+
+  .salary-breakdown-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5pt;
+    margin-bottom: 16px;
+  }
+
+  .salary-breakdown-table th {
+    background-color: #f3f4f6;
+    border: 1px solid #1f2937;
+    padding: 6px 8px;
+    font-weight: 700;
+    text-align: left;
+  }
+
+  .salary-breakdown-table td {
+    border: 1px solid #1f2937;
+    padding: 5px 8px;
+  }
+
+  .gross-row td, .ctc-row td {
+    font-weight: 700;
+    background-color: #f9fafb;
+  }
+
+  @media print {
+    .appointment-page {
+      width: 100%;
+      height: 100vh;
+      padding: 10mm 14mm 10mm 14mm;
+      page-break-after: always;
+      break-after: page;
+    }
+    .appointment-page:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+  }
+</style>
+
+<!-- ====================================================================== -->
+<!-- PAGE 1                                                                 -->
+<!-- ====================================================================== -->
+<div class="appointment-page">
+  <div class="page-header">
+
+    <div class="logo-middle-east">
+      <span class="logo-text-main">MIDDLE EAST</span>
+      <span class="logo-text-sub">TRAVELS &amp; TOURISM</span>
+    </div>
+    <div class="logo-iata">
+      <svg class="iata-svg" viewBox="0 0 100 70" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="35" r="30" fill="#005a9c" />
+        <ellipse cx="50" cy="35" rx="28" ry="12" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <ellipse cx="50" cy="35" rx="14" ry="28" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <line x1="20" y1="35" x2="80" y2="35" stroke="#ffffff" stroke-width="1.8" />
+        <rect x="22" y="24" width="56" height="22" rx="4" fill="#005a9c" opacity="0.95" />
+        <text x="50" y="41" font-family="'Montserrat', sans-serif" font-size="16" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1">IATA</text>
+      </svg>
+    </div>
+
+  </div>
+
+  <div class="page-content">
+    <div class="meta-right">
+      <div><strong>Date:</strong> {{ let_date }}</div>
+      <div><strong>Ref No:</strong> {{ ref_no }}</div>
+    </div>
+
+    <div class="letter-heading">APPOINTMENT LETTER</div>
+
+    <div class="recipient-block">
+      <div>To,</div>
+      <div style="font-weight: 700;">{{ doc.salutation_title or 'Ms.' }} {{ doc.employee_name or 'Anavya K' }}</div>
+      {% if doc.address %}
+        <div>{{ doc.address | replace('\n', '<br>') }}</div>
+      {% else %}
+        <div>Kozhikode, Kerala</div>
+      {% endif %}
+    </div>
+
+    <div class="salutation-line">
+      {{ doc.salutation or ('Dear ' + (doc.salutation_title or 'Ms.') + ' ' + (doc.first_name or (doc.employee_name.split()[0] if doc.employee_name else 'Candidate')) + ',') }}
+    </div>
+
+    <div class="clause-item">
+      {% if doc.introduction %}
+        {{ doc.introduction }}
+      {% else %}
+        We are pleased to appoint you at {{ comp_name }}, as {{ doc.designation or 'Accounts Assistant' }} effective from {{ doj_date }}. Your employment shall be governed by the terms and conditions set forth in this Appointment Letter and the Company’s policies, as amended from time to time, and you shall be bound by all such rules, regulations, and procedures as may be prescribed by the Management.
+      {% endif %}
+    </div>
+
+    <div class="section-title">1. APPOINTMENT &amp; SCOPE OF EMPLOYMENT</div>
+    {% if doc.clause_1_appointment_scope %}
+      <div class="clause-item">{{ doc.clause_1_appointment_scope }}</div>
+    {% else %}
+      <div class="clause-item"><strong>1.1</strong> You are appointed as {{ doc.designation or 'Accounts Assistant' }} w.e.f. {{ doj_date }}, and shall report to your Reporting Manager.</div>
+      <div class="clause-item"><strong>1.2</strong> Your employment shall be governed by the provisions of this Appointment Letter, the Company's HR Policies, Code of Conduct, service rules, administrative instructions, and all applicable laws and statutory regulations, as amended from time to time. You are required to comply with all such policies, rules, and procedures throughout your employment.</div>
+      <div class="clause-item"><strong>1.3</strong> Your initial place of posting shall be the Company's office at {{ doc.posting_location or 'Calicut' }}. However, depending on business requirements, the Company reserves the right to transfer or assign you to any of its offices, branches, or any other place of business.</div>
+      <div class="clause-item"><strong>1.4</strong> You shall diligently perform the duties and responsibilities assigned to you and faithfully discharge all functions relating to your position. The Company reserves the right to modify, expand, or reassign your duties, responsibilities, designation, or reporting structure from time to time based on operational, organizational, or business requirements.</div>
+    {% endif %}
+  </div>
+
+  <div class="page-footer">
+    <div class="footer-text">
+      {{ comp_name }}, Shobha Tower, 5/3412L, Mavoor Rd, near Emerald Mall, Arayidathupalam, Kozhikode, Kerala 673004<br>
+      Tel: 91 8593944666, 91 7025144666 | info@middleeasttravels.in | www.middleeasttravels.in
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- PAGE 2                                                                 -->
+<!-- ====================================================================== -->
+<div class="appointment-page">
+  <div class="page-header">
+
+    <div class="logo-middle-east">
+      <span class="logo-text-main">MIDDLE EAST</span>
+      <span class="logo-text-sub">TRAVELS &amp; TOURISM</span>
+    </div>
+    <div class="logo-iata">
+      <svg class="iata-svg" viewBox="0 0 100 70" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="35" r="30" fill="#005a9c" />
+        <ellipse cx="50" cy="35" rx="28" ry="12" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <ellipse cx="50" cy="35" rx="14" ry="28" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <line x1="20" y1="35" x2="80" y2="35" stroke="#ffffff" stroke-width="1.8" />
+        <rect x="22" y="24" width="56" height="22" rx="4" fill="#005a9c" opacity="0.95" />
+        <text x="50" y="41" font-family="'Montserrat', sans-serif" font-size="16" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1">IATA</text>
+      </svg>
+    </div>
+
+  </div>
+
+  <div class="page-content">
+    <div class="section-title">2. EMPLOYMENT CLASSIFICATION</div>
+    {% if doc.clause_2_classification %}
+      <div class="clause-item">{{ doc.clause_2_classification }}</div>
+    {% else %}
+      <div class="clause-item">As per Company policy, you shall initially be classified as a Probationary Employee. Upon confirmation, your status shall be converted to Permanent Employee, subject to meeting performance and conduct standards.</div>
+    {% endif %}
+
+    <div class="section-title">3. PROBATION, REVIEW &amp; CONFIRMATION</div>
+    {% if doc.clause_3_probation %}
+      <div class="clause-item">{{ doc.clause_3_probation }}</div>
+    {% else %}
+      <div class="clause-item"><strong>3.1</strong> You will be on probation for {{ doc.probation_period or 'three (3) months' }}, effective from your date of joining.</div>
+      <div class="clause-item"><strong>3.2</strong> During the probation period, your performance, attendance, punctuality, discipline, conduct, and overall suitability for the role will be continuously monitored and evaluated. Periodic performance reviews may be conducted by your Reporting Manager in coordination with the Human Resources Department. The Company may provide feedback, guidance, and support to assist you in meeting the required performance standards.</div>
+      <div class="clause-item"><strong>3.3</strong> Based on your overall performance and the Company's assessment, the Company reserves the right, at its sole discretion, to:</div>
+      <ul class="bullet-list">
+        <li>Extend your probation period by up to one (1) to three (3) months, where additional time is considered necessary to evaluate your suitability; or</li>
+        <li>Reduce or waive the remaining probation period and confirm your employment earlier in recognition of exceptional performance.</li>
+      </ul>
+      <div class="clause-item"><strong>3.4</strong> In case of performance gaps, a Performance Improvement Plan (PIP) may be issued, clearly defining expectations and timelines.</div>
+      <div class="clause-item"><strong>3.5</strong> Confirmation of your employment shall be subject to your satisfactory performance, attendance, punctuality, discipline, conduct, and compliance with the Company's policies and procedures. Your employment shall be deemed confirmed only upon the issuance of a written Confirmation Letter by the Company.</div>
+      <div class="clause-item"><strong>3.6</strong> The Company reserves the right to terminate employment during probation if performance, conduct, or suitability is found unsatisfactory.</div>
+    {% endif %}
+
+    <div class="section-title">4. WORKING DAYS, HOURS &amp; BREAKS</div>
+    {% if doc.clause_4_working_hours %}
+      <div class="clause-item">{{ doc.clause_4_working_hours }}</div>
+    {% else %}
+      <div class="clause-item"><strong>4.1</strong> {{ comp_name }} follows a six-day work week ({{ doc.working_days or 'Monday to Saturday' }}).</div>
+      <div class="clause-item"><strong>4.2</strong> Standard working hours shall be {{ doc.working_hours or '10:00 AM to 5:30 PM' }}.</div>
+      <div class="clause-item"><strong>4.3</strong> You shall be entitled to a {{ doc.lunch_break or 'forty (40) minute lunch break, which may be availed at any time between 1:00 PM and 2:30 PM' }}.</div>
+    {% endif %}
+
+    <div class="section-title">5. LEAVE POLICY &amp; ENTITLEMENTS</div>
+    {% if doc.clause_5_leave_policy %}
+      <div class="clause-item">{{ doc.clause_5_leave_policy }}</div>
+    {% else %}
+      <div class="clause-item"><strong>5.1</strong> The Company's leave cycle shall be from 1st January to 31st December of each calendar year. Leave shall be governed by the Company's Leave Policy, as amended from time to time.</div>
+    {% endif %}
+  </div>
+
+  <div class="page-footer">
+    <div class="footer-text">
+      {{ comp_name }}, Shobha Tower, 5/3412L, Mavoor Rd, near Emerald Mall, Arayidathupalam, Kozhikode, Kerala 673004<br>
+      Tel: 91 8593944666, 91 7025144666 | info@middleeasttravels.in | www.middleeasttravels.in
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- PAGE 3                                                                 -->
+<!-- ====================================================================== -->
+<div class="appointment-page">
+  <div class="page-header">
+
+    <div class="logo-middle-east">
+      <span class="logo-text-main">MIDDLE EAST</span>
+      <span class="logo-text-sub">TRAVELS &amp; TOURISM</span>
+    </div>
+    <div class="logo-iata">
+      <svg class="iata-svg" viewBox="0 0 100 70" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="35" r="30" fill="#005a9c" />
+        <ellipse cx="50" cy="35" rx="28" ry="12" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <ellipse cx="50" cy="35" rx="14" ry="28" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <line x1="20" y1="35" x2="80" y2="35" stroke="#ffffff" stroke-width="1.8" />
+        <rect x="22" y="24" width="56" height="22" rx="4" fill="#005a9c" opacity="0.95" />
+        <text x="50" y="41" font-family="'Montserrat', sans-serif" font-size="16" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1">IATA</text>
+      </svg>
+    </div>
+
+  </div>
+
+  <div class="page-content">
+    <div class="clause-item"><strong>5.2</strong> Employees serving under probation shall be entitled to one (1) day of paid leave for per month.</div>
+    <div class="clause-item"><strong>5.3</strong> Upon successful confirmation of employment, you shall be eligible for the following annual leave entitlements:</div>
+    <ul class="bullet-list">
+      <li><strong>Casual Leave (CL):</strong> Twelve (12) days per calendar year. i.e., one (1) CL per month.</li>
+      <li><strong>Sick Leave (SL):</strong> Twelve (12) days per calendar year. i.e., one (1) SL per month.</li>
+    </ul>
+    <div class="clause-item"><strong>5.4</strong> <strong>Other Leave Entitlements:</strong> Employees shall also be entitled to such other leave benefits. You are advised to refer to the Company's HR Policy for detailed provisions.</div>
+
+    <div class="section-title">6. COMPENSATION</div>
+    {% if doc.clause_6_compensation %}
+      <div class="clause-item">{{ doc.clause_6_compensation }}</div>
+    {% else %}
+      <div class="clause-item"><strong>6.1</strong> You shall be paid a monthly gross salary of ₹{{ sal_formatted }}/- ({{ sal_words }}), the detailed salary structure of which is set out in Annexure I.</div>
+      <div class="clause-item"><strong>6.2</strong> Salary shall be subject to:</div>
+      <ul class="bullet-list">
+        <li>Applicable statutory deductions.</li>
+        <li>Company policies.</li>
+      </ul>
+    {% endif %}
+
+    <div class="section-title">7. DUTIES, RESPONSIBILITIES &amp; CONDUCT</div>
+    {% if doc.clause_7_duties_conduct %}
+      <div class="clause-item">{{ doc.clause_7_duties_conduct }}</div>
+    {% else %}
+      <div class="clause-item"><strong>7.1</strong> You shall faithfully, honestly, and diligently perform the duties and responsibilities assigned to you by the Company and shall devote your full working time, attention, and abilities to the business and interests of the Company.</div>
+      <div class="clause-item"><strong>7.2</strong> You shall carry out all lawful instructions, directions, and assignments issued by the Company, your Reporting Manager, or any other authorized representative and shall perform your duties with due skill, care, efficiency, and professionalism.</div>
+      <div class="clause-item"><strong>7.3</strong> You shall comply with the Company's policies, rules, regulations, Code of Conduct, administrative instructions, and all applicable statutory and regulatory requirements, as amended from time to time.</div>
+      <div class="clause-item"><strong>7.4</strong> You shall maintain the highest standards of integrity, honesty, discipline, punctuality, confidentiality, and professional conduct at all times and shall uphold the reputation, values, and business interests of the Company.</div>
+      <div class="clause-item"><strong>7.5</strong> You shall achieve the performance standards, objectives, Key Result Areas (KRAs), Key Performance Indicators (KPIs), and other targets assigned to you from time to time, subject to business requirements.</div>
+      <div class="clause-item"><strong>7.6</strong> You shall protect and properly use all Company assets, property, documents, records, equipment, systems, confidential information, intellectual property, customer information, and any other resources entrusted to you, and shall not misuse or permit unauthorized use of the same.</div>
+      <div class="clause-item"><strong>7.7</strong> You shall not disclose, publish, copy, remove, or misuse any confidential or proprietary information belonging to the Company during or after your employment, except as required in the ordinary course of your duties or with prior written authorization.</div>
+    {% endif %}
+  </div>
+
+  <div class="page-footer">
+    <div class="footer-text">
+      {{ comp_name }}, Shobha Tower, 5/3412L, Mavoor Rd, near Emerald Mall, Arayidathupalam, Kozhikode, Kerala 673004<br>
+      Tel: 91 8593944666, 91 7025144666 | info@middleeasttravels.in | www.middleeasttravels.in
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- PAGE 4                                                                 -->
+<!-- ====================================================================== -->
+<div class="appointment-page">
+  <div class="page-header">
+
+    <div class="logo-middle-east">
+      <span class="logo-text-main">MIDDLE EAST</span>
+      <span class="logo-text-sub">TRAVELS &amp; TOURISM</span>
+    </div>
+    <div class="logo-iata">
+      <svg class="iata-svg" viewBox="0 0 100 70" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="35" r="30" fill="#005a9c" />
+        <ellipse cx="50" cy="35" rx="28" ry="12" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <ellipse cx="50" cy="35" rx="14" ry="28" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <line x1="20" y1="35" x2="80" y2="35" stroke="#ffffff" stroke-width="1.8" />
+        <rect x="22" y="24" width="56" height="22" rx="4" fill="#005a9c" opacity="0.95" />
+        <text x="50" y="41" font-family="'Montserrat', sans-serif" font-size="16" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1">IATA</text>
+      </svg>
+    </div>
+
+  </div>
+
+  <div class="page-content">
+    <div class="clause-item"><strong>7.8</strong> You shall not engage in any other employment, business, profession, consultancy, or occupation, whether paid or unpaid, without obtaining the prior written approval of the Company. You shall also avoid any activity that may give rise to a conflict of interest with the Company's business.</div>
+    <div class="clause-item"><strong>7.9</strong> You shall maintain respectful and professional relationships with colleagues, customers, clients, vendors, business associates, and all other stakeholders, and shall contribute to a safe, healthy, inclusive, and harassment-free workplace.</div>
+    <div class="clause-item"><strong>7.10</strong> You shall promptly report any misconduct, fraud, conflict of interest, safety hazard, security breach, policy violation, or any matter that may adversely affect the Company's operations, reputation, or legal compliance.</div>
+    <div class="clause-item"><strong>7.11</strong> The Company reserves the right to modify your duties, responsibilities, reporting structure, department, or place of work from time to time based on operational, organizational, or business requirements. You shall reasonably cooperate with such changes.</div>
+    <div class="clause-item"><strong>7.12</strong> Any breach of the provisions contained in this Appointment Letter, the Company's policies, or Code of Conduct, may result in disciplinary action, including suspension, recovery of losses, termination of employment, or any other action deemed appropriate by the Company in accordance with applicable law.</div>
+
+    <div class="section-title">8. DRESS CODE &amp; WORKPLACE BEHAVIOUR</div>
+    {% if doc.clause_8_dress_code %}
+      <div class="clause-item">{{ doc.clause_8_dress_code }}</div>
+    {% else %}
+      <div class="clause-item">You are required to adhere to professional dress code standards at all times.</div>
+    {% endif %}
+
+    <div class="section-title">9. CONFIDENTIALITY &amp; COMPANY ASSETS</div>
+    {% if doc.clause_9_confidentiality %}
+      <div class="clause-item">{{ doc.clause_9_confidentiality }}</div>
+    {% else %}
+      <div class="clause-item">You shall maintain strict confidentiality of all Company data, documents, and information at all times, and shall be responsible for safeguarding Company property against any misuse, loss, or damage; upon cessation of employment, you shall promptly return all Company property in your possession.</div>
+    {% endif %}
+
+    <div class="section-title">10. TRANSFER, MOBILITY &amp; DEPLOYMENT</div>
+    {% if doc.clause_10_transfer %}
+      <div class="clause-item">{{ doc.clause_10_transfer }}</div>
+    {% else %}
+      <div class="clause-item">The Company reserves the right to transfer or assign you to any department, role, or location based on business needs.</div>
+    {% endif %}
+
+    <div class="section-title">11. RESIGNATION &amp; TERMINATION</div>
+    {% if doc.clause_11_resignation_termination %}
+      <div class="clause-item">{{ doc.clause_11_resignation_termination }}</div>
+    {% else %}
+      <div class="clause-item"><strong>11.1</strong> Either party may terminate this employment by giving thirty (30) days' prior written notice or salary in lieu of the notice period, unless otherwise specified in this Appointment Letter. The Company may, at its sole discretion, accept a shorter notice period, waive the notice period in whole or in part, or require payment of salary in lieu of the unserved portion of the notice period.</div>
+      <div class="clause-item"><strong>11.2</strong> Any resignation submitted by you shall be made in writing to your Reporting Manager, with a copy to the Human Resources Department. Your resignation shall become effective only upon its acceptance by the Company, and the Company reserves the right to determine your last working day based on business and operational requirements.</div>
+    {% endif %}
+  </div>
+
+  <div class="page-footer">
+    <div class="footer-text">
+      {{ comp_name }}, Shobha Tower, 5/3412L, Mavoor Rd, near Emerald Mall, Arayidathupalam, Kozhikode, Kerala 673004<br>
+      Tel: 91 8593944666, 91 7025144666 | info@middleeasttravels.in | www.middleeasttravels.in
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- PAGE 5                                                                 -->
+<!-- ====================================================================== -->
+<div class="appointment-page">
+  <div class="page-header">
+
+    <div class="logo-middle-east">
+      <span class="logo-text-main">MIDDLE EAST</span>
+      <span class="logo-text-sub">TRAVELS &amp; TOURISM</span>
+    </div>
+    <div class="logo-iata">
+      <svg class="iata-svg" viewBox="0 0 100 70" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="35" r="30" fill="#005a9c" />
+        <ellipse cx="50" cy="35" rx="28" ry="12" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <ellipse cx="50" cy="35" rx="14" ry="28" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <line x1="20" y1="35" x2="80" y2="35" stroke="#ffffff" stroke-width="1.8" />
+        <rect x="22" y="24" width="56" height="22" rx="4" fill="#005a9c" opacity="0.95" />
+        <text x="50" y="41" font-family="'Montserrat', sans-serif" font-size="16" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1">IATA</text>
+      </svg>
+    </div>
+
+  </div>
+
+  <div class="page-content">
+    <div class="clause-item"><strong>11.3</strong> During the notice period, you shall continue to diligently perform your duties and comply with all Company policies, rules, and lawful instructions. You shall not neglect your responsibilities or engage in any act prejudicial to the interests of the Company.</div>
+    <div class="clause-item"><strong>11.4</strong> Before your separation from employment, you shall complete a satisfactory handover of all duties, records, documents, data, passwords, files, ongoing assignments, and any other information or responsibilities entrusted to you, as directed by your Reporting Manager or the Company.</div>
+    <div class="clause-item"><strong>11.5</strong> You shall return all Company property in your possession, including but not limited to identity cards, laptops, computers, mobile devices, sim card, access cards, keys, documents, equipment, records, confidential information, and any other assets belonging to the Company before your last working day.</div>
+    <div class="clause-item"><strong>11.6</strong> Leave during the notice period shall be granted only in exceptional circumstances and with prior approval. Leave taken during the Notice Period shall be considered as LOP. Any leave approved during the notice period may be treated in accordance with the Company's Leave Policy, and where applicable, may result in an extension of the notice period or deduction of salary, as determined by the Company.</div>
+    <div class="clause-item"><strong>11.7</strong> Your Full and Final Settlement shall be processed only after successful completion of the notice period, return of all Company property, completion of all exit formalities, and subject to adjustment of any amounts recoverable by the Company.</div>
+    <div class="clause-item"><strong>11.8</strong> The Company may conduct an exit interview as part of the separation process. Participation in such process and completion of all exit formalities shall be considered part of your obligations upon separation.</div>
+    <div class="clause-item"><strong>11.9</strong> Any request for withdrawal of resignation shall be subject solely to the discretion of the Company and shall not be effective unless expressly approved in writing by the Management.</div>
+    <div class="clause-item"><strong>11.10</strong> The Company reserves the right to relieve you from your duties before completion of the notice period, waive the notice period in full or in part, or make payment of salary in lieu of notice, wherever applicable, in accordance with the terms of this Appointment Letter and applicable laws.</div>
+    <div class="clause-item"><strong>11.11</strong> The Company reserves the right to terminate your employment in the event of misconduct, unsatisfactory performance, violation of Company policies, or unauthorized absence, in accordance with applicable laws and Company procedures.</div>
+
+    <div class="section-title">12. GENERAL TERMS &amp; CONDITIONS</div>
+    {% if doc.clause_12_general_terms %}
+      <div class="clause-item">{{ doc.clause_12_general_terms }}</div>
+    {% else %}
+      <div class="clause-item"><strong>12.1</strong> Your appointment is subject to the satisfactory verification of your educational qualifications, experience, identity, background, and other documents submitted by you. You shall submit all documents and information required by the Company within the prescribed time. Any false declaration, suppression of material facts, forged documents, or misrepresentation shall render your employment liable to disciplinary action.</div>
+      <div class="clause-item"><strong>12.2</strong> You shall promptly inform the Company in writing of any change in your personal information, including but not limited to your residential address, contact number, email address, marital status, nominee details, emergency contact details, or bank account particulars, within seven (7) days of such change.</div>
+    {% endif %}
+  </div>
+
+  <div class="page-footer">
+    <div class="footer-text">
+      {{ comp_name }}, Shobha Tower, 5/3412L, Mavoor Rd, near Emerald Mall, Arayidathupalam, Kozhikode, Kerala 673004<br>
+      Tel: 91 8593944666, 91 7025144666 | info@middleeasttravels.in | www.middleeasttravels.in
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- PAGE 6                                                                 -->
+<!-- ====================================================================== -->
+<div class="appointment-page">
+  <div class="page-header">
+
+    <div class="logo-middle-east">
+      <span class="logo-text-main">MIDDLE EAST</span>
+      <span class="logo-text-sub">TRAVELS &amp; TOURISM</span>
+    </div>
+    <div class="logo-iata">
+      <svg class="iata-svg" viewBox="0 0 100 70" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="35" r="30" fill="#005a9c" />
+        <ellipse cx="50" cy="35" rx="28" ry="12" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <ellipse cx="50" cy="35" rx="14" ry="28" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <line x1="20" y1="35" x2="80" y2="35" stroke="#ffffff" stroke-width="1.8" />
+        <rect x="22" y="24" width="56" height="22" rx="4" fill="#005a9c" opacity="0.95" />
+        <text x="50" y="41" font-family="'Montserrat', sans-serif" font-size="16" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1">IATA</text>
+      </svg>
+    </div>
+
+  </div>
+
+  <div class="page-content">
+    <div class="clause-item"><strong>12.3</strong> You shall be provided with the Company's HR Policy, Code of Conduct, and other applicable policies. You are required to read, understand, and comply with the provisions contained therein and sign the prescribed acknowledgment confirming that you have read, understood, and agreed to abide by the same. Failure to comply with the Company's policies and Code of Conduct may result in disciplinary action, including termination of employment, in accordance with the applicable policies and laws.</div>
+    <div class="clause-item"><strong>12.4</strong> The Company reserves the right to introduce, modify, amend, suspend, withdraw, or replace any of its policies, rules, procedures, benefits, or administrative practices at any time, in accordance with business requirements and applicable laws. Such amendments shall be binding upon you from the date they become effective.</div>
+    <div class="clause-item"><strong>12.5</strong> You shall promptly comply with all lawful instructions, circulars, notifications, and administrative orders issued by the Company from time to time.</div>
+    <div class="clause-item"><strong>12.6</strong> This Appointment Letter, together with the Company's policies and any annexures referred to herein, constitutes the entire understanding between you and {{ comp_name }} with respect to your employment and supersedes all prior discussions, representations, or communications relating to your appointment.</div>
+
+    <div class="section-title">13. POLICY COMPLIANCE</div>
+    {% if doc.clause_13_policy_compliance %}
+      <div class="clause-item">{{ doc.clause_13_policy_compliance }}</div>
+    {% else %}
+      <div class="clause-item">You shall strictly adhere to all HR Policies, Code of Conduct, Company rules, Statutory requirements, and Administrative guidelines at all times. Non-compliance may result in disciplinary action, including termination of employment.</div>
+    {% endif %}
+
+    <div class="section-title">14. ACCEPTANCE</div>
+    {% if doc.clause_14_acceptance %}
+      <div class="clause-item">{{ doc.clause_14_acceptance }}</div>
+    {% else %}
+      <div class="clause-item">Please sign and return a copy of this letter to confirm your acceptance of the terms and conditions of employment.</div>
+    {% endif %}
+
+    <div class="signatory-container">
+      <div class="signatory-company">{{ doc.signatory_company_label or "For Middle East Travels & Tourism" }}</div>
+      <div class="signature-space">
+        {% if doc.signature_image %}
+          <img src="{{ doc.signature_image }}" class="signature-img" />
+        {% else %}
+          <svg width="140" height="46" viewBox="0 0 140 46">
+            <path d="M12,32 Q28,8 42,24 T68,14 T92,28 T115,16 Q125,12 132,24" fill="none" stroke="#1d4ed8" stroke-width="2.2" stroke-linecap="round"/>
+            <path d="M32,26 Q42,34 58,30" fill="none" stroke="#1d4ed8" stroke-width="1.8"/>
+            <circle cx="36" cy="18" r="2" fill="#1d4ed8"/>
+          </svg>
+        {% endif %}
+      </div>
+      <div class="signatory-name">{{ doc.hr_signatory_name or 'Gopika' }}</div>
+      <div class="signatory-desig">{{ doc.hr_signatory_designation or 'HR Consultant' }}</div>
+      <div class="signatory-title">{{ doc.hr_signatory_title or 'Authorized Signatory' }}</div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div class="footer-text">
+      {{ comp_name }}, Shobha Tower, 5/3412L, Mavoor Rd, near Emerald Mall, Arayidathupalam, Kozhikode, Kerala 673004<br>
+      Tel: 91 8593944666, 91 7025144666 | info@middleeasttravels.in | www.middleeasttravels.in
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- PAGE 7                                                                 -->
+<!-- ====================================================================== -->
+<div class="appointment-page">
+  <div class="page-header">
+
+    <div class="logo-middle-east">
+      <span class="logo-text-main">MIDDLE EAST</span>
+      <span class="logo-text-sub">TRAVELS &amp; TOURISM</span>
+    </div>
+    <div class="logo-iata">
+      <svg class="iata-svg" viewBox="0 0 100 70" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="35" r="30" fill="#005a9c" />
+        <ellipse cx="50" cy="35" rx="28" ry="12" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <ellipse cx="50" cy="35" rx="14" ry="28" fill="none" stroke="#ffffff" stroke-width="1.8" />
+        <line x1="20" y1="35" x2="80" y2="35" stroke="#ffffff" stroke-width="1.8" />
+        <rect x="22" y="24" width="56" height="22" rx="4" fill="#005a9c" opacity="0.95" />
+        <text x="50" y="41" font-family="'Montserrat', sans-serif" font-size="16" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1">IATA</text>
+      </svg>
+    </div>
+
+  </div>
+
+  <div class="page-content">
+    <div class="acceptance-heading">EMPLOYEE ACCEPTANCE</div>
+    <div class="acceptance-text">{{ doc.acceptance_statement or 'I hereby accept the terms and conditions stated in this Appointment Letter.' }}</div>
+    <table class="acceptance-grid">
+      <tr>
+        <td style="width: 35%;"><strong>Name:</strong> {{ doc.employee_name or 'Anavya K' }}</td>
+        <td style="width: 35%;"><strong>Signature:</strong> ____________________</td>
+        <td style="width: 30%;"><strong>Date:</strong> ____________________</td>
+      </tr>
+    </table>
+
+    <div class="annexure-title">Annexure I:</div>
+    <div class="annexure-company">{{ comp_name }}</div>
+
+    <div class="candidate-summary-box">
+      <table class="summary-table">
+        <tr>
+          <td style="width: 15%; font-weight: 700;">Name</td>
+          <td style="width: 35%;">{{ doc.employee_name or 'Anavya K' }}</td>
+          <td style="width: 18%; font-weight: 700;">Department</td>
+          <td style="width: 32%;">{{ doc.department or 'Accounts' }}</td>
+        </tr>
+        <tr>
+          <td style="font-weight: 700;">Designation</td>
+          <td colspan="3">{{ doc.designation or 'Accounts Assistant' }}</td>
+        </tr>
+      </table>
+    </div>
+
+    <table class="salary-breakdown-table">
+      <thead>
+        <tr>
+          <th style="width: 50%;">Salary Component</th>
+          <th style="width: 25%; text-align: right;">Salary Per Month (₹)</th>
+          <th style="width: 25%; text-align: right;">Annual Salary (₹)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Basic Salary</td>
+          <td style="text-align: right;">{{ basic_monthly }}</td>
+          <td style="text-align: right;">{{ basic_annual }}</td>
+        </tr>
+        <tr>
+          <td>Dearness Allowance</td>
+          <td style="text-align: right;">{{ da_monthly }}</td>
+          <td style="text-align: right;">{{ da_annual }}</td>
+        </tr>
+        <tr>
+          <td>House Rent Allowance</td>
+          <td style="text-align: right;">{{ hra_monthly }}</td>
+          <td style="text-align: right;">{{ hra_annual }}</td>
+        </tr>
+        <tr>
+          <td>Other Allowances</td>
+          <td style="text-align: right;">{{ other_monthly }}</td>
+          <td style="text-align: right;">{{ other_annual }}</td>
+        </tr>
+        <tr class="gross-row">
+          <td>Gross Salary</td>
+          <td style="text-align: right;">{{ gross_monthly }}</td>
+          <td style="text-align: right;">{{ gross_annual }}</td>
+        </tr>
+        <tr>
+          <td>Employer PF Contribution</td>
+          <td style="text-align: right;">{{ doc.employer_pf_monthly or 'NA' }}</td>
+          <td style="text-align: right;">{{ doc.employer_pf_annual or 'NA' }}</td>
+        </tr>
+        <tr>
+          <td>Employer ESI contribution</td>
+          <td style="text-align: right;">{{ doc.employer_esi_monthly or 'NA' }}</td>
+          <td style="text-align: right;">{{ doc.employer_esi_annual or 'NA' }}</td>
+        </tr>
+        <tr class="ctc-row">
+          <td>Cost To Company (CTC)</td>
+          <td style="text-align: right;">{{ ctc_monthly }}</td>
+          <td style="text-align: right;">{{ ctc_annual }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="signatory-container" style="margin-top: 10px;">
+      <div class="signatory-company">{{ doc.signatory_company_label or "For Middle East Travels & Tourism" }}</div>
+      <div class="signature-space">
+        {% if doc.signature_image %}
+          <img src="{{ doc.signature_image }}" class="signature-img" />
+        {% else %}
+          <svg width="140" height="46" viewBox="0 0 140 46">
+            <path d="M12,32 Q28,8 42,24 T68,14 T92,28 T115,16 Q125,12 132,24" fill="none" stroke="#1d4ed8" stroke-width="2.2" stroke-linecap="round"/>
+            <path d="M32,26 Q42,34 58,30" fill="none" stroke="#1d4ed8" stroke-width="1.8"/>
+            <circle cx="36" cy="18" r="2" fill="#1d4ed8"/>
+          </svg>
+        {% endif %}
+      </div>
+      <div class="signatory-title">{{ doc.hr_signatory_title or 'Authorized Signatory' }}</div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div class="footer-text">
+      {{ comp_name }}, Shobha Tower, 5/3412L, Mavoor Rd, near Emerald Mall, Arayidathupalam, Kozhikode, Kerala 673004<br>
+      Tel: 91 8593944666, 91 7025144666 | info@middleeasttravels.in | www.middleeasttravels.in
+    </div>
+  </div>
+</div>
