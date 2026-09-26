@@ -355,5 +355,76 @@ class TestPrintFormatRendering(unittest.TestCase):
         self.assertIn("METT/HR/AL/01/2026", output)
         self.assertIn("Middle East Travels & Tourism", output)
 
+
+    def test_custom_fields_and_image_uploads_override(self):
+        """Verify custom image uploads (logos & signature), location, signatory and clauses override defaults"""
+        with open(self.travels_html_path, "r", encoding="utf-8") as f:
+            template_str = f.read()
+
+        class MockFrappeUtils:
+            @staticmethod
+            def formatdate(d, fmt):
+                return "26.09.2026"
+
+        class CustomDoc:
+            name = "HR-APP-LETTER-00001"
+            applicant_name = "Jane Candidate"
+            company = "middle east travels & tourism"
+            custom_company_logo = "/files/custom_middle_east_logo.png"
+            custom_iata_logo = "/files/custom_iata_logo.png"
+            custom_signature_image = "/files/custom_hr_signature.png"
+            custom_posting_location = "Kochi InfoPark"
+            custom_hr_signatory_name = "Anoop Kumar"
+            custom_hr_signatory_designation = "Lead HR Manager"
+            custom_signatory_company_label = "For Middle East Travels & Tourism"
+            custom_monthly_salary = 25000.0
+            custom_monthly_salary_in_words = "Rupees Twenty Five Thousand Only"
+            custom_clause_1_appointment_scope = "Custom Scope: Appointed as Executive Lead at Kochi."
+            terms = []
+
+        tmpl = Template(template_str)
+        output = tmpl.render(doc=CustomDoc(), frappe={"utils": MockFrappeUtils()})
+
+        self.assertIn("Jane Candidate", output)
+        self.assertIn("/files/custom_middle_east_logo.png", output)
+        self.assertIn("/files/custom_iata_logo.png", output)
+        self.assertIn("/files/custom_hr_signature.png", output)
+        self.assertIn("Anoop Kumar", output)
+        self.assertIn("Lead HR Manager", output)
+        self.assertIn("25,000", output)
+        self.assertIn("Rupees Twenty Five Thousand Only", output)
+        self.assertIn("Custom Scope: Appointed as Executive Lead at Kochi.", output)
+
+    def test_terms_table_overrides_in_print(self):
+        """Verify standard HRMS terms child table descriptions override defaults when present"""
+        with open(self.holidays_html_path, "r", encoding="utf-8") as f:
+            template_str = f.read()
+
+        class MockFrappeUtils:
+            @staticmethod
+            def formatdate(d, fmt):
+                return "26.09.2026"
+
+        class TermItem:
+            def __init__(self, title, description):
+                self.title = title
+                self.description = description
+
+        class DocWithTerms:
+            name = "HR-APP-LETTER-00002"
+            applicant_name = "Terms User"
+            company = "middle east holidays"
+            terms = [
+                TermItem("1. APPOINTMENT & SCOPE OF EMPLOYMENT", "Edited appointment scope from child table."),
+                TermItem("3. PROBATION, REVIEW & CONFIRMATION", "Edited probation term from child table."),
+            ]
+
+        tmpl = Template(template_str)
+        output = tmpl.render(doc=DocWithTerms(), frappe={"utils": MockFrappeUtils()})
+
+        self.assertIn("Edited appointment scope from child table.", output)
+        self.assertIn("Edited probation term from child table.", output)
+        self.assertIn("Middle East Holidays", output)
+
 if __name__ == "__main__":
     unittest.main()
