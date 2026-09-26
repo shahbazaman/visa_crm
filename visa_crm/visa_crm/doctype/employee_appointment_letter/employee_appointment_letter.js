@@ -4,7 +4,7 @@ frappe.ui.form.on('Employee Appointment Letter', {
             // Determine default print format based on company/template
             let isHolidays = (frm.doc.company_name_display || '').toLowerCase().includes('holiday') ||
                              (frm.doc.company || '').toLowerCase().includes('holiday');
-            let defaultFormat = isHolidays ? 'Middle East Holidays Appointment Letter' : 'Middle East Travels Appointment Letter';
+            let defaultFormat = isHolidays ? 'Employee Holidays Appointment Letter' : 'Employee Travels Appointment Letter';
 
             // Primary Action: Open the exact pixel-perfect 7-page printview
             frm.add_custom_button(__('Print Exact Appointment Letter'), function() {

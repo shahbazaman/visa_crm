@@ -331,7 +331,7 @@ def setup_appointment_letter_templates():
 1.3 Your initial place of posting shall be the Company's office at {posting_location}. However, depending on business requirements, the Company reserves the right to transfer or assign you to any of its offices, branches, or any other place of business.
 1.4 You shall diligently perform the duties and responsibilities assigned to you and faithfully discharge all functions relating to your position. The Company reserves the right to modify, expand, or reassign your duties, responsibilities, designation, or reporting structure from time to time based on operational, organizational, or business requirements.""",
         "clause_2_classification": """As per Company policy, you shall initially be classified as a Probationary Employee. Upon confirmation, your status shall be converted to Permanent Employee, subject to meeting performance and conduct standards.""",
-        "clause_3_probation": """3.1 You will be on probation for {probation_period}, effective from your date of joining.
+        "clause_3_probation": """3.1 You will be on probation for three (3) months, effective from your date of joining.
 3.2 During the probation period, your performance, attendance, punctuality, discipline, conduct, and overall suitability for the role will be continuously monitored and evaluated. Periodic performance reviews may be conducted by your Reporting Manager in coordination with the Human Resources Department. The Company may provide feedback, guidance, and support to assist you in meeting the required performance standards.
 3.3 Based on your overall performance and the Company's assessment, the Company reserves the right, at its sole discretion, to:
 • Extend your probation period by up to one (1) to three (3) months, where additional time is considered necessary to evaluate your suitability; or
@@ -339,9 +339,9 @@ def setup_appointment_letter_templates():
 3.4 In case of performance gaps, a Performance Improvement Plan (PIP) may be issued, clearly defining expectations and timelines.
 3.5 Confirmation of your employment shall be subject to your satisfactory performance, attendance, punctuality, discipline, conduct, and compliance with the Company's policies and procedures. Your employment shall be deemed confirmed only upon the issuance of a written Confirmation Letter by the Company.
 3.6 The Company reserves the right to terminate employment during probation if performance, conduct, or suitability is found unsatisfactory.""",
-        "clause_4_working_hours": """4.1 {company} follows a six-day work week ({working_days}).
-4.2 Standard working hours shall be {working_hours}.
-4.3 You shall be entitled to a {lunch_break}.""",
+        "clause_4_working_hours": """4.1 {company} follows a six-day work week (Monday to Saturday).
+4.2 Standard working hours shall be 10:00 AM to 5:30 PM.
+4.3 You shall be entitled to a forty (40) minute lunch break, which may be availed at any time between 1:00 PM and 2:30 PM.""",
         "clause_5_leave_policy": """5.1 The Company's leave cycle shall be from 1st January to 31st December of each calendar year. Leave shall be governed by the Company's Leave Policy, as amended from time to time.
 5.2 Employees serving under probation shall be entitled to one (1) day of paid leave for per month.
 5.3 Upon successful confirmation of employment, you shall be eligible for the following annual leave entitlements:
@@ -389,54 +389,98 @@ def setup_appointment_letter_templates():
         "acceptance_statement": """I hereby accept the terms and conditions stated in this Appointment Letter."""
     }
 
+    terms_list = [
+        ("1. APPOINTMENT & SCOPE OF EMPLOYMENT", clauses["clause_1_appointment_scope"]),
+        ("2. EMPLOYMENT CLASSIFICATION", clauses["clause_2_classification"]),
+        ("3. PROBATION, REVIEW & CONFIRMATION", clauses["clause_3_probation"]),
+        ("4. WORKING DAYS, HOURS & BREAKS", clauses["clause_4_working_hours"]),
+        ("5. LEAVE POLICY & ENTITLEMENTS", clauses["clause_5_leave_policy"]),
+        ("6. COMPENSATION", clauses["clause_6_compensation"]),
+        ("7. DUTIES, RESPONSIBILITIES & CONDUCT", clauses["clause_7_duties_conduct"]),
+        ("8. DRESS CODE & WORKPLACE BEHAVIOUR", clauses["clause_8_dress_code"]),
+        ("9. CONFIDENTIALITY & COMPANY ASSETS", clauses["clause_9_confidentiality"]),
+        ("10. TRANSFER, MOBILITY & DEPLOYMENT", clauses["clause_10_transfer"]),
+        ("11. RESIGNATION & TERMINATION", clauses["clause_11_resignation_termination"]),
+        ("12. GENERAL TERMS & CONDITIONS", clauses["clause_12_general_terms"]),
+        ("13. POLICY COMPLIANCE", clauses["clause_13_policy_compliance"]),
+        ("14. ACCEPTANCE", clauses["clause_14_acceptance"]),
+    ]
+
     # 1. Middle East Travels Appointment Letter Template
     travels_tmpl_name = "Middle East Travels Appointment Letter Template"
+    doc_t = None
     if not frappe.db.exists("Appointment Letter Template", travels_tmpl_name):
         doc_t = frappe.new_doc("Appointment Letter Template")
-        doc_t.template_name = travels_tmpl_name
-        doc_t.is_default = 1
-        doc_t.company = comp
-        doc_t.company_name_display = "Middle East Travels & Tourism"
-        doc_t.reference_prefix = "METT/HR/AL"
-        doc_t.letter_heading = "APPOINTMENT LETTER"
-        doc_t.salutation_template = "Dear {salutation_title} {first_name},"
-        doc_t.introduction = "We are pleased to appoint you at {company}, as {designation} effective from {date_of_joining}. Your employment shall be governed by the terms and conditions set forth in this Appointment Letter and the Company’s policies, as amended from time to time, and you shall be bound by all such rules, regulations, and procedures as may be prescribed by the Management."
+        if doc_t.meta.has_field("template_name"):
+            doc_t.template_name = travels_tmpl_name
+        else:
+            doc_t.name = travels_tmpl_name
+    else:
+        doc_t = frappe.get_doc("Appointment Letter Template", travels_tmpl_name)
+
+    if doc_t:
+        if doc_t.meta.has_field("is_default"): doc_t.is_default = 1
+        if doc_t.meta.has_field("company"): doc_t.company = comp
+        if doc_t.meta.has_field("company_name_display"): doc_t.company_name_display = "Middle East Travels & Tourism"
+        if doc_t.meta.has_field("reference_prefix"): doc_t.reference_prefix = "METT/HR/AL"
+        if doc_t.meta.has_field("letter_heading"): doc_t.letter_heading = "APPOINTMENT LETTER"
+        if doc_t.meta.has_field("salutation_template"): doc_t.salutation_template = "Dear {salutation_title} {first_name},"
+        intro_t = "We are pleased to appoint you at Middle East Travels & Tourism, as {designation} effective from {date_of_joining}. Your employment shall be governed by the terms and conditions set forth in this Appointment Letter and the Company’s policies, as amended from time to time, and you shall be bound by all such rules, regulations, and procedures as may be prescribed by the Management."
+        if doc_t.meta.has_field("introduction"): doc_t.introduction = intro_t
+        if doc_t.meta.has_field("closing_notes"): doc_t.closing_notes = "EMPLOYEE ACCEPTANCE\nI hereby accept the terms and conditions stated in this Appointment Letter."
         for k, v in clauses.items():
-            setattr(doc_t, k, v)
-        doc_t.signatory_company_label = "For Middle East Travels & Tourism"
-        doc_t.default_hr_signatory_name = "Gopika"
-        doc_t.default_hr_signatory_designation = "HR Consultant"
-        doc_t.default_hr_signatory_title = "Authorized Signatory"
-        doc_t.footer_address = "Shobha Tower, 5/3412L, Mavoor Rd, near Emerald Mall, Arayidathupalam, Kozhikode, Kerala 673004"
-        doc_t.footer_contact = "Tel: 91 8593944666, 91 7025144666"
-        doc_t.footer_email_web = "info@middleeasttravels.in | www.middleeasttravels.in"
+            if doc_t.meta.has_field(k): setattr(doc_t, k, v)
+        if doc_t.meta.has_field("terms"):
+            doc_t.set("terms", [])
+            for t_title, t_desc in terms_list:
+                doc_t.append("terms", {"title": t_title, "description": t_desc.replace("{company}", "Middle East Travels & Tourism")})
+        if doc_t.meta.has_field("signatory_company_label"): doc_t.signatory_company_label = "For Middle East Travels & Tourism"
+        if doc_t.meta.has_field("default_hr_signatory_name"): doc_t.default_hr_signatory_name = "Gopika"
+        if doc_t.meta.has_field("default_hr_signatory_designation"): doc_t.default_hr_signatory_designation = "HR Consultant"
+        if doc_t.meta.has_field("default_hr_signatory_title"): doc_t.default_hr_signatory_title = "Authorized Signatory"
+        if doc_t.meta.has_field("footer_address"): doc_t.footer_address = "Shobha Tower, 5/3412L, Mavoor Rd, near Emerald Mall, Arayidathupalam, Kozhikode, Kerala 673004"
+        if doc_t.meta.has_field("footer_contact"): doc_t.footer_contact = "Tel: 91 8593944666, 91 7025144666"
+        if doc_t.meta.has_field("footer_email_web"): doc_t.footer_email_web = "info@middleeasttravels.in | www.middleeasttravels.in"
         doc_t.flags.ignore_permissions = True
-        doc_t.insert()
-        print("Seeded Middle East Travels Appointment Letter Template")
+        doc_t.save(ignore_permissions=True) if frappe.db.exists("Appointment Letter Template", travels_tmpl_name) else doc_t.insert(ignore_permissions=True)
+        print("Configured Middle East Travels Appointment Letter Template")
 
     # 2. Middle East Holidays Appointment Letter Template
     holidays_tmpl_name = "Middle East Holidays Appointment Letter Template"
+    doc_h = None
     if not frappe.db.exists("Appointment Letter Template", holidays_tmpl_name):
         doc_h = frappe.new_doc("Appointment Letter Template")
-        doc_h.template_name = holidays_tmpl_name
-        doc_h.is_default = 0
-        doc_h.company = comp
-        doc_h.company_name_display = "Middle East Holidays"
-        doc_h.reference_prefix = "MEH/HR/AL"
-        doc_h.letter_heading = "APPOINTMENT LETTER"
-        doc_h.salutation_template = "Dear {salutation_title} {first_name},"
-        doc_h.introduction = "We are pleased to appoint you at {company}, as {designation} effective from {date_of_joining}. Your employment shall be governed by the terms and conditions set forth in this Appointment Letter and the Company’s policies, as amended from time to time, and you shall be bound by all such rules, regulations, and procedures as may be prescribed by the Management."
+        if doc_h.meta.has_field("template_name"):
+            doc_h.template_name = holidays_tmpl_name
+        else:
+            doc_h.name = holidays_tmpl_name
+    else:
+        doc_h = frappe.get_doc("Appointment Letter Template", holidays_tmpl_name)
+
+    if doc_h:
+        if doc_h.meta.has_field("is_default"): doc_h.is_default = 0
+        if doc_h.meta.has_field("company"): doc_h.company = comp
+        if doc_h.meta.has_field("company_name_display"): doc_h.company_name_display = "Middle East Holidays"
+        if doc_h.meta.has_field("reference_prefix"): doc_h.reference_prefix = "MEH/HR/AL"
+        if doc_h.meta.has_field("letter_heading"): doc_h.letter_heading = "APPOINTMENT LETTER"
+        if doc_h.meta.has_field("salutation_template"): doc_h.salutation_template = "Dear {salutation_title} {first_name},"
+        intro_h = "We are pleased to appoint you at Middle East Holidays, as {designation} effective from {date_of_joining}. Your employment shall be governed by the terms and conditions set forth in this Appointment Letter and the Company’s policies, as amended from time to time, and you shall be bound by all such rules, regulations, and procedures as may be prescribed by the Management."
+        if doc_h.meta.has_field("introduction"): doc_h.introduction = intro_h
+        if doc_h.meta.has_field("closing_notes"): doc_h.closing_notes = "EMPLOYEE ACCEPTANCE\nI hereby accept the terms and conditions stated in this Appointment Letter."
         for k, v in clauses.items():
-            # Replace Travels with Holidays if explicitly in clause
             val = v.replace("Middle East Travels & Tourism", "Middle East Holidays").replace("Middle East Travels", "Middle East Holidays")
-            setattr(doc_h, k, val)
-        doc_h.signatory_company_label = "For Middle East Holidays"
-        doc_h.default_hr_signatory_name = "Gopika"
-        doc_h.default_hr_signatory_designation = "HR Consultant"
-        doc_h.default_hr_signatory_title = "Authorized Signatory"
-        doc_h.footer_address = "Shobha Tower, 5/3412L, Mavoor Rd, near Emerald Mall, Arayidathupalam, Kozhikode, Kerala 673004"
-        doc_h.footer_contact = "Tel: 91 8593944666, 91 7025144666"
-        doc_h.footer_email_web = "info@middleeastholidays.in | www.middleeastholidays.in"
+            if doc_h.meta.has_field(k): setattr(doc_h, k, val)
+        if doc_h.meta.has_field("terms"):
+            doc_h.set("terms", [])
+            for t_title, t_desc in terms_list:
+                doc_h.append("terms", {"title": t_title, "description": t_desc.replace("{company}", "Middle East Holidays").replace("Middle East Travels & Tourism", "Middle East Holidays").replace("Middle East Travels", "Middle East Holidays")})
+        if doc_h.meta.has_field("signatory_company_label"): doc_h.signatory_company_label = "For Middle East Holidays"
+        if doc_h.meta.has_field("default_hr_signatory_name"): doc_h.default_hr_signatory_name = "Gopika"
+        if doc_h.meta.has_field("default_hr_signatory_designation"): doc_h.default_hr_signatory_designation = "HR Consultant"
+        if doc_h.meta.has_field("default_hr_signatory_title"): doc_h.default_hr_signatory_title = "Authorized Signatory"
+        if doc_h.meta.has_field("footer_address"): doc_h.footer_address = "Shobha Tower, 5/3412L, Mavoor Rd, near Emerald Mall, Arayidathupalam, Kozhikode, Kerala 673004"
+        if doc_h.meta.has_field("footer_contact"): doc_h.footer_contact = "Tel: 91 8593944666, 91 7025144666"
+        if doc_h.meta.has_field("footer_email_web"): doc_h.footer_email_web = "info@middleeastholidays.in | www.middleeastholidays.in"
         doc_h.flags.ignore_permissions = True
-        doc_h.insert()
-        print("Seeded Middle East Holidays Appointment Letter Template")
+        doc_h.save(ignore_permissions=True) if frappe.db.exists("Appointment Letter Template", holidays_tmpl_name) else doc_h.insert(ignore_permissions=True)
+        print("Configured Middle East Holidays Appointment Letter Template")

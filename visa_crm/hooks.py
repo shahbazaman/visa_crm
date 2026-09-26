@@ -133,6 +133,7 @@ doctype_js = {
     "Employee Letter": "visa_crm/doctype/employee_letter/employee_letter.js",
     "Employee Offer Letter": "visa_crm/doctype/employee_offer_letter/employee_offer_letter.js",
     "Employee Appointment Letter": "visa_crm/doctype/employee_appointment_letter/employee_appointment_letter.js",
+    "Appointment Letter": "public/js/appointment_letter.js",
     "Call Intelligence": "public/js/call_intelligence.js",
     "Customer": "public/js/customer.js",
     "Communication Event": "public/js/communication_event.js",

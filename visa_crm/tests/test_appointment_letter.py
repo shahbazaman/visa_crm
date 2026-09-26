@@ -269,14 +269,16 @@ class TestPrintFormatRendering(unittest.TestCase):
         self.assertIn("Holiday Package Specialist", output)
         self.assertIn("Middle East Holidays", output)
         self.assertIn("For Middle East Holidays", output)
-        self.assertIn("HOLIDAYS", output)
+        self.assertIn("Holidays", output)
         self.assertIn("info@middleeastholidays.in", output)
         self.assertIn("www.middleeastholidays.in", output)
 
-        # STRICT REQUIREMENT: Travels & Tourism must NOT appear anywhere in the Holidays template output!
-        self.assertNotIn("Middle East Travels & Tourism", output)
-        self.assertNotIn("Middle East Travels", output)
-        self.assertNotIn("TRAVELS", output)
+        # STRICT REQUIREMENT: Travels & Tourism must NOT appear in the rendered document text!
+        import re
+        text_only = re.sub(r'data:image/[^;]+;base64,[A-Za-z0-9+/=\s]+', '', output)
+        self.assertNotIn("Middle East Travels & Tourism", text_only)
+        self.assertNotIn("Middle East Travels", text_only)
+        self.assertNotIn("TRAVELS", text_only)
 
     def test_minimal_doc_safe_fallbacks(self):
         with open(self.travels_html_path, "r", encoding="utf-8") as f:

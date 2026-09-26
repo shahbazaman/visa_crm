@@ -1,9 +1,9 @@
 {
  "align_labels_right": 0,
- "creation": "2026-09-24 10:00:00.000000",
+ "creation": "2026-09-26 10:00:00.000000",
  "custom_format": 1,
  "disabled": 0,
- "doc_type": "Appointment Letter",
+ "doc_type": "Employee Appointment Letter",
  "doctype": "Print Format",
  "font_size": 13,
  "format_data": null,
@@ -14,7 +14,7 @@
  "margin_top": 0.0,
  "modified": "2026-09-26 10:00:00.000000",
  "module": "Visa CRM",
- "name": "Middle East Travels Appointment Letter",
+ "name": "Employee Holidays Appointment Letter",
  "page_number": "Hide",
  "print_format_builder": 0,
  "print_format_builder_beta": 0,
@@ -22,5 +22,5 @@
  "raw_printing": 0,
  "show_section_headings": 0,
  "standard": "Yes",
- "default": 1
+ "default": 0
 }
