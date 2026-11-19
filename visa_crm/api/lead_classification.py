@@ -23,6 +23,20 @@ CLASSIFICATION_FIELDS = (
 
 # Suffix pattern matching Meta campaign conventions (visa, package, campaign, campign, leads)
 META_CAMPAIGN_SUFFIX_PATTERN = re.compile(r"(?i)(?:^|[\s_\-]+)(visa|package|campaign|campign|leads)\s*$")
+VISA_SUFFIX_PATTERN = re.compile(r"(?i)(?:^|[\s_\-]+)visa\s*$")
+
+
+def is_visa_suffix(name):
+    """
+    Checks if a normalized string ends with the standalone word 'visa'.
+    Handles case-insensitivity, leading/trailing spaces, extra spaces, hyphens, underscores.
+    E.g.: 'UK Business VISA', 'UK-Family-Visit-Visa', 'UK_Tourist_Visa' -> True
+          'Visakhapatnam', 'Avisas' -> False
+    """
+    if not name:
+        return False
+    return bool(VISA_SUFFIX_PATTERN.search(str(name).strip()))
+
 
 # Generic non-destination words that should not become subcategories
 GENERIC_WORDS = {
@@ -34,6 +48,20 @@ GENERIC_WORDS = {
 # Comprehensive destination configuration: (Canonical Name, [Regex Patterns])
 # Ordered with multi-word phrases and specific entities before single-word substrings
 DESTINATION_CONFIG = [
+    # Visa-specific multi-word destinations (MUST precede general country/region terms)
+    ("UK Tourist Visa", [r"\buk[\s_\-]*(?:tourist|visitor)[\s_\-]*visa\b", r"\buk[\s_\-]*visa[\s_\-]*(?:tourist|visitor)\b"]),
+    ("UK Family Visit Visa", [r"\buk[\s_\-]*(?:family|family[\s_\-]*visit)[\s_\-]*visa\b", r"\buk[\s_\-]*visa[\s_\-]*(?:family|family[\s_\-]*visit)\b"]),
+    ("UK Business Visa", [r"\buk[\s_\-]*business[\s_\-]*visa\b", r"\buk[\s_\-]*visa[\s_\-]*business\b"]),
+    ("UK Visit Visa", [r"\buk[\s_\-]*visit[\s_\-]*visa\b"]),
+    ("USA Tourist Visa", [r"\b(?:usa|us|united\s*states)[\s_\-]*(?:tourist|visitor)[\s_\-]*visa\b"]),
+    ("USA Business Visa", [r"\b(?:usa|us|united\s*states)[\s_\-]*business[\s_\-]*visa\b"]),
+    ("USA Visa", [r"\b(?:usa|us|united\s*states)[\s_\-]*visa\b"]),
+    ("UK Visa", [r"\buk[\s_\-]*visa\b"]),
+    ("Schengen Visa", [r"\bschengen[\s_\-]*visa\b"]),
+    ("Azerbaijan Visa", [r"\bazerbaijan[\s_\-]*visa\b"]),
+    ("Vietnam Visa", [r"\b(?:vietnam|veitnam)[\s_\-]*visa\b"]),
+    ("Europe Visa", [r"\beurope[\s_\-]*visa\b"]),
+
     # Multi-word & phrase destinations
     ("United Arab Emirates", [r"\b(united\s*arab\s*emirates|uae)\b"]),
     ("Abu Dhabi", [r"\babu\s*dhabi\b"]),
@@ -142,11 +170,21 @@ def classify_payload(payload, lead_source=None, rules=None):
         if _rule_matches(rule, source, campaign):
             category = rule.get("category") or UNCATEGORIZED
             group = derive_group(category, payload)
-            ensure_lead_subcategory(category, group)
+
+            # MANDATORY VISA-SUFFIX RULE (Rule A):
+            # If the derived category/subcategory ends with the standalone word 'visa',
+            # its parent MUST be Global Visa, taking priority over any campaign suffix rule!
             rule_name = rule.get("name") or rule.get("rule_name")
             reason = rule.get("reason") or f"Matched {rule.get('match_field')} rule"
-            if payload.get("campaign_name"):
+
+            if is_visa_suffix(group) and source != "WhatsApp":
+                category = "Global Visa"
+                rule_name = f"Visa Suffix Priority (overrode {rule.get('rule_name') or rule.get('name')})"
+                reason = f"Visa subcategory '{group}' enforced under Global Visa (Campaign: '{payload.get('campaign_name')}')"
+            elif payload.get("campaign_name"):
                 reason = f"{reason} (Campaign: '{payload.get('campaign_name')}', Destination: '{group}')"
+
+            ensure_lead_subcategory(category, group)
             return {
                 "lead_category": category,
                 "lead_group": group,
@@ -197,6 +235,10 @@ def classify_payload(payload, lead_source=None, rules=None):
             reason = "Google Ads source"
 
     group = derive_group(category, payload)
+    if is_visa_suffix(group) and source != "WhatsApp":
+        category = "Global Visa"
+        reason = f"Visa subcategory '{group}' enforced under Global Visa"
+
     if category != UNCATEGORIZED:
         ensure_lead_subcategory(category, group)
         status = "Classified"
@@ -280,8 +322,13 @@ def extract_destination(payload, category=None):
 
     # 1. Explicit fields
     explicit = _first(payload, "custom_destination", "destination", "country_interested")
-    if not explicit and category != "Holidays":
-        explicit = _first(payload, "visa_type", "custom_visa_type")
+    visa_explicit = _first(payload, "visa_type", "custom_visa_type")
+    if not explicit:
+        explicit = visa_explicit
+    elif visa_explicit and is_visa_suffix(visa_explicit):
+        # Specific visa type takes precedence over general destination (e.g. visa_type='uk_tourist_visa')
+        explicit = visa_explicit
+
     if explicit:
         str_exp = str(explicit).strip()
         if "<test" in str_exp.lower() or "dummy data" in str_exp.lower() or str_exp.lower().startswith("test lead"):
@@ -296,6 +343,12 @@ def extract_destination(payload, category=None):
     # 2. Suffix-stripped Campaign Name stem matching
     raw_campaign = str(payload.get("campaign_name") or "").strip()
     if raw_campaign:
+        # Match full campaign name first (e.g. 'UK Tourist Visa', 'Azerbaijan Visa')
+        for canonical, patterns in DESTINATION_CONFIG:
+            for pat in patterns:
+                if re.search(pat, raw_campaign, re.IGNORECASE):
+                    return canonical
+
         stem = META_CAMPAIGN_SUFFIX_PATTERN.sub("", raw_campaign).strip(" -_/|.")
         if stem:
             for canonical, patterns in DESTINATION_CONFIG:
@@ -341,15 +394,18 @@ def derive_group(category, payload):
     """
     Derives the subcategory / lead_group name, ensuring case-normalization
     and reusing existing subcategories under the given parent category if available.
+    Enforces Global Visa lookup whenever the destination ends in 'visa'.
     """
     if not category or category == UNCATEGORIZED:
         return "Unspecified"
 
     dest = extract_destination(payload, category=category)
-    if dest and dest != "Unspecified" and category and category != UNCATEGORIZED:
+    target_cat = "Global Visa" if is_visa_suffix(dest) else category
+
+    if dest and dest != "Unspecified" and target_cat and target_cat != UNCATEGORIZED:
         try:
             norm_dest = normalize_text(dest)
-            for sub in frappe.get_all("Lead Subcategory", filters={"parent_category": category}, fields=["sub_category_name"]):
+            for sub in frappe.get_all("Lead Subcategory", filters={"parent_category": target_cat}, fields=["sub_category_name"]):
                 if normalize_text(sub.sub_category_name) == norm_dest:
                     return sub.sub_category_name
         except Exception:
@@ -392,11 +448,18 @@ def ensure_lead_subcategory(category, group):
     Ensures that a Lead Subcategory record exists in the database for the given category and group.
     Returns the Lead Subcategory name (ID) or None.
     Reuses existing records case-insensitively and space-normalized.
-    Strictly isolates by parent_category.
+    Strictly isolates by parent_category, but permanently enforces Global Visa
+    for any subcategory ending with the standalone word 'visa'.
     """
-    if not category or not group or group in ("Unspecified", "None", ""):
+    if not group or group in ("Unspecified", "None", ""):
         return None
-    if category == UNCATEGORIZED:
+
+    # MANDATORY RULE: If subcategory ends with standalone word 'visa', its parent MUST be Global Visa!
+    # A visa subcategory can never belong under Holidays or Uncategorized.
+    if is_visa_suffix(group) and category in ("Holidays", UNCATEGORIZED, None, ""):
+        category = "Global Visa"
+
+    if not category or category == UNCATEGORIZED:
         return None
     if not frappe.db.exists("DocType", "Lead Subcategory"):
         return None
@@ -441,6 +504,12 @@ def sync_lead_classification(lead_name, result, overwrite_automatic=False):
     current = frappe.db.get_value("CRM Lead", lead_name, list(CLASSIFICATION_FIELDS), as_dict=True) or {}
     if current.get("classification_source") == "Manual" and not overwrite_automatic:
         return
+
+    # Enforce visa suffix rule
+    if is_visa_suffix(result.get("lead_group")):
+        result["lead_category"] = "Global Visa"
+        result["responsible_department"] = category_department("Global Visa")
+
     values = {}
     for field in CLASSIFICATION_FIELDS:
         value = result.get(field)
@@ -472,6 +541,9 @@ def apply_manual_classification(lead_name, category, group=None, reason=None):
     queue_name = frappe.db.get_value("Lead Intake Queue", {"matched_lead": lead_name}, "name", order_by="creation desc")
 
     group_name = display_group(group) if group else "Unspecified"
+    if is_visa_suffix(group_name):
+        category = "Global Visa"
+
     ensure_lead_subcategory(category, group_name)
 
     result = {
@@ -480,8 +552,8 @@ def apply_manual_classification(lead_name, category, group=None, reason=None):
         "responsible_department": category_department(category),
         "classification_source": "Manual",
         "classification_status": "Classified",
-        "classification_rule": None,
-        "classification_reason": reason or "Manually classified by management",
+        "classification_rule": "Visa Suffix Priority" if is_visa_suffix(group_name) else None,
+        "classification_reason": reason or (f"Visa subcategory '{group_name}' enforced under Global Visa" if is_visa_suffix(group_name) else "Manually classified by management"),
         "classified_at": now_datetime(),
         "classified_by": frappe.session.user,
     }
@@ -631,6 +703,9 @@ def backfill_meta_leads_classification(dry_run=True, force=False):
         is_affected = (
             (current_cat in (UNCATEGORIZED, None, "") and new_cat != UNCATEGORIZED)
             or (current_grp in ("Unspecified", None, "") and new_grp != "Unspecified")
+            or (current_cat != new_cat)
+            or (current_grp != new_grp)
+            or (is_visa_suffix(current_grp) and current_cat != "Global Visa")
         )
 
         if not is_affected:

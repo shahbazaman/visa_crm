@@ -207,12 +207,17 @@ def create_category(category_name, department=None, sort_order=100, operational_
 @frappe.whitelist()
 def create_sub_category(sub_category_name, parent_category, description=None, sort_order=100):
     _require_operational()
-    if not parent_category or not frappe.db.exists("Lead Category", parent_category):
-        frappe.throw("Valid Parent Lead Category is required", frappe.ValidationError)
-    parent_category = frappe.db.get_value("Lead Category", parent_category, "name") or parent_category
     name = str(sub_category_name).strip()
     if not name:
         frappe.throw("Sub-category Name is required", frappe.ValidationError)
+
+    from visa_crm.api.lead_classification import is_visa_suffix
+    if is_visa_suffix(name):
+        parent_category = "Global Visa"
+
+    if not parent_category or not frappe.db.exists("Lead Category", parent_category):
+        frappe.throw("Valid Parent Lead Category is required", frappe.ValidationError)
+    parent_category = frappe.db.get_value("Lead Category", parent_category, "name") or parent_category
 
     if frappe.db.exists("DocType", "Lead Subcategory"):
         if frappe.db.exists("Lead Subcategory", {"sub_category_name": name, "parent_category": parent_category}):

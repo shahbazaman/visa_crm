@@ -83,10 +83,10 @@ class TestLeadClassification(FrappeTestCase):
 
     def test_matrix_global_visa_suffix(self):
         cases = [
-            ("Azerbaijan Visa", "Global Visa", "Azerbaijan"),
-            ("Vietnam Visa", "Global Visa", "Vietnam"),
-            ("USA Visa", "Global Visa", "USA"),
-            ("Schengen Visa", "Global Visa", "Schengen"),
+            ("Azerbaijan Visa", "Global Visa", "Azerbaijan Visa"),
+            ("Vietnam Visa", "Global Visa", "Vietnam Visa"),
+            ("USA Visa", "Global Visa", "USA Visa"),
+            ("Schengen Visa", "Global Visa", "Schengen Visa"),
         ]
         for cname, expected_cat, expected_grp in cases:
             res = self.classify({"source_lead_id": "M2", "campaign_name": cname})
@@ -100,7 +100,7 @@ class TestLeadClassification(FrappeTestCase):
             ("Europe Holiday CAMPAIGN", "Holidays", "Europe"),
             ("  azerbaijan   campign  ", "Holidays", "Azerbaijan"),
             ("veitnam campaign", "Holidays", "Vietnam"),
-            ("VIETNAM_VISA", "Global Visa", "Vietnam"),
+            ("VIETNAM_VISA", "Global Visa", "Vietnam Visa"),
         ]
         for cname, expected_cat, expected_grp in cases:
             res = self.classify({"source_lead_id": "M3", "campaign_name": cname})
@@ -111,7 +111,7 @@ class TestLeadClassification(FrappeTestCase):
         # A campaign ending in 'visa' must route to Global Visa
         res = self.classify({"source_lead_id": "M4", "campaign_name": "Europe Visa"})
         self.assertEqual(res["lead_category"], "Global Visa")
-        self.assertEqual(res["lead_group"], "Europe")
+        self.assertEqual(res["lead_group"], "Europe Visa")
 
         # A campaign ending in 'campaign' must route to Holidays
         res = self.classify({"source_lead_id": "M5", "campaign_name": "Europe Campaign"})
@@ -166,4 +166,91 @@ class TestLeadClassification(FrappeTestCase):
         })
         self.assertEqual(res_hiring["lead_category"], "Global Visa")
         self.assertEqual(res_hiring["lead_group"], "Sales Hiring")
+    def test_mandatory_visa_suffix_rules_and_conflict_resolution(self):
+        # 1. Names ending with 'visa' MUST route to Global Visa
+        visa_cases = [
+            ("UK Business Visa", "Global Visa", "UK Business Visa"),
+            ("UK Family Visit Visa", "Global Visa", "UK Family Visit Visa"),
+            ("UK Tourist Visa", "Global Visa", "UK Tourist Visa"),
+            ("USA Tourist Visa", "Global Visa", "USA Tourist Visa"),
+            ("Schengen Visa", "Global Visa", "Schengen Visa"),
+            ("Azerbaijan Visa", "Global Visa", "Azerbaijan Visa"),
+            ("Vietnam Visa", "Global Visa", "Vietnam Visa"),
+            ("UK BUSINESS VISA", "Global Visa", "UK Business Visa"),
+            ("UK-Tourist-Visa", "Global Visa", "UK Tourist Visa"),
+            ("UK_Tourist_Visa", "Global Visa", "UK Tourist Visa"),
+        ]
+        for cname, expected_cat, expected_grp in visa_cases:
+            res = self.classify({"source_lead_id": f"V-{cname}", "campaign_name": cname})
+            self.assertEqual(res["lead_category"], expected_cat, f"Failed category for {cname}")
+            self.assertEqual(res["lead_group"], expected_grp, f"Failed group for {cname}")
 
+        # 2. Conflicting rules: Campaign ending in 'leads' or 'campaign' BUT payload with visa subcategory
+        # Rule A (visa suffix) MUST override campaign suffix
+        conflict_res = self.classify({
+            "source_lead_id": "CONF-1",
+            "campaign_name": "uk leads",
+            "visa_type": "uk_tourist_visa"
+        })
+        self.assertEqual(conflict_res["lead_category"], "Global Visa", "Rule A must override 'uk leads' into Global Visa")
+        self.assertEqual(conflict_res["lead_group"], "UK Tourist Visa")
+
+        conflict_res2 = self.classify({
+            "source_lead_id": "CONF-2",
+            "campaign_name": "UK Holiday Campaign",
+            "custom_destination": "UK Family Visit Visa"
+        })
+        self.assertEqual(conflict_res2["lead_category"], "Global Visa")
+        self.assertEqual(conflict_res2["lead_group"], "UK Family Visit Visa")
+
+        # 3. Non-visa Holidays campaigns remain unchanged
+        holiday_cases = [
+            ("Vietnam Campaign", "Holidays", "Vietnam"),
+            ("Azerbaijan Leads", "Holidays", "Azerbaijan"),
+            ("Azerbaijan Campign", "Holidays", "Azerbaijan"),
+            ("Europe Holiday Campaign", "Holidays", "Europe"),
+        ]
+        for cname, expected_cat, expected_grp in holiday_cases:
+            res = self.classify({"source_lead_id": f"H-{cname}", "campaign_name": cname})
+            self.assertEqual(res["lead_category"], expected_cat)
+            self.assertEqual(res["lead_group"], expected_grp)
+
+    def test_ensure_lead_subcategory_enforces_global_visa_for_visa_suffix(self):
+        if frappe.db.exists("DocType", "Lead Subcategory"):
+            for p in ["Holidays", "Global Visa"]:
+                if not frappe.db.exists("Lead Category", p):
+                    frappe.get_doc({"doctype": "Lead Category", "category_name": p, "is_active": 1}).insert(ignore_permissions=True)
+
+            # Attempting to ensure subcategory under Holidays with name ending in 'visa'
+            # MUST redirect and create/reuse under Global Visa
+            sub_id = ensure_lead_subcategory("Holidays", "UK Tourist Visa")
+            doc = frappe.get_doc("Lead Subcategory", sub_id)
+            self.assertEqual(doc.parent_category, "Global Visa")
+            self.assertEqual(doc.sub_category_name, "UK Tourist Visa")
+
+            # Calling it again must reuse the exact same record
+            sub_id_again = ensure_lead_subcategory("Holidays", "uk tourist visa")
+            self.assertEqual(sub_id_again, sub_id)
+
+    def test_subcategory_doctype_and_api_redirect_to_global_visa(self):
+        if frappe.db.exists("DocType", "Lead Subcategory"):
+            for p in ["Holidays", "Global Visa"]:
+                if not frappe.db.exists("Lead Category", p):
+                    frappe.get_doc({"doctype": "Lead Category", "category_name": p, "is_active": 1}).insert(ignore_permissions=True)
+
+            # Test Document validate redirect
+            unique_name = f"Test Temp {frappe.generate_hash(length=4)} Visa"
+            sub_doc = frappe.get_doc({
+                "doctype": "Lead Subcategory",
+                "sub_category_name": unique_name,
+                "parent_category": "Holidays"
+            })
+            sub_doc.validate()
+            self.assertEqual(sub_doc.parent_category, "Global Visa")
+
+            # Test create_sub_category API redirect
+            from visa_crm.api.lead_management import create_sub_category
+            with patch("visa_crm.api.lead_management._require_operational", return_value=True):
+                unique_api = f"API Temp {frappe.generate_hash(length=4)} Visa"
+                api_res = create_sub_category(unique_api, "Holidays")
+                self.assertEqual(api_res["parent_category"], "Global Visa")
